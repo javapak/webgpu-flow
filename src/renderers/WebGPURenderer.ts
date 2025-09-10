@@ -1,5 +1,6 @@
-import tgpu from 'typegpu';
+import tgpu, {type TgpuRenderPipeline, type TgpuBuffer} from 'typegpu';
 import type { WebGPURenderer, DiagramState } from '../types';
+
 
 // Extended WebGPU type declarations
 declare global {
@@ -120,10 +121,12 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
   root: any | null = null;
   initialized: boolean = false;
   
-  private renderPipeline: any = null;
-  private lineRenderPipeline: any =  null;
-  private nodeBuffer: any = null;
-  private lineBuffer: any = null;
+  private renderPipeline: TgpuRenderPipeline | null = null;
+  private lineRenderPipeline: TgpuRenderPipeline | null =  null;
+  private singleVertexRenderPipeline: TgpuRenderPipeline | null = null;
+  private nodeBuffer: TgpuBuffer<any> | null = null;
+  private lineBuffer: TgpuBuffer<any> | null  = null;
+  private singleVertexBuffer: TgpuBuffer<any> | null = null;
   private uniformBuffer: any = null;
   private bindGroup: any = null;
   private bufferUsage: any = null;
@@ -216,6 +219,29 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
     }
 `;
 
+const singleVertexShaderCode = `
+    struct VertexInput {
+      @location(0) position: vec2<f32>,
+      @location(1) color: vec3<f32>,
+    }
+
+    struct VertexOutput {
+      @builtin(position) position: vec4<f32>,
+      @location(0) color: vec3<f32>,
+    }
+
+    @vertex
+    fn main(input: VertexInput) -> VertexOutput {
+      var output: VertexOutput;
+      
+      let clipPos = (input.position / vec2<f32>(${dimensions.width}.0, ${dimensions.height}.0)) * 2.0 - 1.0;
+      
+      output.position = vec4<f32>(clipPos.x, -clipPos.y, 0.0, 1.0);
+      output.color = input.color;
+      
+      return output;
+    }
+  `;
     const vertexShaderCode = `
       struct VertexInput {
         @location(0) position: vec2<f32>,
@@ -263,6 +289,8 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
     const lineVertexShader = device.createShaderModule({
         code: lineVertexShaderCode,
     })
+
+    const singleVertexShader = device.createShaderModule({code: singleVertexShaderCode});
 
     const fragmentShader = device.createShaderModule({
       code: fragmentShaderCode,
@@ -317,6 +345,39 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
 
 
     })
+
+    this.singleVertexRenderPipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        }),
+        vertex: {
+            module: singleVertexShader,
+            entryPoint: 'main',
+            buffers: [{
+            arrayStride: 20,
+            attributes: [
+                { format: 'float32x2', offset: 0, shaderLocation: 0 },
+                { format: 'float32x3', offset: 8, shaderLocation: 1 },
+            ]
+            }]
+        },
+      fragment: {
+        module: fragmentShader,
+        entryPoint: 'main',
+        targets: [{
+          format: navigator.gpu!.getPreferredCanvasFormat(),
+        }]
+      },
+      primitive: {
+        topology: 'point-list',
+      },
+      multisample: {
+        count: 4,
+      }
+
+
+    })
+
 
 
     this.renderPipeline = device.createRenderPipeline({
@@ -378,6 +439,8 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
     const device = this.root.device;
     const vertices: number[] = [];
     const selectionBoxVertices: number[] = []
+    const resizeHandleVertices: number[] = [];
+
     
     state.nodes.forEach((node, index) => {
         let x = node.data.position?.x || 0;
@@ -395,8 +458,9 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
         const color = this.hexToRgb(node.visual.color || '#3b82f6');
         if (node.visual.selected) {
             const selectionBox = this.generateSelectionBoxVertices(x, y, width, height, color);
-
+            const handles = this.generateResizeHandleVertices(x, y, width, height);
             selectionBoxVertices.push(...selectionBox);
+            resizeHandleVertices.push(...handles);
         }
         const shapeVertices = this.generateShapeVertices(shape, x, y, width, height, color);
         vertices.push(...shapeVertices);
@@ -426,6 +490,14 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
         });
         device.queue.writeBuffer(this.lineBuffer, 0, new Float32Array(selectionBoxVertices));
     }
+
+      if (resizeHandleVertices.length > 0) {
+      this.singleVertexBuffer = device.createBuffer({
+          size: resizeHandleVertices.length * 4,
+          usage: this.bufferUsage.VERTEX | this.bufferUsage.COPY_DST,
+      });
+      device.queue.writeBuffer(this.singleVertexBuffer, 0, new Float32Array(resizeHandleVertices));
+  }
   }
 
   private generateRoundedRectangleVertices(x: number, y: number, width: number, height: number, color: [number, number, number]): number[] {
@@ -600,7 +672,7 @@ private generatePackageVertices(x: number, y: number, width: number, height: num
   
   // Package shape - rectangle with tab (Y coordinates flipped)
   const tabWidth = 0.3;
-  const tabHeight = 0.15;
+  const tabHeight = 0.1;
   
   // Main rectangle (flipped Y)
   vertices.push(
@@ -693,7 +765,38 @@ private generateFinalNodeVertices(x: number, y: number, width: number, height: n
   }
   
   return vertices;
+
 }
+
+private generateResizeHandleVertices(x: number, y: number, width: number, height: number): number[] {
+  const vertices: number[] = [];
+  
+  // Calculate handle positions (8 handles: 4 corners + 4 edge midpoints)
+  const left = x - width / 2;
+  const right = x + width / 2;
+  const bottom = y - height / 2;
+  const top = y + height / 2;
+  const centerX = x;
+  const centerY = y;
+  
+  // Handle color (usually white or a contrasting color)
+  const handleColor = [1.0, 1.0, 1.0]; // White handles
+  
+  // Corner handles
+  vertices.push(left, top, ...handleColor);      // Top-left (nw)
+  vertices.push(right, top, ...handleColor);     // Top-right (ne)
+  vertices.push(left, bottom, ...handleColor);   // Bottom-left (sw)
+  vertices.push(right, bottom, ...handleColor);  // Bottom-right (se)
+  
+  // Edge midpoint handles
+  vertices.push(centerX, top, ...handleColor);    // Top center (n)
+  vertices.push(centerX, bottom, ...handleColor); // Bottom center (s)
+  vertices.push(left, centerY, ...handleColor);   // Left center (w)
+  vertices.push(right, centerY, ...handleColor);  // Right center (e)
+  
+  return vertices;
+}
+
 
   private generateShapeVertices(shape: string, x: number, y: number, width: number, height: number, color: [number, number, number]): number[] {
   switch (shape) {
@@ -826,8 +929,13 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
     this.updateUniforms(state);
     let totalVertices = 0;
     let totalSelectionVertices = 0;
+    let totalSelectionHandleVertices = 0;
     state.nodes.forEach(node => {
-        if (node.visual.selected) totalSelectionVertices += 5;
+        if (node.visual.selected) {
+          totalSelectionVertices += 5;
+          totalSelectionHandleVertices += 8;
+        }
+
         const shape = node.visual.shape || 'rectangle';
         switch (shape) {
         case 'circle': totalVertices += 96; break;
@@ -873,6 +981,11 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
             renderPass.setVertexBuffer(0, this.lineBuffer);
             renderPass.draw(totalSelectionVertices);
         }
+        if (this.singleVertexBuffer && totalSelectionHandleVertices > 0) {
+            renderPass.setPipeline(this.singleVertexRenderPipeline)
+            renderPass.setVertexBuffer(0, this.singleVertexBuffer);
+            renderPass.draw(totalSelectionHandleVertices);
+        }
       } 
       else {
       }
@@ -890,8 +1003,12 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
       this.nodeBuffer.destroy();
     }
 
-    if(this.lineBuffer) {
+    if (this.lineBuffer) {
         this.lineBuffer.destroy();
+    }
+
+    if (this.singleVertexBuffer) {
+      this.singleVertexBuffer.destroy();
     }
 
     if (this.uniformBuffer) {
@@ -907,6 +1024,8 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
     this.canvas = null;
     this.root = null;
     this.renderPipeline = null;
+    this.lineRenderPipeline = null;
+    this.singleVertexRenderPipeline = null;
     this.nodeBuffer = null;
     this.uniformBuffer = null;
     this.bindGroup = null;

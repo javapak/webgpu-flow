@@ -1,8 +1,10 @@
-// Core types for the diagram system
-// Add these types to your types/index.ts
+export type ResizeHandle = 'none' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
 export interface InteractionState {
-  mode: 'idle' | 'dragging' | 'panning';
+  mode: 'idle' | 'dragging' | 'panning' | 'resizing';
   dragTarget: string | null; // node ID being dragged
+  resizeHandle: ResizeHandle;
+  hoverHandle: ResizeHandle;
   lastMousePos: { x: number; y: number };
   selectedNodes: NodeSchema[];
 }
@@ -65,6 +67,7 @@ export interface DiagramContextType {
   setInteractionState: (interactionState: InteractionState | any) => void;
   setSelectedNodes: (nodeIds: NodeSchema[]) => void;
   moveNode: (nodeId: string, position: { x: number; y: number }) => void;
+  resizeNode: (nodeId: string, dimensions: { width: number; height: number; x?: number; y?: number }) => void;
   updateNodes: (nodes: NodeSchema[]) => void;
   updateEdges: (edges: EdgeSchema[]) => void;
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;

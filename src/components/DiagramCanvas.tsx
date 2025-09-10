@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { WebGPUDiagramRenderer } from '../renderers/WebGPURenderer';
 import { DiagramContext, useDiagram } from '../context/DiagramContext';
 import { MouseInteractions as InteractionUtils } from '../utils/MouseInteractions';
+import type { ResizeHandle } from '../types';
 
 interface DiagramCanvasProps {
   width: number;
@@ -19,6 +20,16 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const rendererRef = useRef<WebGPUDiagramRenderer | null>(null);
   
   // Get everything from the diagram context
+  const { 
+    state, 
+    setViewport, 
+    updateNodes,
+    moveNode,
+    resizeNode,
+    interactionState,
+    setInteractionState,
+    setSelectedNodes
+  } = useDiagram();
 
   // Initialize WebGPU renderer
   useEffect(() => {
@@ -39,16 +50,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     initRenderer();
   }, []);
-
-    const { 
-    state, 
-    setViewport, 
-    updateNodes,
-    moveNode,
-    interactionState,
-    setInteractionState,
-    setSelectedNodes
-  } = useDiagram();
 
   // Render the diagram whenever state changes
   useEffect(() => {
@@ -77,15 +78,31 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       state.viewport
     );
     
+    // First check if we're clicking on a resize handle of a selected node
+    if (interactionState.selectedNodes.length > 0) {
+      const selectedNode = interactionState.selectedNodes[0];
+      const resizeHandle = InteractionUtils.getResizeHandle(worldPos, selectedNode, state.viewport);
+      
+      if (resizeHandle !== 'none') {
+        // Start resizing
+        setInteractionState((prev: any) => ({
+          ...prev,
+          mode: 'resizing',
+          dragTarget: selectedNode.id,
+          resizeHandle,
+          lastMousePos: worldPos
+        }));
+        return;
+      }
+    }
+    
     const clickedNode = InteractionUtils.findNodeAtPosition(worldPos, state.nodes);
     
     if (clickedNode) {
       // Select and start dragging the node
-
       // deselect selected node (singular for now....will format as array if decide that should change.) upon new selection
       if (interactionState.selectedNodes.length === 1) // We know for now that length is always going to be 1 or 0 if we keep our conditions consistent...
         interactionState.selectedNodes[0].visual.selected = false;
-
 
       // trigger effect setting clickedNode
       setSelectedNodes([clickedNode]);
@@ -93,6 +110,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         ...prev,
         mode: 'dragging',
         dragTarget: clickedNode.id,
+        resizeHandle: 'none',
         lastMousePos: worldPos
       }));
     } else {
@@ -101,6 +119,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         ...prev,
         mode: 'panning',
         dragTarget: null,
+        resizeHandle: 'none',
         lastMousePos: worldPos
       }));
     }
@@ -110,21 +129,19 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // deselect node on canvas click....
     if (interactionState.mode === 'panning') {
       if (interactionState.selectedNodes.length === 1)
-      interactionState.selectedNodes[0].visual.selected = false;
+        interactionState.selectedNodes[0].visual.selected = false;
     
       setSelectedNodes([]);
-
     }
-
   }, [interactionState.mode]);
   
   useEffect(() => {
-      if (interactionState.selectedNodes.length === 1)
+    if (interactionState.selectedNodes.length === 1)
       interactionState.selectedNodes[0].visual.selected = true;
   }, [interactionState.selectedNodes])
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
-    if (!canvasRef.current || interactionState.mode === 'idle') return;
+    if (!canvasRef.current) return;
     
     const worldPos = InteractionUtils.screenToWorld(
       event.clientX,
@@ -133,10 +150,45 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       state.viewport
     );
     
+    // Update hover handle for cursor changes when not actively interacting
+    if (interactionState.mode === 'idle' && interactionState.selectedNodes.length > 0) {
+      const selectedNode = interactionState.selectedNodes[0];
+      const hoverHandle = InteractionUtils.getResizeHandle(worldPos, selectedNode, state.viewport);
+      
+      if (hoverHandle !== interactionState.hoverHandle) {
+        setInteractionState((prev: any) => ({
+          ...prev,
+          hoverHandle
+        }));
+      }
+    }
+    
+    if (interactionState.mode === 'idle') return;
+    
     const deltaX = worldPos.x - interactionState.lastMousePos.x;
     const deltaY = worldPos.y - interactionState.lastMousePos.y;
     
-    if (interactionState.mode === 'dragging' && interactionState.dragTarget) {
+    if (interactionState.mode === 'resizing' && interactionState.dragTarget) {
+      // Resize the selected node
+      const currentNode = state.nodes.find((n: { id: any; }) => n.id === interactionState.dragTarget);
+      if (currentNode) {
+        const currentWidth = currentNode.visual.width || 120;
+        const currentHeight = currentNode.visual.height || 80;
+        const currentPos = currentNode.data.position || { x: 0, y: 0 };
+        
+        const resizeResult = InteractionUtils.calculateResize(
+          interactionState.resizeHandle,
+          deltaX,
+          deltaY,
+          currentWidth,
+          currentHeight,
+          currentPos.x,
+          currentPos.y
+        );
+        
+        resizeNode(interactionState.dragTarget, resizeResult);
+      }
+    } else if (interactionState.mode === 'dragging' && interactionState.dragTarget) {
       // Move the selected node
       const currentNode = state.nodes.find((n: { id: any; }) => n.id === interactionState.dragTarget);
       if (currentNode) {
@@ -162,13 +214,14 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       ...prev,
       lastMousePos: worldPos
     }));
-  }, [state.viewport.x, state.viewport.y, state.nodes, interactionState, moveNode, setViewport, setInteractionState]);
+  }, [state.viewport.x, state.viewport.y, state.nodes, interactionState, moveNode, resizeNode, setViewport, setInteractionState]);
 
   const handleMouseUp = useCallback(() => {
     setInteractionState((prev: any) => ({
       ...prev,
       mode: 'idle',
-      dragTarget: null
+      dragTarget: null,
+      resizeHandle: 'none'
     }));
   }, [setInteractionState]);
 
@@ -181,6 +234,21 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       zoom: newZoom
     });
   }, [state.viewport.zoom, setViewport]);
+
+  // Determine cursor based on interaction state and hover handle
+  const getCursor = () => {
+    if (interactionState.mode === 'resizing') {
+      return InteractionUtils.getCursorForHandle(interactionState.resizeHandle);
+    } else if (interactionState.mode === 'dragging') {
+      return 'grabbing';
+    } else if (interactionState.mode === 'panning') {
+      return 'grabbing';
+    } else if (interactionState.hoverHandle !== 'none') {
+      return InteractionUtils.getCursorForHandle(interactionState.hoverHandle);
+    } else {
+      return 'grab';
+    }
+  };
 
   return (
     <canvas
@@ -196,8 +264,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       style={{ 
         border: '1px solid #ccc',
         display: 'block',
-        cursor: interactionState.mode === 'dragging' ? 'grabbing' : 
-                interactionState.mode === 'panning' ? 'grabbing' : 'grab',
+        cursor: getCursor(),
         ...({} as React.CSSProperties)
       }}
     />

@@ -40,8 +40,8 @@ export const DiagramDemo: React.FC = () => {
           position={{ x: 200, y: 300 }}
           data={{ component: "UserList" }}
           visual={{ 
-            color: "#f59e0b", 
-            shape: 'diamond',
+            color: "#ff42c6", 
+            shape: 'hexagon',
             width: 100, 
             height: 90 
           }}

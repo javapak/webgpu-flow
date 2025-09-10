@@ -66,52 +66,77 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   };
 
   const [interactionState, setInteractionState] = useState<InteractionState>({
-  mode: 'idle',
-  dragTarget: null,
-  lastMousePos: { x: 0, y: 0 },
-  selectedNodes: []
-});
+    mode: 'idle',
+    dragTarget: null,
+    resizeHandle: 'none',
+    lastMousePos: { x: 0, y: 0 },
+    selectedNodes: [],
+    hoverHandle: 'none'
+  });
 
+  const setSelectedNodes = useCallback((nodes: NodeSchema[]) => {
+    setInteractionState(prev => ({
+      ...prev,
+      selectedNodes: [...nodes]
+    }));
+  }, []);
 
-const setSelectedNodes = useCallback((nodes: NodeSchema[]) => {
-  setInteractionState(prev => ({
-    ...prev,
-    selectedNodes: [...nodes]
-  }));
-}, []);
+  const moveNode = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    setState(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(node => 
+        node.id === nodeId 
+          ? { ...node, data: { ...node.data, position } }
+          : node
+      )
+    }));
+  }, []);
 
-const moveNode = useCallback((nodeId: string, position: { x: number; y: number }) => {
-  setState(prev => ({
-    ...prev,
-    nodes: prev.nodes.map(node => 
-      node.id === nodeId 
-        ? { ...node, data: { ...node.data, position } }
-        : node
-    )
-  }));
-}, []);
-
+  const resizeNode = useCallback((nodeId: string, dimensions: { width: number; height: number; x?: number; y?: number }) => {
+    setState(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(node => 
+        node.id === nodeId 
+          ? { 
+              ...node, 
+              visual: { 
+                ...node.visual, 
+                width: dimensions.width, 
+                height: dimensions.height 
+              },
+              data: {
+                ...node.data,
+                position: {
+                  x: dimensions.x !== undefined ? dimensions.x : node.data.position?.x || 0,
+                  y: dimensions.y !== undefined ? dimensions.y : node.data.position?.y || 0
+                }
+              }
+            }
+          : node
+      )
+    }));
+  }, []);
 
   const contextValue: DiagramContextType = {
-      state,
-      renderer: rendererRef.current,
-      updateNodes,
-      updateEdges,
-      setViewport,
-      addNode,
-      removeNode,
-      addEdge,
-      removeEdge,
-      interactionState,
-      setInteractionState,
-      setSelectedNodes,
-      moveNode,
-      }
-  
+    state,
+    renderer: rendererRef.current,
+    updateNodes,
+    updateEdges,
+    setViewport,
+    addNode,
+    removeNode,
+    addEdge,
+    removeEdge,
+    interactionState,
+    setInteractionState,
+    setSelectedNodes,
+    moveNode,
+    resizeNode,
+  };
 
   return (
     <DiagramContext.Provider value={contextValue}>
       {children}
     </DiagramContext.Provider>
   );
-}
+};

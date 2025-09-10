@@ -68,62 +68,83 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [width, height, state]);
 
   // Mouse event handlers
-  const handleMouseDown = useCallback((event: React.MouseEvent) => {
-    if (!canvasRef.current) return;
+const handleMouseDown = useCallback((event: React.MouseEvent) => {
+  if (!canvasRef.current) return;
+  
+  const worldPos = InteractionUtils.screenToWorld(
+    event.clientX,
+    event.clientY,
+    canvasRef.current,
+    state.viewport
+  );
+  
+  // First check if we're clicking on a resize handle of a selected node
+  if (interactionState.selectedNodes.length > 0) {
+    const selectedNode = interactionState.selectedNodes[0];
+    const resizeHandle = InteractionUtils.getResizeHandle(worldPos, selectedNode, state.viewport);
     
-    const worldPos = InteractionUtils.screenToWorld(
-      event.clientX,
-      event.clientY,
-      canvasRef.current,
-      state.viewport
+    if (resizeHandle !== 'none') {
+      // Start resizing
+      setInteractionState((prev: any) => ({
+        ...prev,
+        mode: 'resizing',
+        dragTarget: selectedNode.id,
+        resizeHandle,
+        lastMousePos: worldPos
+      }));
+      return;
+    }
+  }
+  
+  const clickedNode = InteractionUtils.findNodeAtPosition(worldPos, state.nodes);
+  
+  if (clickedNode) {
+    // Clear selection from ALL nodes first, then select the clicked node
+    const updatedNodes = state.nodes.map(node => ({
+      ...node,
+      visual: { ...node.visual, selected: false }
+    }));
+    
+    // Set the clicked node as selected
+    const finalNodes = updatedNodes.map(node => 
+      node.id === clickedNode.id 
+        ? { ...node, visual: { ...node.visual, selected: true } }
+        : node
     );
     
-    // First check if we're clicking on a resize handle of a selected node
-    if (interactionState.selectedNodes.length > 0) {
-      const selectedNode = interactionState.selectedNodes[0];
-      const resizeHandle = InteractionUtils.getResizeHandle(worldPos, selectedNode, state.viewport);
-      
-      if (resizeHandle !== 'none') {
-        // Start resizing
-        setInteractionState((prev: any) => ({
-          ...prev,
-          mode: 'resizing',
-          dragTarget: selectedNode.id,
-          resizeHandle,
-          lastMousePos: worldPos
-        }));
-        return;
+    // Update the state with the corrected nodes
+    updateNodes(finalNodes);
+    
+    // Update interaction state
+    setSelectedNodes([{ ...clickedNode, visual: { ...clickedNode.visual, selected: true } }]);
+    setInteractionState((prev: any) => ({
+      ...prev,
+      mode: 'dragging',
+      dragTarget: clickedNode.id,
+      resizeHandle: 'none',
+      lastMousePos: worldPos
+    }));
+  } else {
+    // FIXED: O(1) deselection - we have direct reference to selected node
+    if (interactionState.selectedNodes.length === 1) {
+      const prevSelectedNode = interactionState.selectedNodes[0];
+      if (prevSelectedNode.visual.selected) {
+        prevSelectedNode.visual.selected = false;
+        updateNodes([...state.nodes]); // Shallow copy to trigger React re-render
       }
     }
     
-    const clickedNode = InteractionUtils.findNodeAtPosition(worldPos, state.nodes);
-    
-    if (clickedNode) {
-      // Select and start dragging the node
-      // deselect selected node (singular for now....will format as array if decide that should change.) upon new selection
-      if (interactionState.selectedNodes.length === 1) // We know for now that length is always going to be 1 or 0 if we keep our conditions consistent...
-        interactionState.selectedNodes[0].visual.selected = false;
-
-      // trigger effect setting clickedNode
-      setSelectedNodes([clickedNode]);
-      setInteractionState((prev: any) => ({
-        ...prev,
-        mode: 'dragging',
-        dragTarget: clickedNode.id,
-        resizeHandle: 'none',
-        lastMousePos: worldPos
-      }));
-    } else {
-      // Start panning
-      setInteractionState((prev: any) => ({
-        ...prev,
-        mode: 'panning',
-        dragTarget: null,
-        resizeHandle: 'none',
-        lastMousePos: worldPos
-      }));
-    }
-  }, [state.viewport, interactionState.selectedNodes, state.nodes, setSelectedNodes, setInteractionState]);
+    // Start panning
+    setSelectedNodes([]);
+    setInteractionState((prev: any) => ({
+      ...prev,
+      mode: 'panning',
+      dragTarget: null,
+      resizeHandle: 'none',
+      lastMousePos: worldPos
+    }));
+  }
+}, [state.viewport, state.nodes, interactionState.selectedNodes, setSelectedNodes, setInteractionState, updateNodes]);
 
   useEffect(() => {
     // deselect node on canvas click....

@@ -1,8 +1,8 @@
-import tgpu, {type TgpuRenderPipeline, type TgpuBuffer} from 'typegpu';
+import tgpu, {type TgpuRenderPipeline, type TgpuBuffer, type TgpuBindGroup, type TgpuTexture} from 'typegpu';
 import type { WebGPURenderer, DiagramState } from '../types';
+import TextRenderer from './TextRenderer';
 
 
-// Extended WebGPU type declarations
 declare global {
   interface Navigator {
     gpu?: GPU;
@@ -122,6 +122,11 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
   initialized: boolean = false;
   
   private renderPipeline: TgpuRenderPipeline | null = null;
+  private textRenderer: TextRenderer | null = null;
+  private textRenderPipeline: any = null;
+  private textBindGroupLayout: any = null;
+  private sampler: any = null;
+  private textBuffers: Map<string, { buffer: any, vertexCount: number, bindGroup: TgpuBindGroup, texture: any }> = new Map();
   private lineRenderPipeline: TgpuRenderPipeline | null =  null;
   private singleVertexRenderPipeline: TgpuRenderPipeline | null = null;
   private nodeBuffer: TgpuBuffer<any> | null = null;
@@ -281,6 +286,110 @@ const singleVertexShaderCode = `
     `;
 
     const device = this.root.device;
+
+    this.textRenderer = new TextRenderer(device);
+
+      this.sampler = device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+    });
+
+    const textVertexShader = `
+      struct VertexInput {
+        @location(0) position: vec2<f32>,
+        @location(1) texCoord: vec2<f32>,
+      }
+
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) texCoord: vec2<f32>,
+      }
+
+      @vertex
+      fn main(input: VertexInput) -> VertexOutput {
+        var output: VertexOutput;
+        
+        let clipPos = (input.position / vec2<f32>(${dimensions.width}.0, ${dimensions.height}.0)) * 2.0 - 1.0;
+        output.position = vec4<f32>(clipPos.x, -clipPos.y, 0.0, 1.0);
+        output.texCoord = input.texCoord;
+        
+        return output;
+      }
+    `;
+
+    const textFragmentShader = `
+      @group(0) @binding(0) var textSampler: sampler;
+      @group(0) @binding(1) var textTexture: texture_2d<f32>;
+
+      @fragment
+      fn main(@location(0) texCoord: vec2<f32>) -> @location(0) vec4<f32> {
+        let color = textureSample(textTexture, textSampler, texCoord);
+        // Discard transparent pixels
+        if (color.a < 0.1) {
+          discard;
+        }
+        return color;
+      }
+    `;
+
+    const textVertShader = device.createShaderModule({ code: textVertexShader });
+    const textFragShader = device.createShaderModule({ code: textFragmentShader });
+
+    // Create bind group layout for text rendering
+    this.textBindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: {},
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {},
+        },
+      ],
+    });
+
+    this.textRenderPipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [this.textBindGroupLayout],
+      }),
+      vertex: {
+        module: textVertShader,
+        entryPoint: 'main',
+        buffers: [{
+          arrayStride: 16, // 4 floats * 4 bytes = 16 bytes
+          attributes: [
+            { format: 'float32x2', offset: 0, shaderLocation: 0 }, // position
+            { format: 'float32x2', offset: 8, shaderLocation: 1 }, // texCoord
+          ],
+        }],
+      },
+      fragment: {
+        module: textFragShader,
+        entryPoint: 'main',
+        targets: [{
+          format: navigator.gpu!.getPreferredCanvasFormat(),
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+            },
+          },
+        }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+      },
+      multisample: {
+        count: 4,
+      },
+    });
     
     const vertexShader = device.createShaderModule({
       code: vertexShaderCode,
@@ -591,14 +700,13 @@ private generateOvalVertices(x: number, y: number, width: number, height: number
 private generateHexagonVertices(x: number, y: number, width: number, height: number, color: [number, number, number]): number[] {
   const vertices: number[] = [];
   
-  // Hexagon points (6-sided)
+
   const points = [];
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
     points.push([Math.cos(angle) * 0.5, Math.sin(angle) * 0.5]);
   }
-  
-  // Create triangles from center to edges
+
   for (let i = 0; i < 6; i++) {
     const next = (i + 1) % 6;
     vertices.push(
@@ -616,10 +724,7 @@ private generateHexagonVertices(x: number, y: number, width: number, height: num
 
 private generateActorVertices(x: number, y: number, width: number, height: number, color: [number, number, number]): number[] {
   const vertices: number[] = [];
-  
-  // Simplified stick figure (Y coordinates flipped)
-  // Head (circle at top, flipped Y) 
-  const headY = -0.25; // Flipped from 0.25
+  const headY = -0.25; 
   const headRadius = 0.1;
   for (let i = 0; i < 8; i++) {
     const angle1 = (i / 8) * Math.PI * 2;
@@ -783,16 +888,87 @@ private generateResizeHandleVertices(x: number, y: number, width: number, height
   const handleColor = [1.0, 1.0, 1.0]; // White handles
   
   // Corner handles
-  vertices.push(left, top, ...handleColor);      // Top-left (nw)
-  vertices.push(right, top, ...handleColor);     // Top-right (ne)
-  vertices.push(left, bottom, ...handleColor);   // Bottom-left (sw)
-  vertices.push(right, bottom, ...handleColor);  // Bottom-right (se)
+  vertices.push(left, top, ...handleColor);   
+  vertices.push(left + 1, top, ...handleColor);
+  vertices.push(left - 1, top, ...handleColor);
+  vertices.push(left, top + 1, ...handleColor);
+  vertices.push(left, top - 1, ...handleColor);
+  vertices.push(left + 2, top -1, ...handleColor);
+  vertices.push(left - 2, top - 1, ...handleColor);
+  vertices.push(left + 2, top + 1, ...handleColor);
+  vertices.push(left - 2, top + 1, ...handleColor);      // Top-left (nw)
+
+  vertices.push(right, top, ...handleColor);   
+  vertices.push(right + 1, top, ...handleColor);
+  vertices.push(right - 1, top, ...handleColor);
+  vertices.push(right, top + 1, ...handleColor);
+  vertices.push(right, top - 1, ...handleColor);
+  vertices.push(right + 2, top -1, ...handleColor);
+  vertices.push(right - 2, top - 1, ...handleColor);
+  vertices.push(right + 2, top + 1, ...handleColor);
+  vertices.push(right - 2, top + 1, ...handleColor); // Top-right (ne)
+
+  vertices.push(left, bottom, ...handleColor);   
+  vertices.push(left + 1, bottom, ...handleColor);
+  vertices.push(left - 1, bottom, ...handleColor);
+  vertices.push(left, bottom + 1, ...handleColor);
+  vertices.push(left, bottom - 1, ...handleColor);
+  vertices.push(left + 2, bottom -1, ...handleColor);
+  vertices.push(left - 2, bottom - 1, ...handleColor);
+  vertices.push(left + 2, bottom + 1, ...handleColor);
+  vertices.push(left - 2, bottom + 1, ...handleColor);  // Bottom-left (sw)
+
+  vertices.push(right, bottom, ...handleColor);   
+  vertices.push(right + 1, bottom, ...handleColor);
+  vertices.push(right - 1, bottom, ...handleColor);
+  vertices.push(right, bottom + 1, ...handleColor);
+  vertices.push(right, bottom - 1, ...handleColor);
+  vertices.push(right + 2, bottom -1, ...handleColor);
+  vertices.push(right - 2, bottom - 1, ...handleColor);
+  vertices.push(right + 2, bottom + 1, ...handleColor);
+  vertices.push(right - 2, bottom + 1, ...handleColor); // Bottom-right (se)
   
   // Edge midpoint handles
-  vertices.push(centerX, top, ...handleColor);    // Top center (n)
-  vertices.push(centerX, bottom, ...handleColor); // Bottom center (s)
-  vertices.push(left, centerY, ...handleColor);   // Left center (w)
-  vertices.push(right, centerY, ...handleColor);  // Right center (e)
+  vertices.push(centerX, top, ...handleColor);   
+  vertices.push(centerX + 1, top, ...handleColor);
+  vertices.push(centerX - 1, top, ...handleColor);
+  vertices.push(centerX, top + 1, ...handleColor);
+  vertices.push(centerX, top - 1, ...handleColor);
+  vertices.push(centerX + 2, top -1, ...handleColor);
+  vertices.push(centerX - 2, top - 1, ...handleColor);
+  vertices.push(centerX + 2, top + 1, ...handleColor);
+  vertices.push(centerX - 2, top + 1, ...handleColor);
+
+
+  vertices.push(centerX, bottom, ...handleColor);   
+  vertices.push(centerX + 1, bottom, ...handleColor);
+  vertices.push(centerX - 1, bottom, ...handleColor);
+  vertices.push(centerX, bottom + 1, ...handleColor);
+  vertices.push(centerX, bottom - 1, ...handleColor);
+  vertices.push(centerX + 2, bottom -1, ...handleColor);
+  vertices.push(centerX - 2, bottom - 1, ...handleColor);
+  vertices.push(centerX + 2, bottom + 1, ...handleColor);
+  vertices.push(centerX - 2, bottom + 1, ...handleColor);// Bottom center 
+
+  vertices.push(left, centerY, ...handleColor);   
+  vertices.push(left + 1, centerY, ...handleColor);
+  vertices.push(left - 1, centerY, ...handleColor);
+  vertices.push(left, centerY + 1, ...handleColor);
+  vertices.push(left, centerY - 1, ...handleColor);
+  vertices.push(left + 2, centerY -1, ...handleColor);
+  vertices.push(left - 2, centerY - 1, ...handleColor);
+  vertices.push(left + 2, centerY + 1, ...handleColor);
+  vertices.push(left - 2, centerY + 1, ...handleColor);// Left center (w)
+
+  vertices.push(right, centerY, ...handleColor);   
+  vertices.push(right + 1, centerY, ...handleColor);
+  vertices.push(right - 1, centerY, ...handleColor);
+  vertices.push(right, centerY + 1, ...handleColor);
+  vertices.push(right, centerY - 1, ...handleColor);
+  vertices.push(right + 2, centerY -1, ...handleColor);
+  vertices.push(right - 2, centerY - 1, ...handleColor);
+  vertices.push(right + 2, centerY + 1, ...handleColor);
+  vertices.push(right - 2, centerY + 1, ...handleColor);  // Right center (e)
   
   return vertices;
 }
@@ -898,6 +1074,73 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
     ] : [0.2, 0.5, 0.8];
   }
 
+  private updateTextBuffers(state: DiagramState) {
+    if (!this.textRenderer) return;
+
+    const device = this.root.device;
+    
+    // Clear existing text buffers
+    this.textBuffers.forEach(({ buffer }) => buffer.destroy());
+    this.textBuffers.clear();
+
+    state.nodes.forEach(node => {
+      if (!node.data.label) return;
+
+      const x = node.data.position?.x || 0;
+      const y = node.data.position?.y || 0;
+      const screenX = (x - state.viewport.x) * state.viewport.zoom;
+      const screenY = (y - state.viewport.y) * state.viewport.zoom;
+
+      // Create text texture
+      const fontSize = Math.max(12, 16 * state.viewport.zoom);
+      const { texture, width, height } = this.textRenderer!.createTextTexture(
+        node.data.label, 
+        fontSize, 
+        node.visual.textColor || '#000'
+      );
+
+      // Create quad vertices for the text
+      const halfWidth = width / 2;
+      const halfHeight = height / 2;
+      
+      const vertices = new Float32Array([
+        // Triangle 1
+        screenX - halfWidth, screenY - halfHeight, 0.0, 0.0, // top-left
+        screenX + halfWidth, screenY - halfHeight, 1.0, 0.0, // top-right
+        screenX - halfWidth, screenY + halfHeight, 0.0, 1.0, // bottom-left
+        
+        // Triangle 2
+        screenX + halfWidth, screenY - halfHeight, 1.0, 0.0, // top-right
+        screenX + halfWidth, screenY + halfHeight, 1.0, 1.0, // bottom-right
+        screenX - halfWidth, screenY + halfHeight, 0.0, 1.0, // bottom-left
+      ]);
+
+      // Create buffer
+      const buffer = device.createBuffer({
+        size: vertices.byteLength,
+        usage: this.bufferUsage.VERTEX | this.bufferUsage.COPY_DST,
+      });
+
+      device.queue.writeBuffer(buffer, 0, vertices);
+
+      // Create bind group for this text
+      const bindGroup = device.createBindGroup({
+        layout: this.textBindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: texture.createView() },
+        ],
+      });
+
+      this.textBuffers.set(node.id, { 
+        buffer, 
+        vertexCount: 6, 
+        bindGroup,
+        texture 
+      });
+    });
+  }
+
   private updateUniforms(state: DiagramState) {
     const device = this.root.device;
     const canvas = this.canvas!;
@@ -926,6 +1169,8 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
 
 
     this.updateNodeBuffer(state);
+    this.updateTextBuffers(state);
+
     this.updateUniforms(state);
     let totalVertices = 0;
     let totalSelectionVertices = 0;
@@ -933,17 +1178,17 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
     state.nodes.forEach(node => {
         if (node.visual.selected) {
           totalSelectionVertices += 5;
-          totalSelectionHandleVertices += 8;
+          totalSelectionHandleVertices += 72;
         }
 
         const shape = node.visual.shape || 'rectangle';
         switch (shape) {
         case 'circle': totalVertices += 96; break;
-        case 'oval': totalVertices += 96; break; // Same as circle - 32 triangles
+        case 'oval': totalVertices += 96; break; 
         case 'diamond': totalVertices += 12; break;
-        case 'roundedRectangle': totalVertices += 30; break; // Fixed count
+        case 'roundedRectangle': totalVertices += 30; break; 
         case 'hexagon': totalVertices += 18; break;
-        case 'actor': totalVertices += 42; break; // Fixed count  
+        case 'actor': totalVertices += 42; break;  
         case 'package': totalVertices += 12; break;
         case 'initialNode': totalVertices += 48; break;
         case 'finalNode': totalVertices += 144; break;
@@ -986,6 +1231,16 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
             renderPass.setVertexBuffer(0, this.singleVertexBuffer);
             renderPass.draw(totalSelectionHandleVertices);
         }
+        if (this.textRenderPipeline && this.textBuffers.size > 0) {
+          renderPass.setPipeline(this.textRenderPipeline);
+          
+          this.textBuffers.forEach(({ buffer, vertexCount, bindGroup }) => {
+            renderPass.setBindGroup(0, bindGroup);
+            renderPass.setVertexBuffer(0, buffer);
+            renderPass.draw(vertexCount);
+        });
+      }
+
       } 
       else {
       }

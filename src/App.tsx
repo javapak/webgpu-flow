@@ -4,11 +4,9 @@ import { DiagramProvider, DiagramCanvas, Node, Edge } from './index';
 export const DiagramDemo: React.FC = () => {
   return (
     <div style={{ padding: '20px' }}>
-      <h2>WebGPU Diagram Demo</h2>
+      <h2>WebGPU-Flow demo</h2>
       <DiagramProvider>
         <DiagramCanvas width={800} height={600} />
-        
-        {/* Add some test nodes */}
         <Node 
           id="node1" 
           type="database" 
@@ -38,10 +36,11 @@ export const DiagramDemo: React.FC = () => {
           id="node3" 
           type="frontend" 
           position={{ x: 200, y: 300 }}
-          data={{ component: "UserList" }}
+          data={{ component: "UserList", label: "Test" }}
           visual={{ 
             color: "#ff42c6", 
             shape: 'hexagon',
+
             width: 100, 
             height: 90 
           }}
@@ -63,8 +62,7 @@ export const DiagramDemo: React.FC = () => {
       </DiagramProvider>
       
       <div style={{ marginTop: '20px', fontSize: '14px', color: '#525252ff' }}>
-        <p>This demo shows basic WebGPU rendering of nodes and edges.</p>
-        <p>You should see colored rectangles representing the nodes.</p>
+
       </div>
     </div>
   );

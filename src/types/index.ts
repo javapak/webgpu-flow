@@ -4,7 +4,7 @@ export interface InteractionState {
   mode: 'idle' | 'dragging' | 'panning';
   dragTarget: string | null; // node ID being dragged
   lastMousePos: { x: number; y: number };
-  selectedNodes: Set<NodeSchema>;
+  selectedNodes: NodeSchema[];
 }
 
 export interface NodeSchema {

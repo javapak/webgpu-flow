@@ -129,7 +129,7 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
   private bufferUsage: any = null;
   private msaaTexture: any = null;
 
-  async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
+  async initialize(canvas: HTMLCanvasElement, dimensions: {width: number, height: number}): Promise<boolean> {
     try {
       
       if (this.initialized) {
@@ -154,7 +154,7 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
         alphaMode: 'premultiplied',
       });
 
-      await this.createRenderPipeline();
+      await this.createRenderPipeline(dimensions);
       
       this.initialized = true;
       return true;
@@ -163,7 +163,7 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
     }
   }
 
-  private async createRenderPipeline() {
+  private async createRenderPipeline(dimensions: {width: number, height: number}) {
     
     let GPUBufferUsage, GPUShaderStage;
     
@@ -207,7 +207,7 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
     fn main(input: VertexInput) -> VertexOutput {
       var output: VertexOutput;
       
-      let clipPos = (input.position / vec2<f32>(800.0, 600.0)) * 2.0 - 1.0;
+      let clipPos = (input.position / vec2<f32>(${dimensions.width}.0, ${dimensions.height}.0)) * 2.0 - 1.0;
       
       output.position = vec4<f32>(clipPos.x, -clipPos.y, 0.0, 1.0);
       output.color = input.color;
@@ -234,7 +234,7 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
         var output: VertexOutput;
         
         let worldPos = input.nodePos + input.position * input.nodeSize;
-        let clipPos = (worldPos / vec2<f32>(800.0, 600.0)) * 2.0 - 1.0;
+        let clipPos = (worldPos / vec2<f32>(${dimensions.width}.0, ${dimensions.height}.0)) * 2.0 - 1.0;
         
         output.position = vec4<f32>(clipPos.x, -clipPos.y, 0.0, 1.0);
         output.color = input.color;
@@ -395,6 +395,7 @@ export class WebGPUDiagramRenderer implements WebGPURenderer {
         const color = this.hexToRgb(node.visual.color || '#3b82f6');
         if (node.visual.selected) {
             const selectionBox = this.generateSelectionBoxVertices(x, y, width, height, color);
+
             selectionBoxVertices.push(...selectionBox);
         }
         const shapeVertices = this.generateShapeVertices(shape, x, y, width, height, color);
@@ -727,7 +728,7 @@ private generateSelectionBoxVertices(x: number, y: number, width: number, height
     const top = y + height / 2;
     
     // Normalize color to 0-1 range for WebGL
-    const normalizedColor = [255 / 255, 0 / 255, 0 / 255];
+    const normalizedColor = [1, 0, 0];
     
     return [
         left, bottom, ...normalizedColor,

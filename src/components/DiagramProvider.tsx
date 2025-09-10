@@ -69,14 +69,14 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   mode: 'idle',
   dragTarget: null,
   lastMousePos: { x: 0, y: 0 },
-  selectedNodes: new Set()
+  selectedNodes: []
 });
 
 
-const setSelectedNodes = useCallback((nodeIds: string[]) => {
+const setSelectedNodes = useCallback((nodes: NodeSchema[]) => {
   setInteractionState(prev => ({
     ...prev,
-    selectedNodes: new Set(nodeIds)
+    selectedNodes: [...nodes]
   }));
 }, []);
 

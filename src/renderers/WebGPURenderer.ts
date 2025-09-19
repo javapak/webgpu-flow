@@ -15,7 +15,9 @@ export class WebGPURenderer {
   private nodeBuffer: any | null = null;
   private uniformBuffer: any| null = null;
   private bindGroup: any | null = null;
-  private initialized = false;
+  public initialized = false;
+
+ 
 
   async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {

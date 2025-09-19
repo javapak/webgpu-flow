@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
+import { WebGPURenderer } from '../types';
 
 interface SpatialDiagramCanvasProps {
   width: number;
@@ -25,8 +26,11 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
   onNodeDropped,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<WebGPURenderer>(null);
   const debugInfoRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(null);
+
+  
   
   const {
     viewport,
@@ -45,6 +49,32 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
     getSpatialDebugInfo,
   } = useDiagram();
 
+   useEffect(() => {
+    const initRenderer = async () => {
+      if (!canvasRef.current) return;
+      
+      const renderer = new WebGPURenderer();
+      const success = await renderer.initialize(canvasRef.current);
+      
+      if (success) {
+        rendererRef.current = renderer;
+        console.log('WebGPU renderer initialized successfully');
+      } else {
+        console.warn('WebGPU initialization failed, falling back to Canvas 2D');
+        // TODO: Implement Canvas 2D fallback
+      }
+    };
+
+    initRenderer();
+  }, []);
+
+  // Render the diagram whenever state changes
+  useEffect(() => {
+    if (rendererRef.current && rendererRef.current.initialized) {
+      rendererRef.current.render(getVisibleNodes(), viewport, {width, height});
+    }
+  }, [viewport, width, height, getVisibleNodes]);
+
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [performanceStats, setPerformanceStats] = useState({
     visibleNodes: 0,
@@ -59,67 +89,11 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
   }, [width, height, setViewport]);
 
   // Canvas drawing function with spatial optimization
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const startTime = performance.now();
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    
-    // Set up viewport transformation
-    ctx.save();
-    ctx.translate(width / 2, height / 2);
-    ctx.scale(viewport.zoom, viewport.zoom);
-    ctx.translate(-viewport.x, -viewport.y);
-
-    // Get only visible nodes using spatial index
-    const visibleNodes = getVisibleNodes();
-    
-    // Draw nodes
-    visibleNodes.forEach((node) => {
-      const isSelected = interaction.selectedNodes.some(selected => selected.id === node.id);
-      drawNode(ctx, node, isSelected);
-    });
-
-    ctx.restore();
-
-    // Draw selection box if dragging
-    if (interaction.dragState.isDragging && interaction.dragState.dragType === 'viewport') {
-      drawViewportDragIndicator(ctx);
-    }
-
-    const renderTime = performance.now() - startTime;
-
-    // Update performance stats
-    setPerformanceStats(prev => ({
-      ...prev,
-      visibleNodes: visibleNodes.length,
-      renderTime,
-    }));
-
-    // Update debug info if enabled
-    if (showDebugInfo) {
-      setDebugInfo(getSpatialDebugInfo());
-    }
-  }, [
-    width,
-    height,
-    viewport,
-    interaction,
-    getVisibleNodes,
-    getSpatialDebugInfo,
-    showDebugInfo,
-  ]);
 
   // Animation loop
   useEffect(() => {
     const animate = () => {
-      draw();
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
@@ -130,7 +104,7 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [draw]);
+  }, []);
 
   // Mouse event handlers with spatial hit testing
   const getMousePos = useCallback((e: React.MouseEvent) => {
@@ -422,17 +396,16 @@ export const DiagramPerformanceMonitor: React.FC<PerformanceMonitorProps> = ({
     return () => clearInterval(interval);
   }, [getSpatialDebugInfo]);
   
-  if (!stats) return null;
   
   return (
     <div className={`bg-gray-100 p-4 rounded ${className}`}>
       <h3 className="text-lg font-semibold mb-2">Spatial Index Performance</h3>
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
-          <span className="font-medium">Total Nodes:</span> {stats.totalItems}
+          <span className="font-medium">Total Nodes:</span> {stats && stats.totalItems}
         </div>
         <div>
-          <span className="font-medium">Max Depth:</span> {getMaxDepth(stats.quadTreeInfo)}
+          <span className="font-medium">Max Depth:</span> {stats && getMaxDepth(stats.quadTreeInfo)}
         </div>
       </div>
     </div>

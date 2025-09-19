@@ -468,6 +468,22 @@ export interface NodeSchema {
   };
 }
 
+export interface EdgeSchema {
+  id: string;
+  type: string;
+  source: string,
+  target: string,
+  visual: {
+    width?: number;
+    style?: 'dotted' | 'solid';
+    color?: string;
+    size?: { width: number; height: number };
+  };
+  data: {
+    [key: string]: any;
+  };
+}
+
 export const validateNodeSchema = (node: DiagramNode, schema: NodeSchema): boolean => {
   try {
     // Basic validation - in a real implementation, you'd use a proper JSON schema validator

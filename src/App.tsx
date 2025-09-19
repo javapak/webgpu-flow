@@ -1,6 +1,7 @@
 import React, { memo, useState } from 'react';
 import { DiagramProvider, DiagramCanvas, Node, Edge } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
+import { DiagramPerformanceMonitor } from './types';
 
 export const DiagramDemo: React.FC = () => {
   const [draggedNodeType, setDraggedNodeType] = useState<NodeType | null>(null);
@@ -22,7 +23,7 @@ export const DiagramDemo: React.FC = () => {
       padding: '20px',
       display: 'flex',
       gap: '20px',
-      backgroundColor: '#f8f9fa',
+      backgroundColor: '#313131ff',
       minHeight: '100vh'
     }}>
       <div style={{ flex: '0 0 auto' }}>
@@ -45,20 +46,22 @@ export const DiagramDemo: React.FC = () => {
             )}
           </p>
         </div>
-
+            
         <div style={{ 
           flex: '1',
           border: '2px dashed #dee2e6',
           borderRadius: '8px',
           padding: '16px',
-          backgroundColor: '#ffffff',
+          backgroundColor: '#262626',
           position: 'relative'
         }}>
-          <DiagramProvider>
+          <DiagramProvider >
             <DiagramCanvas 
               width={1280} 
               height={720}
               onNodeDropped={handleNodeDropped}
+              showDebugInfo
+            
             />
             
             {/* Add some example nodes */}
@@ -71,8 +74,8 @@ export const DiagramDemo: React.FC = () => {
                 label: "Example Database"
               }}
               visual={{ 
-                color: "#3b82f6", 
-                shape: 'circle',
+                color: "#0062ffff", 
+                shape: 'rectangle',
                 size: {
                 width: 120, 
                 height: 120
@@ -80,7 +83,8 @@ export const DiagramDemo: React.FC = () => {
               }}
             />
             
-           
+          <DiagramPerformanceMonitor />
+
           </DiagramProvider>
         </div>
 
@@ -89,7 +93,7 @@ export const DiagramDemo: React.FC = () => {
           display: 'flex',
           gap: '16px',
           fontSize: '14px',
-          color: '#6c757d'
+          color: '#313131'
         }}>
           
         </div>

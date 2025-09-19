@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { useDiagram } from "../context/DiagramContext";
+import { useDiagram } from "../components/DiagramProvider";
 import type { EdgeSchema } from "../types";
+
 
 // Edge component
 interface EdgeProps {
@@ -30,8 +31,8 @@ export const Edge: React.FC<EdgeProps> = ({
         id,
         source,
         target,
-        sourcePort,
-        targetPort,
+        type: '',
+        data: {},
         visual: {
           color: '#6b7280',
           width: 2,

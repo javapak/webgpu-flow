@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { useDiagram } from '../context/DiagramContext';
-import type { NodeSchema } from '../types';
+import type { DiagramNode, NodeSchema } from '../types';
+import { useDiagram } from './DiagramProvider';
 
 // Node component
 interface NodeProps {
@@ -28,8 +28,9 @@ export const Node: React.FC<NodeProps> = ({
         id,
         type,
         visual: {
+          size: {
           width: 120,
-          height: 80,
+          height: 80},
           color: '#3b82f6',
           shape: 'rectangle' as const,
           ...visual
@@ -41,7 +42,7 @@ export const Node: React.FC<NodeProps> = ({
       };
 
       console.log('Adding node:', node);
-      addNode(node);
+      addNode(node as DiagramNode);
       hasAddedRef.current = true;
     }
   }, []); // Empty dependency array - only run once

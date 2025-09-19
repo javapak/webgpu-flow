@@ -1,293 +1,441 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { WebGPUDiagramRenderer } from '../renderers/WebGPURenderer';
-import { DiagramContext, useDiagram } from '../context/DiagramContext';
-import { MouseInteractions as InteractionUtils } from '../utils/MouseInteractions';
-import type { ResizeHandle } from '../types';
+// components/SpatialDiagramCanvas.tsx
+import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { useDiagram } from './DiagramProvider';
+import { MouseInteractions } from '../utils/MouseInteractions';
 
-interface DiagramCanvasProps {
+interface SpatialDiagramCanvasProps {
   width: number;
   height: number;
   className?: string;
+  showDebugInfo?: boolean;
+  onNodeClick?: (node: any) => void;
+  onNodeDropped?: (nodeType: any, position: {x: number, y: number}) => void;
+  onNodeDoubleClick?: (node: any) => void;
+  onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
 }
 
-export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
+export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
   width,
   height,
-  className
+  className = '',
+  showDebugInfo = false,
+  onNodeClick,
+  onNodeDoubleClick,
+  onCanvasClick,
+  onNodeDropped,
 }) => {
-    
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<WebGPUDiagramRenderer | null>(null);
+  const debugInfoRef = useRef<HTMLDivElement>(null);
+  const animationFrameRef = useRef<number>(null);
   
-  // Get everything from the diagram context
-  const { 
-    state, 
-    setViewport, 
-    updateNodes,
-    moveNode,
-    resizeNode,
-    interactionState,
-    setInteractionState,
-    setSelectedNodes
+  const {
+    viewport,
+    interaction,
+    addNode,
+    getVisibleNodes,
+    hitTestPoint,
+    selectNode,
+    clearSelection,
+    startDrag,
+    updateDrag,
+    endDrag,
+    setViewport,
+    screenToWorld,
+    worldToScreen,
+    getSpatialDebugInfo,
   } = useDiagram();
 
-  // Initialize WebGPU renderer
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [performanceStats, setPerformanceStats] = useState({
+    visibleNodes: 0,
+    totalNodes: 0,
+    renderTime: 0,
+    hitTestTime: 0,
+  });
+
+  // Update viewport size
   useEffect(() => {
-    const initRenderer = async () => {
-      if (!canvasRef.current) return;
-      
-      const renderer = new WebGPUDiagramRenderer();
-      const success = await renderer.initialize(canvasRef.current, {width, height});
-      
-      if (success) {
-        rendererRef.current = renderer;
-        console.log('WebGPU renderer initialized successfully');
-      } else {
-        console.warn('WebGPU initialization failed, falling back to Canvas 2D');
-        // TODO: Implement Canvas 2D fallback
-      }
+    setViewport({ width, height });
+  }, [width, height, setViewport]);
+
+  // Canvas drawing function with spatial optimization
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const startTime = performance.now();
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Set up viewport transformation
+    ctx.save();
+    ctx.translate(width / 2, height / 2);
+    ctx.scale(viewport.zoom, viewport.zoom);
+    ctx.translate(-viewport.x, -viewport.y);
+
+    // Get only visible nodes using spatial index
+    const visibleNodes = getVisibleNodes();
+    
+    // Draw nodes
+    visibleNodes.forEach((node) => {
+      const isSelected = interaction.selectedNodes.some(selected => selected.id === node.id);
+      drawNode(ctx, node, isSelected);
+    });
+
+    ctx.restore();
+
+    // Draw selection box if dragging
+    if (interaction.dragState.isDragging && interaction.dragState.dragType === 'viewport') {
+      drawViewportDragIndicator(ctx);
+    }
+
+    const renderTime = performance.now() - startTime;
+
+    // Update performance stats
+    setPerformanceStats(prev => ({
+      ...prev,
+      visibleNodes: visibleNodes.length,
+      renderTime,
+    }));
+
+    // Update debug info if enabled
+    if (showDebugInfo) {
+      setDebugInfo(getSpatialDebugInfo());
+    }
+  }, [
+    width,
+    height,
+    viewport,
+    interaction,
+    getVisibleNodes,
+    getSpatialDebugInfo,
+    showDebugInfo,
+  ]);
+
+  // Animation loop
+  useEffect(() => {
+    const animate = () => {
+      draw();
+      animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    initRenderer();
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [draw]);
+
+  // Mouse event handlers with spatial hit testing
+  const getMousePos = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
   }, []);
 
-  // Render the diagram whenever state changes
-  useEffect(() => {
-    if (rendererRef.current && rendererRef.current.initialized) {
-      rendererRef.current.render(state);
-    }
-  }, [state, state.nodes, interactionState]);
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const mousePos = getMousePos(e);
+    const hitTestStart = performance.now();
+    const hitNodes = hitTestPoint(mousePos);
+    const hitTestTime = performance.now() - hitTestStart;
 
-  // Force re-render on canvas resize
-  useEffect(() => {
-    if (rendererRef.current && rendererRef.current.initialized && canvasRef.current) {
-      canvasRef.current.width = width;
-      canvasRef.current.height = height;
-      rendererRef.current.render(state);
-    }
-  }, [width, height, state]);
+    setPerformanceStats(prev => ({ ...prev, hitTestTime }));
 
-  // Mouse event handlers
-const handleMouseDown = useCallback((event: React.MouseEvent) => {
-  if (!canvasRef.current) return;
-  
-  const worldPos = InteractionUtils.screenToWorld(
-    event.clientX,
-    event.clientY,
-    canvasRef.current,
-    state.viewport
-  );
-  
-  // First check if we're clicking on a resize handle of a selected node
-  if (interactionState.selectedNodes.length > 0) {
-    const selectedNode = interactionState.selectedNodes[0];
-    const resizeHandle = InteractionUtils.getResizeHandle(worldPos, selectedNode, state.viewport);
-    
-    if (resizeHandle !== 'none') {
-      // Start resizing
-      setInteractionState((prev: any) => ({
-        ...prev,
-        mode: 'resizing',
-        dragTarget: selectedNode.id,
-        resizeHandle,
-        lastMousePos: worldPos
-      }));
-      return;
+    if (hitNodes.length > 0) {
+      // Node hit - start node drag
+      const topNode = hitNodes[0]; // Spatial index returns sorted by area
+      selectNode(topNode);
+      startDrag('node', mousePos);
+      onNodeClick?.(topNode);
+    } else {
+      // Canvas hit - start viewport pan
+      clearSelection();
+      startDrag('viewport', mousePos);
+      const worldPoint = screenToWorld(mousePos);
+      onCanvasClick?.(worldPoint);
     }
-  }
-  
-  const clickedNode = InteractionUtils.findNodeAtPosition(worldPos, state.nodes);
-  
-  if (clickedNode) {
-    // Clear selection from ALL nodes first, then select the clicked node
-    const updatedNodes = state.nodes.map(node => ({
-      ...node,
-      visual: { ...node.visual, selected: false }
-    }));
-    
-    // Set the clicked node as selected
-    const finalNodes = updatedNodes.map(node => 
-      node.id === clickedNode.id 
-        ? { ...node, visual: { ...node.visual, selected: true } }
-        : node
-    );
-    
-    // Update the state with the corrected nodes
-    updateNodes(finalNodes);
-    
-    // Update interaction state
-    setSelectedNodes([{ ...clickedNode, visual: { ...clickedNode.visual, selected: true } }]);
-    setInteractionState((prev: any) => ({
-      ...prev,
-      mode: 'dragging',
-      dragTarget: clickedNode.id,
-      resizeHandle: 'none',
-      lastMousePos: worldPos
-    }));
-  } else {
-    // FIXED: O(1) deselection - we have direct reference to selected node
-    if (interactionState.selectedNodes.length === 1) {
-      const prevSelectedNode = interactionState.selectedNodes[0];
-      if (prevSelectedNode.visual.selected) {
-        prevSelectedNode.visual.selected = false;
-        updateNodes([...state.nodes]); // Shallow copy to trigger React re-render
-      }
-    }
-    
-    // Start panning
-    setSelectedNodes([]);
-    setInteractionState((prev: any) => ({
-      ...prev,
-      mode: 'panning',
-      dragTarget: null,
-      resizeHandle: 'none',
-      lastMousePos: worldPos
-    }));
-  }
-}, [state.viewport, state.nodes, interactionState.selectedNodes, setSelectedNodes, setInteractionState, updateNodes]);
-
-  useEffect(() => {
-    // deselect node on canvas click....
-    if (interactionState.mode === 'panning') {
-      if (interactionState.selectedNodes.length === 1)
-        interactionState.selectedNodes[0].visual.selected = false;
-    
-      setSelectedNodes([]);
-    }
-  }, [interactionState.mode]);
-  
-  useEffect(() => {
-    if (interactionState.selectedNodes.length === 1)
-      interactionState.selectedNodes[0].visual.selected = true;
-  }, [interactionState.selectedNodes])
+  }, [
+    getMousePos,
+    hitTestPoint,
+    selectNode,
+    startDrag,
+    clearSelection,
+    screenToWorld,
+    onNodeClick,
+    onCanvasClick,
+  ]);
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
-    if (!canvasRef.current) return;
-    
-    const worldPos = InteractionUtils.screenToWorld(
-      event.clientX,
-      event.clientY,
-      canvasRef.current,
-      state.viewport
-    );
-    
-    // Update hover handle for cursor changes when not actively interacting
-    if (interactionState.mode === 'idle' && interactionState.selectedNodes.length > 0) {
-      const selectedNode = interactionState.selectedNodes[0];
-      const hoverHandle = InteractionUtils.getResizeHandle(worldPos, selectedNode, state.viewport);
-      
-      if (hoverHandle !== interactionState.hoverHandle) {
-        setInteractionState((prev: any) => ({
-          ...prev,
-          hoverHandle
-        }));
-      }
+    event.preventDefault();
+    if (interaction.dragState.isDragging) {
+      const mousePos = getMousePos(event);
+      updateDrag(mousePos);
     }
-    
-    if (interactionState.mode === 'idle') return;
-    
-    const deltaX = worldPos.x - interactionState.lastMousePos.x;
-    const deltaY = worldPos.y - interactionState.lastMousePos.y;
-    
-    if (interactionState.mode === 'resizing' && interactionState.dragTarget) {
-      // Resize the selected node
-      const currentNode = state.nodes.find((n: { id: any; }) => n.id === interactionState.dragTarget);
-      if (currentNode) {
-        const currentWidth = currentNode.visual.width || 120;
-        const currentHeight = currentNode.visual.height || 80;
-        const currentPos = currentNode.data.position || { x: 0, y: 0 };
-        
-        const resizeResult = InteractionUtils.calculateResize(
-          interactionState.resizeHandle,
-          deltaX,
-          deltaY,
-          currentWidth,
-          currentHeight,
-          currentPos.x,
-          currentPos.y
-        );
-        
-        resizeNode(interactionState.dragTarget, resizeResult);
-      }
-    } else if (interactionState.mode === 'dragging' && interactionState.dragTarget) {
-      // Move the selected node
-      const currentNode = state.nodes.find((n: { id: any; }) => n.id === interactionState.dragTarget);
-      if (currentNode) {
-        const currentPos = currentNode.data.position || { x: 0, y: 0 };
-        const newPos = {
-          x: currentPos.x + deltaX,
-          y: currentPos.y + deltaY
-        };
-        moveNode(interactionState.dragTarget, newPos);
-      }
-    } else if (interactionState.mode === 'panning') {
-      // Pan the viewport - pass partial viewport object
-      if (worldPos.x !== interactionState.lastMousePos.x && worldPos.y !== interactionState.lastMousePos.y) {
-        setViewport({
-            x: state.viewport.x - deltaX ,
-            y: state.viewport.y - deltaY,
-            zoom: state.viewport.zoom
-        });
-      }
-    }
-    
-    setInteractionState((prev: any) => ({
-      ...prev,
-      lastMousePos: worldPos
-    }));
-  }, [state.viewport.x, state.viewport.y, state.nodes, interactionState, moveNode, resizeNode, setViewport, setInteractionState]);
+  }, [interaction.dragState.isDragging, getMousePos, updateDrag]);
 
   const handleMouseUp = useCallback(() => {
-    setInteractionState((prev: any) => ({
-      ...prev,
-      mode: 'idle',
-      dragTarget: null,
-      resizeHandle: 'none'
-    }));
-  }, [setInteractionState]);
+    if (interaction.dragState.isDragging) {
+      endDrag();
+    }
+  }, [interaction.dragState.isDragging, endDrag]);
 
-  const handleWheel = useCallback((event: React.WheelEvent) => {
-    const zoomSpeed = 0.1;
-    const zoomDelta = -event.deltaY * zoomSpeed * 0.01;
-    const newZoom = Math.max(0.1, Math.min(3.0, state.viewport.zoom + zoomDelta));
+   const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback((event: React.DragEvent) => {
+    
+    if (!canvasRef.current) return;
+    
+    try {
+      // Get the dropped node type data
+      const nodeTypeData = event.dataTransfer.getData('application/node-type');
+      if (!nodeTypeData) return;
+      
+      const nodeType: any = JSON.parse(nodeTypeData);
+      
+      // Convert drop position to world coordinates
+      const worldPos = MouseInteractions.screenToWorld(
+        event.clientX,
+        event.clientY,
+        canvasRef.current,
+        viewport
+      );
+      
+      // Generate unique ID for the new node
+      const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create new node
+      const newNode = {
+        id: newNodeId,
+        type: nodeType.id,
+        data: { 
+          label: nodeType.name,
+          position: worldPos 
+        },
+        visual: {
+          width: nodeType.width,
+          height: nodeType.height,
+          color: nodeType.color,
+          shape: nodeType.shape,
+          selected: false
+        }
+      };
+      
+      // Add the node to the diagram
+      addNode(newNode);
+      
+      // Call optional callback
+      if (onNodeDropped) {
+        onNodeDropped(nodeType, worldPos);
+      }
+      
+      console.log('Node dropped:', newNode);
+      
+    } catch (error) {
+      console.error('Error handling node drop:', error);
+    }
+  }, [viewport, addNode, onNodeDropped]);
+
+  const handleDragEnter = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    // Add visual feedback when drag enters canvas
+    if (canvasRef.current) {
+      canvasRef.current.style.backgroundColor = '#f0f8ff';
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    // Remove visual feedback when drag leaves canvas
+    if (canvasRef.current && !canvasRef.current.contains(event.relatedTarget as Node)) {
+      canvasRef.current.style.backgroundColor = '';
+    }
+  }, []);
+
+
+
+  const handleMouseLeave = useCallback(() => {
+    if (interaction.dragState.isDragging) {
+      endDrag();
+    }
+  }, [interaction.dragState.isDragging, endDrag]);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    const mousePos = getMousePos(e);
+    const hitNodes = hitTestPoint(mousePos);
+    
+    if (hitNodes.length > 0) {
+      onNodeDoubleClick?.(hitNodes[0]);
+    }
+  }, [getMousePos, hitTestPoint, onNodeDoubleClick]);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    
+    const mousePos = getMousePos(e);
+    const worldPosBeforeZoom = screenToWorld(mousePos);
+    
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
+    
+    // Calculate new viewport position to keep mouse point stable
+    const worldPosAfterZoom = {
+      x: (mousePos.x - width / 2) / newZoom + viewport.x,
+      y: (mousePos.y - height / 2) / newZoom + viewport.y,
+    };
+    
+    const deltaX = worldPosAfterZoom.x - worldPosBeforeZoom.x;
+    const deltaY = worldPosAfterZoom.y - worldPosBeforeZoom.y;
     
     setViewport({
-      zoom: newZoom
+      zoom: newZoom,
+      x: viewport.x + deltaX,
+      y: viewport.y + deltaY,
     });
-  }, [state.viewport.zoom, setViewport]);
+  }, [getMousePos, screenToWorld, viewport, width, height, setViewport]);
 
-  // Determine cursor based on interaction state and hover handle
-  const getCursor = () => {
-    if (interactionState.mode === 'resizing') {
-      return InteractionUtils.getCursorForHandle(interactionState.resizeHandle);
-    } else if (interactionState.mode === 'dragging') {
-      return 'grabbing';
-    } else if (interactionState.mode === 'panning') {
-      return 'grabbing';
-    } else if (interactionState.hoverHandle !== 'none') {
-      return InteractionUtils.getCursorForHandle(interactionState.hoverHandle);
-    } else {
-      return 'grab';
+  // Drawing helper functions
+  const drawNode = (ctx: CanvasRenderingContext2D, node: any, isSelected: boolean) => {
+    const { x, y } = node.data.position;
+    const size = node.data.size || { width: 100, height: 60 };
+    const color = node.visual?.color || '#3b82f6';
+    
+    ctx.save();
+    
+    // Draw node body
+    ctx.fillStyle = color;
+    ctx.fillRect(
+      x - size.width / 2,
+      y - size.height / 2,
+      size.width,
+      size.height
+    );
+    
+    // Draw border
+    ctx.strokeStyle = isSelected ? '#ef4444' : '#1f2937';
+    ctx.lineWidth = isSelected ? 3 : 1;
+    ctx.strokeRect(
+      x - size.width / 2,
+      y - size.height / 2,
+      size.width,
+      size.height
+    );
+    
+    // Draw label
+    if (node.data.label) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.data.label, x, y);
     }
+    
+    ctx.restore();
+  };
+
+  const drawViewportDragIndicator = (ctx: CanvasRenderingContext2D) => {
+    ctx.save();
+    ctx.strokeStyle = '#6b7280';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(10, 10, width - 20, height - 20);
+    ctx.restore();
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={width}
-      height={height}
-      className={className}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp} // Stop interactions when mouse leaves canvas
-      onWheel={handleWheel}
-      style={{ 
-        border: '1px solid #ccc',
-        display: 'block',
-        cursor: getCursor(),
-        ...({} as React.CSSProperties)
-      }}
-    />
+    <div className={`relative ${className}`}>
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        className="border border-gray-300 cursor-grab active:cursor-grabbing"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onDoubleClick={handleDoubleClick}
+        onWheel={handleWheel}
+      />
+      
+      {showDebugInfo && (
+        <div
+          ref={debugInfoRef}
+          className="absolute top-2 left-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded font-mono"
+        >
+          <div>Visible: {performanceStats.visibleNodes} nodes</div>
+          <div>Render: {performanceStats.renderTime.toFixed(2)}ms</div>
+          <div>Hit Test: {performanceStats.hitTestTime.toFixed(2)}ms</div>
+          <div>Zoom: {viewport.zoom.toFixed(2)}x</div>
+          <div>Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})</div>
+          {debugInfo && (
+            <div className="mt-2 border-t border-gray-600 pt-2">
+              <div>QuadTree Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</div>
+              <div>Total Items: {debugInfo.totalItems}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
+
+// Helper function to calculate max depth from debug info
+const getMaxDepth = (nodeInfo: any): number => {
+  if (!nodeInfo.children) return nodeInfo.depth;
+  
+  return Math.max(
+    nodeInfo.depth,
+    ...nodeInfo.children.map((child: any) => getMaxDepth(child))
+  );
+};
+
+// Performance monitoring component
+interface PerformanceMonitorProps {
+  className?: string;
+}
+
+export const DiagramPerformanceMonitor: React.FC<PerformanceMonitorProps> = ({
+  className = '',
+}) => {
+  const { getSpatialDebugInfo } = useDiagram();
+  const [stats, setStats] = useState<any>(null);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStats(getSpatialDebugInfo());
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [getSpatialDebugInfo]);
+  
+  if (!stats) return null;
+  
+  return (
+    <div className={`bg-gray-100 p-4 rounded ${className}`}>
+      <h3 className="text-lg font-semibold mb-2">Spatial Index Performance</h3>
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <span className="font-medium">Total Nodes:</span> {stats.totalItems}
+        </div>
+        <div>
+          <span className="font-medium">Max Depth:</span> {getMaxDepth(stats.quadTreeInfo)}
+        </div>
+      </div>
+    </div>
+  );
+};
+

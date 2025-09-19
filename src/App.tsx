@@ -1,68 +1,98 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { DiagramProvider, DiagramCanvas, Node, Edge } from './index';
+import { NodePalette, type NodeType } from './components/NodePalette';
 
 export const DiagramDemo: React.FC = () => {
+  const [draggedNodeType, setDraggedNodeType] = useState<NodeType | null>(null);
+  const [nodeCounter, setNodeCounter] = useState(1);
+
+  const handleNodeDragStart = (nodeType: NodeType, event: React.DragEvent) => {
+    setDraggedNodeType(nodeType);
+    console.log('Started dragging node type:', nodeType.name);
+  };
+
+  const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
+    console.log(`Dropped ${nodeType.name} at position:`, position);
+    setDraggedNodeType(null);
+    setNodeCounter(prev => prev + 1);
+  };
+
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>WebGPU-Flow demo</h2>
-      <DiagramProvider>
-        <DiagramCanvas width={800} height={600} />
-        <Node 
-          id="node1" 
-          type="database" 
-          position={{ x: 100, y: 100 }}
-          data={{ tableName: "users" }}
-          visual={{ 
-            color: "#3b82f6", 
-            shape: 'circle',
-            width: 120, 
-            height: 120, 
-          }}
+    <div style={{ 
+      padding: '20px',
+      display: 'flex',
+      gap: '20px',
+      backgroundColor: '#f8f9fa',
+      minHeight: '100vh'
+    }}>
+      <div style={{ flex: '0 0 auto' }}>
+        <NodePalette 
+          onNodeDragStart={handleNodeDragStart}
         />
-        
-        <Node 
-          id="node2" 
-          type="api" 
-          position={{ x: 0, y: 50 }}
-          data={{ endpoint: "/api/users" }}
-          visual={{ 
-            color: "#10b981", 
-            width: 140, 
-            height: 70 
-          }}
-        />
-        
-        <Node 
-          id="node3" 
-          type="frontend" 
-          position={{ x: 200, y: 300 }}
-          data={{ component: "UserList", label: "Test" }}
-          visual={{ 
-            color: "#ff42c6", 
-            shape: 'hexagon',
-
-            width: 100, 
-            height: 90 
-          }}
-        />
-        
-        <Edge 
-          id="edge1" 
-          source="node1" 
-          target="node2"
-          visual={{ color: "#6b7280", width: 2 }}
-        />
-        
-        <Edge 
-          id="edge2" 
-          source="node2" 
-          target="node3"
-          visual={{ color: "#ef4444", width: 3 }}
-        />
-      </DiagramProvider>
+      </div>
       
-      <div style={{ marginTop: '20px', fontSize: '14px', color: '#525252ff' }}>
+      <div style={{ flex: '1', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h2 style={{ margin: '0 0 8px 0', color: '#343a40' }}>
+            WebGPU Diagram Demo with Drag & Drop
+          </h2>
+          <p style={{ margin: '0', color: '#6c757d', fontSize: '14px' }}>
+            Drag nodes from the palette to add them to the diagram. 
+            {draggedNodeType && (
+              <span style={{ color: '#007bff', fontWeight: 'bold' }}>
+                {' '}Currently dragging: {draggedNodeType.name}
+              </span>
+            )}
+          </p>
+        </div>
 
+        <div style={{ 
+          flex: '1',
+          border: '2px dashed #dee2e6',
+          borderRadius: '8px',
+          padding: '16px',
+          backgroundColor: '#ffffff',
+          position: 'relative'
+        }}>
+          <DiagramProvider>
+            <DiagramCanvas 
+              width={1280} 
+              height={720}
+              onNodeDropped={handleNodeDropped}
+            />
+            
+            {/* Add some example nodes */}
+            <Node 
+              id="example-node1" 
+              type="database" 
+              position={{ x: 150, y: 100 }}
+              data={{ 
+                tableName: "users",
+                label: "Example Database"
+              }}
+              visual={{ 
+                color: "#3b82f6", 
+                shape: 'circle',
+                size: {
+                width: 120, 
+                height: 120
+                }
+              }}
+            />
+            
+           
+          </DiagramProvider>
+        </div>
+
+        <div style={{
+          marginTop: '16px',
+          display: 'flex',
+          gap: '16px',
+          fontSize: '14px',
+          color: '#6c757d'
+        }}>
+          
+        </div>
       </div>
     </div>
   );

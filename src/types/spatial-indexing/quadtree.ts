@@ -2,8 +2,8 @@ import type { QuadTreeNode, AABB, SpatialNode, Point } from "./types";
 
 export class QuadTree<T = any> {
   private root: QuadTreeNode<T>;
-  private readonly MAX_ITEMS = 10;
-  private readonly MAX_DEPTH = 8;
+  private MAX_ITEMS = 10;
+  private MAX_DEPTH = 8;
 
   constructor(bounds: AABB, maxItems = 10, maxDepth = 8) {
     this.MAX_ITEMS = maxItems;

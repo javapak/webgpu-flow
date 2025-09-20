@@ -28,8 +28,8 @@ export class MouseInteractions {
   ): boolean {
     const nodeX = node.data.position?.x || 0;
     const nodeY = node.data.position?.y || 0;
-    const width = node.visual.width || 120;
-    const height = node.visual.height || 80;
+    const width = node.visual.size?.width || 120;
+    const height = node.visual.size?.height || 80;
     
     const left = nodeX - width / 2;
     const right = nodeX + width / 2;
@@ -54,8 +54,8 @@ export class MouseInteractions {
 
     const nodeX = node.data.position?.x || 0;
     const nodeY = node.data.position?.y || 0;
-    const width = node.visual.width || 120;
-    const height = node.visual.height || 80;
+    const width = node.visual.size?.width || 120;
+    const height = node.visual.size?.height || 80;
     
     // Get node bounds in world coordinates
     const left = nodeX - width / 2;

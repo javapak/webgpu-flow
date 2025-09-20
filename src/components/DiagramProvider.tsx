@@ -1,10 +1,9 @@
-import { useReducer, useEffect, useCallback, useMemo, useContext, createContext } from "react";
-import { useSpatialIndex } from "../hooks/useSpatialIndex";
+import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef } from "react";
+import { useSpatialIndex, type SpatialDiagramHook } from "../hooks/useSpatialIndex";
+import { WebGPURenderer } from "../renderers/WebGPURenderer";
 import type { Viewport, DiagramState, DiagramNode, DiagramEdge, InteractionState } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
-
-
-
+import { DebugWebGPURenderer } from "../renderers/DebugWebGPURenderer";
 
 export interface DiagramContextValue extends DiagramState {
   // Spatial-aware methods
@@ -29,6 +28,12 @@ export interface DiagramContextValue extends DiagramState {
   updateDrag: (screenPoint: Point) => void;
   endDrag: () => void;
   
+  // Renderer methods
+  getRenderer: () => WebGPURenderer | null;
+  isRendererInitialized: () => boolean;
+  initializeRenderer: (canvas: HTMLCanvasElement) => Promise<boolean>;
+  renderFrame: () => void;
+  
   // Debug
   getSpatialDebugInfo: () => any;
 }
@@ -44,22 +49,24 @@ type DiagramAction =
   | { type: 'UPDATE_EDGE'; edge: DiagramEdge }
   | { type: 'SET_VIEWPORT'; viewport: Partial<Viewport> }
   | { type: 'SELECT_NODE'; node: DiagramNode | null }
-  | { type: 'SELECT_NODES'; nodes: DiagramNode[] }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'selection'; startPos: Point }
   | { type: 'UPDATE_DRAG'; currentPos: Point }
-  | { type: 'END_DRAG' }
-  | { type: 'SET_MODE'; mode: InteractionState['mode'] };
+  | { type: 'END_DRAG' };
 
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
+  console.log('Reducer action:', action.type, action);
+  
   switch (action.type) {
     case 'ADD_NODE':
+      console.log('Adding node to state:', action.node);
       return {
         ...state,
         nodes: [...state.nodes, action.node],
       };
 
     case 'REMOVE_NODE':
+      console.log('Removing node from state:', action.nodeId);
       return {
         ...state,
         nodes: state.nodes.filter(node => node.id !== action.nodeId),
@@ -72,6 +79,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'UPDATE_NODE':
+      console.log('Updating node in state:', action.node);
       return {
         ...state,
         nodes: state.nodes.map(node =>
@@ -85,6 +93,26 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         },
       };
 
+    case 'ADD_EDGE':
+      return {
+        ...state,
+        edges: [...state.edges, action.edge],
+      };
+
+    case 'REMOVE_EDGE':
+      return {
+        ...state,
+        edges: state.edges.filter(edge => edge.id !== action.edgeId),
+      };
+
+    case 'UPDATE_EDGE':
+      return {
+        ...state,
+        edges: state.edges.map(edge =>
+          edge.id === action.edge.id ? action.edge : edge
+        ),
+      };
+
     case 'SET_VIEWPORT':
       return {
         ...state,
@@ -92,6 +120,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'SELECT_NODE':
+      console.log('Selecting node:', action.node?.id || 'none');
       return {
         ...state,
         interaction: {
@@ -101,6 +130,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'CLEAR_SELECTION':
+      console.log('Clearing selection');
       return {
         ...state,
         interaction: {
@@ -197,6 +227,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       return state;
   }
 };
+
 interface DiagramProviderProps {
   children: React.ReactNode;
   initialBounds?: AABB;
@@ -232,54 +263,18 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     },
   };
 
+  // State and refs
   const [state, dispatch] = useReducer(diagramReducer, initialState);
-  const spatial = useSpatialIndex(initialBounds);
+  const spatial: SpatialDiagramHook = useSpatialIndex(initialBounds);
+  const rendererRef = useRef<WebGPURenderer | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderScheduledRef = useRef<boolean>(false);
+  const stateRef = useRef(state); // Keep current state in ref
 
-  // Sync spatial index with state changes
+  // Update state ref whenever state changes
   useEffect(() => {
-    spatial.rebuild(state.nodes);
-  }, [state.nodes, spatial]);
-
-  // Node methods
-  const addNode = useCallback((node: DiagramNode) => {
-    dispatch({ type: 'ADD_NODE', node });
-    spatial.addNode(node);
-  }, [spatial]);
-
-  const removeNode = useCallback((nodeId: string) => {
-    dispatch({ type: 'REMOVE_NODE', nodeId });
-    spatial.removeNode(nodeId);
-  }, [spatial]);
-
-  const updateNode = useCallback((node: DiagramNode) => {
-    dispatch({ type: 'UPDATE_NODE', node });
-    spatial.updateNode(node);
-  }, [spatial]);
-
-  
-  const addEdge = useCallback((edge: DiagramEdge) => {
-    dispatch({ type: 'ADD_EDGE', edge });
-  }, []);
-
-  const removeEdge = useCallback((edgeId: string) => {
-    dispatch({ type: 'REMOVE_EDGE', edgeId });
-  }, []);
-
-  const updateEdge = useCallback((edge: DiagramEdge) => {
-    dispatch({ type: 'UPDATE_EDGE', edge });
-  }, []);
-  
-
-  // Get only visible nodes for efficient rendering
-  const getVisibleNodes = useCallback(() => {
-    const viewportBounds: AABB = {
-      minX: state.viewport.x - state.viewport.width / (2 * state.viewport.zoom),
-      minY: state.viewport.y - state.viewport.height / (2 * state.viewport.zoom),
-      maxX: state.viewport.x + state.viewport.width / (2 * state.viewport.zoom),
-      maxY: state.viewport.y + state.viewport.height / (2 * state.viewport.zoom),
-    };
-    return spatial.getVisibleNodes(viewportBounds);
-  }, [spatial, state.viewport]);
+    stateRef.current = state;
+  }, [state]);
 
   // Coordinate transformation utilities
   const screenToWorld = useCallback((screenPoint: Point): Point => {
@@ -296,11 +291,116 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     };
   }, [state.viewport]);
 
+  // Get only visible nodes for efficient rendering
+  const getVisibleNodes = useCallback(() => {
+    const viewportBounds: AABB = {
+      minX: state.viewport.x - state.viewport.width / (2 * state.viewport.zoom),
+      minY: state.viewport.y - state.viewport.height / (2 * state.viewport.zoom),
+      maxX: state.viewport.x + state.viewport.width / (2 * state.viewport.zoom),
+      maxY: state.viewport.y + state.viewport.height / (2 * state.viewport.zoom),
+    };
+    const visible = spatial.getVisibleNodes(viewportBounds);
+    console.log('getVisibleNodes:', { 
+      bounds: viewportBounds, 
+      total: state.nodes.length, 
+      visible: visible.length,
+      visibleIds: visible.map(n => n.id)
+    });
+    return visible;
+  }, [spatial, state.viewport, state.nodes.length]);
+
+  // Simplified render scheduling
+  const scheduleRender = useCallback(() => {
+    if (rendererRef.current?.initialized && canvasRef.current) {
+      // Get fresh state values directly
+      const currentState = stateRef.current;
+      
+      // Calculate visible nodes with fresh state
+      const viewportBounds: AABB = {
+        minX: currentState.viewport.x - currentState.viewport.width / (2 * currentState.viewport.zoom),
+        minY: currentState.viewport.y - currentState.viewport.height / (2 * currentState.viewport.zoom),
+        maxX: currentState.viewport.x + currentState.viewport.width / (2 * currentState.viewport.zoom),
+        maxY: currentState.viewport.y + currentState.viewport.height / (2 * currentState.viewport.zoom),
+      };
+      const visibleNodes = spatial.getVisibleNodes(viewportBounds);
+      
+      const canvasSize = {
+        width: canvasRef.current.width,
+        height: canvasRef.current.height,
+      };
+      
+      console.log('WebGPU Render (Direct):', {
+        totalNodes: currentState.nodes.length,
+        visibleNodes: visibleNodes.length,
+        selectedNodes: currentState.interaction.selectedNodes.length,
+        viewport: currentState.viewport
+      });
+      
+      try {
+        rendererRef.current.render(currentState.nodes, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
+      } catch (error) {
+        console.error('Render error:', error);
+      }
+    }
+  }, [spatial]); // Only depend on spatial
+
+  // Initialize renderer
+  const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {
+    console.log('Initializing WebGPU renderer...');
+    canvasRef.current = canvas;
+    
+    if (!rendererRef.current) {
+      rendererRef.current = new WebGPURenderer();
+    }
+    
+    const success = await rendererRef.current.initialize(canvas);
+    
+    if (success) {
+      console.log('WebGPU renderer initialized successfully');
+      scheduleRender();
+      return true;
+    } else {
+      console.warn('WebGPU initialization failed');
+      return false;
+    }
+  }, [scheduleRender]);
+
   // Hit testing using spatial index
   const hitTestPoint = useCallback((screenPoint: Point) => {
     const worldPoint = screenToWorld(screenPoint);
-    return spatial.hitTest(worldPoint);
+    const hits = spatial.hitTest(worldPoint);
+    console.log('hitTestPoint:', { screenPoint, worldPoint, hits: hits.length, hitIds: hits.map(n => n.id) });
+    return hits;
   }, [spatial, screenToWorld]);
+
+  // Node methods
+  const addNode = useCallback((node: DiagramNode) => {
+    console.log('DiagramProvider.addNode called:', node);
+    dispatch({ type: 'ADD_NODE', node });
+  }, []);
+
+  const removeNode = useCallback((nodeId: string) => {
+    console.log('DiagramProvider.removeNode called:', nodeId);
+    dispatch({ type: 'REMOVE_NODE', nodeId });
+  }, []);
+
+  const updateNode = useCallback((node: DiagramNode) => {
+    console.log('DiagramProvider.updateNode called:', node);
+    dispatch({ type: 'UPDATE_NODE', node });
+  }, []);
+
+  // Edge methods
+  const addEdge = useCallback((edge: DiagramEdge) => {
+    dispatch({ type: 'ADD_EDGE', edge });
+  }, []);
+
+  const removeEdge = useCallback((edgeId: string) => {
+    dispatch({ type: 'REMOVE_EDGE', edgeId });
+  }, []);
+
+  const updateEdge = useCallback((edge: DiagramEdge) => {
+    dispatch({ type: 'UPDATE_EDGE', edge });
+  }, []);
 
   // Viewport methods
   const setViewport = useCallback((viewport: Partial<Viewport>) => {
@@ -309,14 +409,12 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
 
   // Selection methods
   const selectNode = useCallback((node: DiagramNode | null) => {
+    console.log('selectNode called:', node?.id || 'null');
     dispatch({ type: 'SELECT_NODE', node });
   }, []);
 
-  const selectNodes = useCallback((nodes: DiagramNode[]) => {
-    dispatch({ type: 'SELECT_NODES', nodes });
-  }, []);
-
   const clearSelection = useCallback(() => {
+    console.log('clearSelection called');
     dispatch({ type: 'CLEAR_SELECTION' });
   }, []);
 
@@ -333,36 +431,84 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     dispatch({ type: 'END_DRAG' });
   }, []);
 
-  // Mode methods
-  const setMode = useCallback((mode: InteractionState['mode']) => {
-    dispatch({ type: 'SET_MODE', mode });
+  // Renderer methods
+  const getRenderer = useCallback(() => rendererRef.current, []);
+  
+  const isRendererInitialized = useCallback(() => {
+    return rendererRef.current?.initialized || false;
   }, []);
+
+  const renderFrame = useCallback(() => {
+    scheduleRender();
+  }, [scheduleRender]);
 
   // Debug methods
   const getSpatialDebugInfo = useCallback(() => {
     return spatial.getDebugInfo();
   }, [spatial]);
 
+  // Effects
+  // Log state changes
+  useEffect(() => {
+    console.log('State updated:', {
+      nodeCount: state.nodes.length,
+      selectedCount: state.interaction.selectedNodes.length,
+      nodes: state.nodes.map(n => ({ id: n.id, pos: n.data.position })),
+      selected: state.interaction.selectedNodes.map(n => n.id)
+    });
+  }, [state.nodes, state.interaction.selectedNodes]);
+
+  // Rebuild spatial index when nodes change
+  useEffect(() => {
+    console.log('Rebuilding spatial index with', state.nodes.length, 'nodes');
+    spatial.rebuild(state.nodes);
+  }, [state.nodes, spatial]);
+
+  // Schedule render when state changes
+  useEffect(() => {
+    scheduleRender();
+  }, [scheduleRender]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (rendererRef.current) {
+        rendererRef.current.destroy();
+      }
+    };
+  }, []);
+
+  // Context value
   const contextValue: DiagramContextValue = useMemo(() => ({
     ...state,
+    // Node methods
     addNode,
     removeNode,
     updateNode,
+    // Edge methods  
     addEdge,
     removeEdge,
     updateEdge,
+    // Spatial methods
     getVisibleNodes,
     hitTestPoint,
+    // Viewport methods
     setViewport,
     screenToWorld,
     worldToScreen,
+    // Selection methods
     selectNode,
-    selectNodes,
     clearSelection,
+    // Interaction methods
     startDrag,
     updateDrag,
     endDrag,
-    setMode,
+    // Renderer methods
+    getRenderer,
+    isRendererInitialized,
+    initializeRenderer,
+    renderFrame,
+    // Debug methods
     getSpatialDebugInfo,
   }), [
     state,
@@ -378,12 +524,14 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     screenToWorld,
     worldToScreen,
     selectNode,
-    selectNodes,
     clearSelection,
     startDrag,
     updateDrag,
     endDrag,
-    setMode,
+    getRenderer,
+    isRendererInitialized,
+    initializeRenderer,
+    renderFrame,
     getSpatialDebugInfo,
   ]);
 

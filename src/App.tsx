@@ -57,8 +57,8 @@ export const DiagramDemo: React.FC = () => {
         }}>
           <DiagramProvider >
             <DiagramCanvas 
-              width={1280} 
-              height={720}
+              width={800} 
+              height={600}
               onNodeDropped={handleNodeDropped}
               showDebugInfo
             
@@ -66,19 +66,37 @@ export const DiagramDemo: React.FC = () => {
             
             {/* Add some example nodes */}
             <Node 
-              id="example-node1" 
+              id="abc" 
               type="database" 
-              position={{ x: 150, y: 100 }}
+              position={{ x: 100, y: 100 }}
               data={{ 
                 tableName: "users",
                 label: "Example Database"
               }}
               visual={{ 
-                color: "#0062ffff", 
+                color: "#ff7300ff", 
                 shape: 'rectangle',
                 size: {
-                width: 120, 
-                height: 120
+                width: 1000, 
+                height: 100,
+                }
+              }}
+            />
+
+           <Node 
+              id="example-node1" 
+              type="database" 
+              position={{ x: 100, y: -100 }}
+              data={{ 
+                tableName: "users",
+                label: "Example Database"
+              }}
+              visual={{ 
+                color: "#004dc8ff", 
+                shape: 'rectangle',
+                size: {
+                width: 100, 
+                height: 100,
                 }
               }}
             />

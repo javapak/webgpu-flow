@@ -460,6 +460,7 @@ export interface NodeSchema {
   type: string;
   visual: {
     shape?: 'rectangle' | 'circle' | 'diamond';
+    selected?: boolean;
     color?: string;
     size?: { width: number; height: number };
   };

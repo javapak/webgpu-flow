@@ -1,10 +1,8 @@
-// components/SpatialDiagramCanvas.tsx
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
-import { WebGPURenderer } from '../types';
 
-interface SpatialDiagramCanvasProps {
+interface DiagramCanvasProps {
   width: number;
   height: number;
   className?: string;
@@ -15,7 +13,7 @@ interface SpatialDiagramCanvasProps {
   onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
 }
 
-export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
+export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   width,
   height,
   className = '',
@@ -26,17 +24,14 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
   onNodeDropped,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<WebGPURenderer>(null);
-  const debugInfoRef = useRef<HTMLDivElement>(null);
-  const animationFrameRef = useRef<number>(null);
+  const [webGPUSupported, setWebGPUSupported] = useState<boolean | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const initializationAttempted = useRef(false);
 
-  
-  
   const {
     viewport,
     interaction,
     addNode,
-    getVisibleNodes,
     hitTestPoint,
     selectNode,
     clearSelection,
@@ -45,68 +40,69 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
     endDrag,
     setViewport,
     screenToWorld,
-    worldToScreen,
     getSpatialDebugInfo,
+    initializeRenderer,
+    isRendererInitialized,
+    renderFrame,
   } = useDiagram();
 
-   useEffect(() => {
-    const initRenderer = async () => {
-      if (!canvasRef.current) return;
+  // Initialize renderer once
+  useEffect(() => {
+    if (!canvasRef.current || initializationAttempted.current) {
+      return;
+    }
+
+    const initCanvas = async () => {
+      initializationAttempted.current = true;
+      console.log('🚀 DiagramCanvas: Initializing renderer...');
       
-      const renderer = new WebGPURenderer();
-      const success = await renderer.initialize(canvasRef.current);
-      
-      if (success) {
-        rendererRef.current = renderer;
-        console.log('WebGPU renderer initialized successfully');
-      } else {
-        console.warn('WebGPU initialization failed, falling back to Canvas 2D');
-        // TODO: Implement Canvas 2D fallback
+      try {
+        const success = await initializeRenderer(canvasRef.current!);
+        setWebGPUSupported(success);
+        
+        if (success) {
+          console.log('✅ DiagramCanvas: WebGPU initialized');
+        } else {
+          console.warn('⚠️ DiagramCanvas: WebGPU failed');
+        }
+      } catch (error) {
+        console.error('❌ DiagramCanvas: Init error:', error);
+        setWebGPUSupported(false);
       }
     };
 
-    initRenderer();
-  }, []);
+    initCanvas();
+  }, [initializeRenderer]);
 
-  // Render the diagram whenever state changes
   useEffect(() => {
-    if (rendererRef.current && rendererRef.current.initialized) {
-      rendererRef.current.render(getVisibleNodes(), viewport, {width, height});
-    }
-  }, [viewport, width, height, getVisibleNodes]);
+  if (isRendererInitialized() && canvasRef.current) {
+    console.log('🔄 VIEWPORT CHANGED, triggering render:', {
+      x: viewport.x,
+      y: viewport.y, 
+      zoom: viewport.zoom
+    });
+    renderFrame();
+  }
+}, [viewport.x, viewport.y, viewport.zoom, isRendererInitialized, renderFrame]);
+  
 
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [performanceStats, setPerformanceStats] = useState({
-    visibleNodes: 0,
-    totalNodes: 0,
-    renderTime: 0,
-    hitTestTime: 0,
-  });
-
-  // Update viewport size
+  // Update viewport size when canvas size changes
   useEffect(() => {
     setViewport({ width, height });
   }, [width, height, setViewport]);
 
-  // Canvas drawing function with spatial optimization
-
-
-  // Animation loop
+  // Update debug info periodically
   useEffect(() => {
-    const animate = () => {
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
+    if (showDebugInfo) {
+      const interval = setInterval(() => {
+        setDebugInfo(getSpatialDebugInfo());
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [showDebugInfo, getSpatialDebugInfo]);
 
-    animationFrameRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, []);
-
-  // Mouse event handlers with spatial hit testing
+  // Mouse position helper
   const getMousePos = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
@@ -117,42 +113,30 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
     };
   }, []);
 
+  // Mouse event handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    console.log('🖱️ Mouse down');
     const mousePos = getMousePos(e);
-    const hitTestStart = performance.now();
     const hitNodes = hitTestPoint(mousePos);
-    const hitTestTime = performance.now() - hitTestStart;
-
-    setPerformanceStats(prev => ({ ...prev, hitTestTime }));
 
     if (hitNodes.length > 0) {
-      // Node hit - start node drag
-      const topNode = hitNodes[0]; // Spatial index returns sorted by area
+      const topNode = hitNodes[0];
+      console.log('🎯 Node hit:', topNode.id);
       selectNode(topNode);
       startDrag('node', mousePos);
       onNodeClick?.(topNode);
     } else {
-      // Canvas hit - start viewport pan
+      console.log('🌍 Canvas hit');
       clearSelection();
       startDrag('viewport', mousePos);
       const worldPoint = screenToWorld(mousePos);
       onCanvasClick?.(worldPoint);
     }
-  }, [
-    getMousePos,
-    hitTestPoint,
-    selectNode,
-    startDrag,
-    clearSelection,
-    screenToWorld,
-    onNodeClick,
-    onCanvasClick,
-  ]);
+  }, [getMousePos, hitTestPoint, selectNode, startDrag, clearSelection, screenToWorld, onNodeClick, onCanvasClick]);
 
-  const handleMouseMove = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (interaction.dragState.isDragging) {
-      const mousePos = getMousePos(event);
+      const mousePos = getMousePos(e);
       updateDrag(mousePos);
     }
   }, [interaction.dragState.isDragging, getMousePos, updateDrag]);
@@ -162,82 +146,6 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
       endDrag();
     }
   }, [interaction.dragState.isDragging, endDrag]);
-
-   const handleDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-  }, []);
-
-  const handleDrop = useCallback((event: React.DragEvent) => {
-    
-    if (!canvasRef.current) return;
-    
-    try {
-      // Get the dropped node type data
-      const nodeTypeData = event.dataTransfer.getData('application/node-type');
-      if (!nodeTypeData) return;
-      
-      const nodeType: any = JSON.parse(nodeTypeData);
-      
-      // Convert drop position to world coordinates
-      const worldPos = MouseInteractions.screenToWorld(
-        event.clientX,
-        event.clientY,
-        canvasRef.current,
-        viewport
-      );
-      
-      // Generate unique ID for the new node
-      const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Create new node
-      const newNode = {
-        id: newNodeId,
-        type: nodeType.id,
-        data: { 
-          label: nodeType.name,
-          position: worldPos 
-        },
-        visual: {
-          width: nodeType.width,
-          height: nodeType.height,
-          color: nodeType.color,
-          shape: nodeType.shape,
-          selected: false
-        }
-      };
-      
-      // Add the node to the diagram
-      addNode(newNode);
-      
-      // Call optional callback
-      if (onNodeDropped) {
-        onNodeDropped(nodeType, worldPos);
-      }
-      
-      console.log('Node dropped:', newNode);
-      
-    } catch (error) {
-      console.error('Error handling node drop:', error);
-    }
-  }, [viewport, addNode, onNodeDropped]);
-
-  const handleDragEnter = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    // Add visual feedback when drag enters canvas
-    if (canvasRef.current) {
-      canvasRef.current.style.backgroundColor = '#f0f8ff';
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((event: React.DragEvent) => {
-    // Remove visual feedback when drag leaves canvas
-    if (canvasRef.current && !canvasRef.current.contains(event.relatedTarget as Node)) {
-      canvasRef.current.style.backgroundColor = '';
-    }
-  }, []);
-
-
 
   const handleMouseLeave = useCallback(() => {
     if (interaction.dragState.isDragging) {
@@ -255,6 +163,7 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
   }, [getMousePos, hitTestPoint, onNodeDoubleClick]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
     
     const mousePos = getMousePos(e);
     const worldPosBeforeZoom = screenToWorld(mousePos);
@@ -262,7 +171,6 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
     
-    // Calculate new viewport position to keep mouse point stable
     const worldPosAfterZoom = {
       x: (mousePos.x - width / 2) / newZoom + viewport.x,
       y: (mousePos.y - height / 2) / newZoom + viewport.y,
@@ -278,52 +186,80 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
     });
   }, [getMousePos, screenToWorld, viewport, width, height, setViewport]);
 
-  // Drawing helper functions
-  const drawNode = (ctx: CanvasRenderingContext2D, node: any, isSelected: boolean) => {
-    const { x, y } = node.data.position;
-    const size = node.data.size || { width: 100, height: 60 };
-    const color = node.visual?.color || '#3b82f6';
-    
-    ctx.save();
-    
-    // Draw node body
-    ctx.fillStyle = color;
-    ctx.fillRect(
-      x - size.width / 2,
-      y - size.height / 2,
-      size.width,
-      size.height
-    );
-    
-    // Draw border
-    ctx.strokeStyle = isSelected ? '#ef4444' : '#1f2937';
-    ctx.lineWidth = isSelected ? 3 : 1;
-    ctx.strokeRect(
-      x - size.width / 2,
-      y - size.height / 2,
-      size.width,
-      size.height
-    );
-    
-    // Draw label
-    if (node.data.label) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node.data.label, x, y);
-    }
-    
-    ctx.restore();
-  };
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
 
-  const drawViewportDragIndicator = (ctx: CanvasRenderingContext2D) => {
-    ctx.save();
-    ctx.strokeStyle = '#6b7280';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
-    ctx.strokeRect(10, 10, width - 20, height - 20);
-    ctx.restore();
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    
+    if (!canvasRef.current) return;
+    
+    try {
+      const nodeTypeData = e.dataTransfer.getData('application/node-type');
+      if (!nodeTypeData) return;
+      
+      const nodeType: any = JSON.parse(nodeTypeData);
+      
+      const worldPos = MouseInteractions.screenToWorld(
+        e.clientX,
+        e.clientY,
+        canvasRef.current,
+        viewport
+      );
+      
+      const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      const newNode = {
+        id: newNodeId,
+        type: nodeType.id,
+        data: { 
+          label: nodeType.name,
+          position: worldPos,
+          size: {
+            width: nodeType.width,
+            height: nodeType.height,
+          }
+        },
+        visual: {
+          color: nodeType.color,
+          shape: nodeType.shape,
+          selected: false
+        }
+      };
+      
+      console.log('📦 Node dropped:', newNode.id);
+      addNode(newNode);
+      onNodeDropped?.(nodeType, worldPos);
+      
+    } catch (error) {
+      console.error('❌ Drop error:', error);
+    }
+  }, [viewport, addNode, onNodeDropped]);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (canvasRef.current) {
+      canvasRef.current.style.backgroundColor = '#f0f8ff';
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (canvasRef.current && !canvasRef.current.contains(e.relatedTarget as Node)) {
+      canvasRef.current.style.backgroundColor = '';
+    }
+  }, []);
+
+  // Helper function for debug display
+  const getMaxDepth = (nodeInfo: any): number => {
+    if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
+    
+    return Math.max(
+      nodeInfo.depth,
+      ...nodeInfo.children.map((child: any) => getMaxDepth(child))
+    );
   };
 
   return (
@@ -335,45 +271,32 @@ export const DiagramCanvas: React.FC<SpatialDiagramCanvasProps> = ({
         className="border border-gray-300 cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
         onDoubleClick={handleDoubleClick}
         onWheel={handleWheel}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       />
       
       {showDebugInfo && (
-        <div
-          ref={debugInfoRef}
-          className="absolute top-2 left-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded font-mono"
-        >
-          <div>Visible: {performanceStats.visibleNodes} nodes</div>
-          <div>Render: {performanceStats.renderTime.toFixed(2)}ms</div>
-          <div>Hit Test: {performanceStats.hitTestTime.toFixed(2)}ms</div>
+        <div className="absolute top-2 left-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded font-mono">
+          <div>Renderer: {webGPUSupported === null ? 'Initializing...' : webGPUSupported ? 'WebGPU' : 'Failed'}</div>
+          <div>Initialized: {isRendererInitialized() ? 'Yes' : 'No'}</div>
           <div>Zoom: {viewport.zoom.toFixed(2)}x</div>
           <div>Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})</div>
+          <div>Selected: {interaction.selectedNodes.length}</div>
           {debugInfo && (
             <div className="mt-2 border-t border-gray-600 pt-2">
-              <div>QuadTree Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</div>
-              <div>Total Items: {debugInfo.totalItems}</div>
+              <div>Spatial Items: {debugInfo.totalItems}</div>
+              <div>Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</div>
             </div>
           )}
         </div>
       )}
     </div>
-  );
-};
-
-// Helper function to calculate max depth from debug info
-const getMaxDepth = (nodeInfo: any): number => {
-  if (!nodeInfo.children) return nodeInfo.depth;
-  
-  return Math.max(
-    nodeInfo.depth,
-    ...nodeInfo.children.map((child: any) => getMaxDepth(child))
   );
 };
 
@@ -395,20 +318,27 @@ export const DiagramPerformanceMonitor: React.FC<PerformanceMonitorProps> = ({
     
     return () => clearInterval(interval);
   }, [getSpatialDebugInfo]);
-  
+
+  const getMaxDepth = (nodeInfo: any): number => {
+    if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
+    
+    return Math.max(
+      nodeInfo.depth,
+      ...nodeInfo.children.map((child: any) => getMaxDepth(child))
+    );
+  };
   
   return (
     <div className={`bg-gray-100 p-4 rounded ${className}`}>
       <h3 className="text-lg font-semibold mb-2">Spatial Index Performance</h3>
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
-          <span className="font-medium">Total Nodes:</span> {stats && stats.totalItems}
+          <span className="font-medium">Total Nodes:</span> {stats?.totalItems || 0}
         </div>
         <div>
-          <span className="font-medium">Max Depth:</span> {stats && getMaxDepth(stats.quadTreeInfo)}
+          <span className="font-medium">Max Depth:</span> {stats ? getMaxDepth(stats.quadTreeInfo) : 0}
         </div>
       </div>
     </div>
   );
 };
-

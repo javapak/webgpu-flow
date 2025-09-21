@@ -42,7 +42,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     screenToWorld,
     getSpatialDebugInfo,
     initializeRenderer,
-    getRenderer,
     isRendererInitialized,
     renderFrame,
   } = useDiagram();
@@ -269,57 +268,36 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     );
   };
 
-  useEffect(() => {
-  const handleKeyPress = (e: KeyboardEvent) => {
-    if (e.key === ';') {
-      e.preventDefault();
-      const renderer = getRenderer();
-      if (renderer && 'testMinimalRendering' in renderer) {
-        (renderer as any).testMinimalRendering();
-      }
-    }
-  };
   
-  window.addEventListener('keydown', handleKeyPress);
-  return () => window.removeEventListener('keydown', handleKeyPress);
-}, [getRenderer]);
 
   return (
-    <div className={`relative ${className}`}>
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        className="border border-gray-300 cursor-grab active:cursor-grabbing"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        onDoubleClick={handleDoubleClick}
-        onWheel={handleWheel}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      />
-      
-      {showDebugInfo && (
-        <div className="absolute top-2 left-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded font-mono">
-          <div>Renderer: {webGPUSupported === null ? 'Initializing...' : webGPUSupported ? 'WebGPU' : 'Failed'}</div>
-          <div>Initialized: {isRendererInitialized() ? 'Yes' : 'No'}</div>
-          <div>Zoom: {viewport.zoom.toFixed(2)}x</div>
-          <div>Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})</div>
-          <div>Canvas Size: {width}x{height}</div>
-          <div>Selected: {interaction.selectedNodes.length}</div>
-          {debugInfo && (
-            <div className="mt-2 border-t border-gray-600 pt-2">
-              <div>Spatial Items: {debugInfo.totalItems}</div>
-              <div>Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</div>
+    <div>
+      <div className={`relative ${className}`}>
+              {showDebugInfo && (
+          <div>
+            <div>Initialized: {isRendererInitialized() ? 'Yes' : 'No'}, Zoom: {viewport.zoom.toFixed(2)}x, Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)}), Canvas Size: {width}x{height} <div>Selected: {interaction.selectedNodes.length}, {debugInfo && (<span>Spatial Items: {debugInfo.totalItems}, Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</span>)}</div>
             </div>
-          )}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          className="border border-gray-300 cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          onDoubleClick={handleDoubleClick}
+          onWheel={handleWheel}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        />
+      </div>
+
   );
 };
 

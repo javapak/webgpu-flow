@@ -19,12 +19,13 @@ export const DiagramDemo: React.FC = () => {
   };
 
   return (
+    <div style={{width: '100vw', backgroundColor: '#313131ff',}}>
     <div style={{ 
       padding: '20px',
       display: 'flex',
+      backgroundColor: 'inherit',
       gap: '20px',
-      backgroundColor: '#313131ff',
-      minHeight: '100vh'
+      minWidth: '50%'
     }}>
       <div style={{ flex: '0 0 auto' }}>
         <NodePalette 
@@ -34,28 +35,23 @@ export const DiagramDemo: React.FC = () => {
       
       <div style={{ flex: '1', display: 'flex', flexDirection: 'column' }}>
         <div style={{ marginBottom: '16px' }}>
-          <h2 style={{ margin: '0 0 8px 0', color: '#343a40' }}>
-            WebGPU Diagram Demo with Drag & Drop
+          <h2 style={{ margin: '0 0 8px 0', color: '#ffffffff' }}>
+            WORK IN PROGRESS WEBGPU FLOW DIAGRAM EDITOR
           </h2>
-          <p style={{ margin: '0', color: '#6c757d', fontSize: '14px' }}>
-            Drag nodes from the palette to add them to the diagram. 
-            {draggedNodeType && (
-              <span style={{ color: '#007bff', fontWeight: 'bold' }}>
-                {' '}Currently dragging: {draggedNodeType.name}
-              </span>
-            )}
+          <p style={{ margin: '0', color: '#ffffffff', fontSize: '14px' }}>
+            - shape, resizing interactions, and label support are work in progress
           </p>
         </div>
             
         <div style={{ 
           flex: '1',
-          border: '2px dashed #dee2e6',
-          borderRadius: '8px',
           padding: '16px',
-          backgroundColor: '#262626',
+          backgroundColor: 'inherit',
           position: 'relative'
         }}>
           <DiagramProvider >
+            <DiagramPerformanceMonitor />
+
             <DiagramCanvas 
               width={800} 
               height={600}
@@ -101,8 +97,6 @@ export const DiagramDemo: React.FC = () => {
               }}
             />
             
-          <DiagramPerformanceMonitor />
-
           </DiagramProvider>
         </div>
 
@@ -116,6 +110,7 @@ export const DiagramDemo: React.FC = () => {
           
         </div>
       </div>
+    </div>
     </div>
   );
 };

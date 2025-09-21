@@ -474,6 +474,8 @@ export interface EdgeSchema {
   type: string;
   source: string,
   target: string,
+  sourcePort?: string,
+  targetPort?: string,
   visual: {
     width?: number;
     style?: 'dotted' | 'solid';

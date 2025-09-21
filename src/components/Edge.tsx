@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { useDiagram } from "../components/DiagramProvider";
 import type { EdgeSchema } from "../types";
 
@@ -31,6 +31,8 @@ export const Edge: React.FC<EdgeProps> = ({
         id,
         source,
         target,
+        sourcePort,
+        targetPort,
         type: '',
         data: {},
         visual: {

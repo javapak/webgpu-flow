@@ -24,7 +24,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   onNodeDropped,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [webGPUSupported, setWebGPUSupported] = useState<boolean | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const initializationAttempted = useRef(false);
 
@@ -58,7 +57,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       
       try {
         const success = await initializeRenderer(canvasRef.current!);
-        setWebGPUSupported(success);
         
         if (success) {
           console.log('✅ DiagramCanvas: WebGPU initialized');
@@ -67,7 +65,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         }
       } catch (error) {
         console.error('❌ DiagramCanvas: Init error:', error);
-        setWebGPUSupported(false);
       }
     };
 

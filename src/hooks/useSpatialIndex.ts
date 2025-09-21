@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback } from 'react';
 import { type SpatialNode, type AABB, type Point } from '../types/spatial-indexing/types';
 import { diagramNodeToSpatial, SpatialIndex, type DiagramNode } from '../utils/SpatialIndex';
 

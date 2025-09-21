@@ -1,21 +1,16 @@
-import React, { memo, useState } from 'react';
-import { DiagramProvider, DiagramCanvas, Node, Edge } from './index';
+import React from 'react';
+import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import { DiagramPerformanceMonitor } from './types';
 
 export const DiagramDemo: React.FC = () => {
-  const [draggedNodeType, setDraggedNodeType] = useState<NodeType | null>(null);
-  const [nodeCounter, setNodeCounter] = useState(1);
 
   const handleNodeDragStart = (nodeType: NodeType, event: React.DragEvent) => {
-    setDraggedNodeType(nodeType);
-    console.log('Started dragging node type:', nodeType.name);
+    console.log('Started dragging node type:', nodeType.name, event);
   };
 
   const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
     console.log(`Dropped ${nodeType.name} at position:`, position);
-    setDraggedNodeType(null);
-    setNodeCounter(prev => prev + 1);
   };
 
   return (

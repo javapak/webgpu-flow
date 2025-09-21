@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef } from "react";
 import { useSpatialIndex, type SpatialDiagramHook } from "../hooks/useSpatialIndex";
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
-import type { Viewport, DiagramState, DiagramNode, DiagramEdge, InteractionState } from "../types";
+import type { Viewport, DiagramState, DiagramNode, DiagramEdge } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
 
 export interface DiagramContextValue extends DiagramState {

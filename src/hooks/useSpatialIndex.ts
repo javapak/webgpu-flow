@@ -32,7 +32,16 @@ export const useSpatialIndex = (initialBounds: AABB): SpatialDiagramHook => {
 
   const getVisibleNodes = useCallback((viewport: AABB) => {
     const spatialNodes = spatialIndexRef.current.queryRegion(viewport);
-    return spatialNodes.map((sn: SpatialNode) => sn.data);
+    console.log('📊 Spatial query returned:', spatialNodes.length, 'nodes');
+    const results = spatialNodes.map((sn: SpatialNode) => sn.data);
+    results.forEach((node, i) => {
+      console.log(`📦 Result ${i}:`, {
+        id: node.id,
+        position: node.data.position
+      });
+    });
+
+    return results;
   }, []);
 
   const hitTest = useCallback((point: Point) => {

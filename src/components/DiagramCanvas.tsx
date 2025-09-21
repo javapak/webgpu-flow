@@ -42,6 +42,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     screenToWorld,
     getSpatialDebugInfo,
     initializeRenderer,
+    getRenderer,
     isRendererInitialized,
     renderFrame,
   } = useDiagram();
@@ -75,15 +76,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [initializeRenderer]);
 
   useEffect(() => {
-  if (isRendererInitialized() && canvasRef.current) {
-    console.log('🔄 VIEWPORT CHANGED, triggering render:', {
-      x: viewport.x,
-      y: viewport.y, 
-      zoom: viewport.zoom
-    });
-    renderFrame();
-  }
-}, [viewport.x, viewport.y, viewport.zoom, isRendererInitialized, renderFrame]);
+    if (isRendererInitialized() && canvasRef.current) {
+      console.log('🔄 VIEWPORT CHANGED, triggering render:', {
+        x: viewport.x,
+        y: viewport.y, 
+        zoom: viewport.zoom
+      });
+      renderFrame();
+    }
+  }, [viewport.x, viewport.y, viewport.zoom, isRendererInitialized, renderFrame]);
   
 
   // Update viewport size when canvas size changes
@@ -102,8 +103,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
   }, [showDebugInfo, getSpatialDebugInfo]);
 
-  // Mouse position helper
-  const getMousePos = useCallback((e: React.MouseEvent) => {
+  // Mouse position helper - returns canvas coordinates
+  const getCanvasMousePos = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     
@@ -116,30 +117,34 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   // Mouse event handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     console.log('🖱️ Mouse down');
-    const mousePos = getMousePos(e);
-    const hitNodes = hitTestPoint(mousePos);
+    const canvasPos = getCanvasMousePos(e);
+    
+    // Convert to world coordinates for hit testing
+    const worldPos = screenToWorld(canvasPos);
+    const hitNodes = hitTestPoint(canvasPos); // This should use canvas coordinates internally
+    
+    console.log('Mouse down:', { canvasPos, worldPos, viewport });
 
     if (hitNodes.length > 0) {
       const topNode = hitNodes[0];
       console.log('🎯 Node hit:', topNode.id);
       selectNode(topNode);
-      startDrag('node', mousePos);
+      startDrag('node', canvasPos);
       onNodeClick?.(topNode);
     } else {
       console.log('🌍 Canvas hit');
       clearSelection();
-      startDrag('viewport', mousePos);
-      const worldPoint = screenToWorld(mousePos);
-      onCanvasClick?.(worldPoint);
+      startDrag('viewport', canvasPos);
+      onCanvasClick?.(worldPos);
     }
-  }, [getMousePos, hitTestPoint, selectNode, startDrag, clearSelection, screenToWorld, onNodeClick, onCanvasClick]);
+  }, [getCanvasMousePos, screenToWorld, hitTestPoint, selectNode, startDrag, clearSelection, onNodeClick, onCanvasClick, viewport]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (interaction.dragState.isDragging) {
-      const mousePos = getMousePos(e);
-      updateDrag(mousePos);
+      const canvasPos = getCanvasMousePos(e);
+      updateDrag(canvasPos);
     }
-  }, [interaction.dragState.isDragging, getMousePos, updateDrag]);
+  }, [interaction.dragState.isDragging, getCanvasMousePos, updateDrag]);
 
   const handleMouseUp = useCallback(() => {
     if (interaction.dragState.isDragging) {
@@ -154,26 +159,28 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [interaction.dragState.isDragging, endDrag]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    const mousePos = getMousePos(e);
-    const hitNodes = hitTestPoint(mousePos);
+    const canvasPos = getCanvasMousePos(e);
+    const hitNodes = hitTestPoint(canvasPos);
     
     if (hitNodes.length > 0) {
       onNodeDoubleClick?.(hitNodes[0]);
     }
-  }, [getMousePos, hitTestPoint, onNodeDoubleClick]);
+  }, [getCanvasMousePos, hitTestPoint, onNodeDoubleClick]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     
-    const mousePos = getMousePos(e);
-    const worldPosBeforeZoom = screenToWorld(mousePos);
+    const canvasPos = getCanvasMousePos(e);
+    const worldPosBeforeZoom = screenToWorld(canvasPos);
     
+    // Calculate zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
     
+    // Calculate new viewport position to keep mouse point fixed
     const worldPosAfterZoom = {
-      x: (mousePos.x - width / 2) / newZoom + viewport.x,
-      y: (mousePos.y - height / 2) / newZoom + viewport.y,
+      x: (canvasPos.x - width / 2) / newZoom + viewport.x,
+      y: (canvasPos.y - height / 2) / newZoom + viewport.y,
     };
     
     const deltaX = worldPosAfterZoom.x - worldPosBeforeZoom.x;
@@ -184,7 +191,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       x: viewport.x + deltaX,
       y: viewport.y + deltaY,
     });
-  }, [getMousePos, screenToWorld, viewport, width, height, setViewport]);
+  }, [getCanvasMousePos, screenToWorld, viewport, width, height, setViewport]);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -203,9 +210,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       
       const nodeType: any = JSON.parse(nodeTypeData);
       
-      const worldPos = MouseInteractions.screenToWorld(
-        e.clientX,
-        e.clientY,
+      // Use the fixed coordinate transformation
+      const worldPos = MouseInteractions.dragEventToWorld(
+        e,
         canvasRef.current,
         viewport
       );
@@ -230,7 +237,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         }
       };
       
-      console.log('📦 Node dropped:', newNode.id);
+      console.log('📦 Node dropped:', { newNode, worldPos, viewport });
       addNode(newNode);
       onNodeDropped?.(nodeType, worldPos);
       
@@ -262,6 +269,21 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     );
   };
 
+  useEffect(() => {
+  const handleKeyPress = (e: KeyboardEvent) => {
+    if (e.key === ';') {
+      e.preventDefault();
+      const renderer = getRenderer();
+      if (renderer && 'testMinimalRendering' in renderer) {
+        (renderer as any).testMinimalRendering();
+      }
+    }
+  };
+  
+  window.addEventListener('keydown', handleKeyPress);
+  return () => window.removeEventListener('keydown', handleKeyPress);
+}, [getRenderer]);
+
   return (
     <div className={`relative ${className}`}>
       <canvas
@@ -287,6 +309,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           <div>Initialized: {isRendererInitialized() ? 'Yes' : 'No'}</div>
           <div>Zoom: {viewport.zoom.toFixed(2)}x</div>
           <div>Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})</div>
+          <div>Canvas Size: {width}x{height}</div>
           <div>Selected: {interaction.selectedNodes.length}</div>
           {debugInfo && (
             <div className="mt-2 border-t border-gray-600 pt-2">

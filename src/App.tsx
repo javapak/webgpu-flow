@@ -68,7 +68,7 @@ export const DiagramDemo: React.FC = () => {
             <Node 
               id="abc" 
               type="database" 
-              position={{ x: 100, y: 100 }}
+              position={{ x: 0, y: 200 }}
               data={{ 
                 tableName: "users",
                 label: "Example Database"
@@ -77,7 +77,7 @@ export const DiagramDemo: React.FC = () => {
                 color: "#ff7300ff", 
                 shape: 'rectangle',
                 size: {
-                width: 1000, 
+                width: 100, 
                 height: 100,
                 }
               }}
@@ -86,13 +86,13 @@ export const DiagramDemo: React.FC = () => {
            <Node 
               id="example-node1" 
               type="database" 
-              position={{ x: 100, y: -100 }}
+              position={{ x: 0, y: 0 }}
               data={{ 
                 tableName: "users",
                 label: "Example Database"
               }}
               visual={{ 
-                color: "#004dc8ff", 
+                color: "#004dc8", 
                 shape: 'rectangle',
                 size: {
                 width: 100, 

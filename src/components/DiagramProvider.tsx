@@ -3,7 +3,6 @@ import { useSpatialIndex, type SpatialDiagramHook } from "../hooks/useSpatialInd
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
 import type { Viewport, DiagramState, DiagramNode, DiagramEdge, InteractionState } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
-import { DebugWebGPURenderer } from "../renderers/DebugWebGPURenderer";
 
 export interface DiagramContextValue extends DiagramState {
   // Spatial-aware methods
@@ -160,12 +159,16 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       const deltaY = action.currentPos.y - (state.interaction.dragState.lastPos?.y || 0);
 
       if (state.interaction.dragState.dragType === 'viewport') {
+        // Convert screen delta to world delta for viewport panning
+        const worldDeltaX = deltaX / state.viewport.zoom;
+        const worldDeltaY = deltaY / state.viewport.zoom;
+        
         return {
           ...state,
           viewport: {
             ...state.viewport,
-            x: state.viewport.x - deltaX / state.viewport.zoom,
-            y: state.viewport.y - deltaY / state.viewport.zoom,
+            x: state.viewport.x - worldDeltaX,
+            y: state.viewport.y - worldDeltaY,
           },
           interaction: {
             ...state.interaction,
@@ -180,13 +183,17 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         state.interaction.selectedNodes.length > 0
       ) {
         const selectedNode = state.interaction.selectedNodes[0];
+        // Convert screen delta to world delta for node movement
+        const worldDeltaX = deltaX / state.viewport.zoom;
+        const worldDeltaY = deltaY / state.viewport.zoom;
+        
         const updatedNode = {
           ...selectedNode,
           data: {
             ...selectedNode.data,
             position: {
-              x: selectedNode.data.position.x + deltaX / state.viewport.zoom,
-              y: selectedNode.data.position.y + deltaY / state.viewport.zoom,
+              x: selectedNode.data.position.x + worldDeltaX,
+              y: selectedNode.data.position.y + worldDeltaY,
             },
           },
         };
@@ -268,7 +275,6 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const spatial: SpatialDiagramHook = useSpatialIndex(initialBounds);
   const rendererRef = useRef<WebGPURenderer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const renderScheduledRef = useRef<boolean>(false);
   const stateRef = useRef(state); // Keep current state in ref
 
   // Update state ref whenever state changes
@@ -276,31 +282,48 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     stateRef.current = state;
   }, [state]);
 
-  // Coordinate transformation utilities
+  // Fixed coordinate transformation utilities
   const screenToWorld = useCallback((screenPoint: Point): Point => {
-    return {
-      x: (screenPoint.x - state.viewport.width / 2) / state.viewport.zoom + state.viewport.x,
-      y: (screenPoint.y - state.viewport.height / 2) / state.viewport.zoom + state.viewport.y,
-    };
+    // Convert screen coordinates to world coordinates
+    // Screen origin (0,0) is top-left, world origin (0,0) is center
+    const screenCenterX = state.viewport.width / 2;
+    const screenCenterY = state.viewport.height / 2;
+    
+    // Convert screen point relative to center, then scale by zoom and add viewport offset
+    const worldX = (screenPoint.x - screenCenterX) / state.viewport.zoom + state.viewport.x;
+    const worldY = (screenPoint.y - screenCenterY) / state.viewport.zoom + state.viewport.y;
+    
+    return { x: worldX, y: worldY };
   }, [state.viewport]);
 
   const worldToScreen = useCallback((worldPoint: Point): Point => {
-    return {
-      x: (worldPoint.x - state.viewport.x) * state.viewport.zoom + state.viewport.width / 2,
-      y: (worldPoint.y - state.viewport.y) * state.viewport.zoom + state.viewport.height / 2,
-    };
+    // Convert world coordinates to screen coordinates
+    const screenCenterX = state.viewport.width / 2;
+    const screenCenterY = state.viewport.height / 2;
+    
+    // Transform world point relative to viewport, scale by zoom, then offset to screen center
+    const screenX = (worldPoint.x - state.viewport.x) * state.viewport.zoom + screenCenterX;
+    const screenY = (worldPoint.y - state.viewport.y) * state.viewport.zoom + screenCenterY;
+    
+    return { x: screenX, y: screenY };
   }, [state.viewport]);
 
   // Get only visible nodes for efficient rendering
   const getVisibleNodes = useCallback(() => {
+    // Calculate viewport bounds in world coordinates
+    const halfWidth = state.viewport.width / (2 * state.viewport.zoom);
+    const halfHeight = state.viewport.height / (2 * state.viewport.zoom);
+    
     const viewportBounds: AABB = {
-      minX: state.viewport.x - state.viewport.width / (2 * state.viewport.zoom),
-      minY: state.viewport.y - state.viewport.height / (2 * state.viewport.zoom),
-      maxX: state.viewport.x + state.viewport.width / (2 * state.viewport.zoom),
-      maxY: state.viewport.y + state.viewport.height / (2 * state.viewport.zoom),
+      minX: state.viewport.x - halfWidth,
+      minY: state.viewport.y - halfHeight,
+      maxX: state.viewport.x + halfWidth,
+      maxY: state.viewport.y + halfHeight,
     };
+    
     const visible = spatial.getVisibleNodes(viewportBounds);
     console.log('getVisibleNodes:', { 
+      viewport: state.viewport,
       bounds: viewportBounds, 
       total: state.nodes.length, 
       visible: visible.length,
@@ -316,12 +339,16 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
       const currentState = stateRef.current;
       
       // Calculate visible nodes with fresh state
+      const halfWidth = currentState.viewport.width / (2 * currentState.viewport.zoom);
+      const halfHeight = currentState.viewport.height / (2 * currentState.viewport.zoom);
+      
       const viewportBounds: AABB = {
-        minX: currentState.viewport.x - currentState.viewport.width / (2 * currentState.viewport.zoom),
-        minY: currentState.viewport.y - currentState.viewport.height / (2 * currentState.viewport.zoom),
-        maxX: currentState.viewport.x + currentState.viewport.width / (2 * currentState.viewport.zoom),
-        maxY: currentState.viewport.y + currentState.viewport.height / (2 * currentState.viewport.zoom),
+        minX: currentState.viewport.x - halfWidth,
+        minY: currentState.viewport.y - halfHeight,
+        maxX: currentState.viewport.x + halfWidth,
+        maxY: currentState.viewport.y + halfHeight,
       };
+      
       const visibleNodes = spatial.getVisibleNodes(viewportBounds);
       
       const canvasSize = {
@@ -333,11 +360,12 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
         totalNodes: currentState.nodes.length,
         visibleNodes: visibleNodes.length,
         selectedNodes: currentState.interaction.selectedNodes.length,
-        viewport: currentState.viewport
+        viewport: currentState.viewport,
+        canvasSize
       });
       
       try {
-        rendererRef.current.render(currentState.nodes, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
+        rendererRef.current.render(visibleNodes, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
       } catch (error) {
         console.error('Render error:', error);
       }
@@ -369,9 +397,15 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const hitTestPoint = useCallback((screenPoint: Point) => {
     const worldPoint = screenToWorld(screenPoint);
     const hits = spatial.hitTest(worldPoint);
-    console.log('hitTestPoint:', { screenPoint, worldPoint, hits: hits.length, hitIds: hits.map(n => n.id) });
+    console.log('hitTestPoint:', { 
+      screenPoint, 
+      worldPoint, 
+      viewport: state.viewport,
+      hits: hits.length, 
+      hitIds: hits.map(n => n.id) 
+    });
     return hits;
-  }, [spatial, screenToWorld]);
+  }, [spatial, screenToWorld, state.viewport]);
 
   // Node methods
   const addNode = useCallback((node: DiagramNode) => {
@@ -453,10 +487,11 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     console.log('State updated:', {
       nodeCount: state.nodes.length,
       selectedCount: state.interaction.selectedNodes.length,
+      viewport: state.viewport,
       nodes: state.nodes.map(n => ({ id: n.id, pos: n.data.position })),
       selected: state.interaction.selectedNodes.map(n => n.id)
     });
-  }, [state.nodes, state.interaction.selectedNodes]);
+  }, [state.nodes, state.interaction.selectedNodes, state.viewport]);
 
   // Rebuild spatial index when nodes change
   useEffect(() => {

@@ -8,17 +8,37 @@ export class MouseInteractions {
     screenX: number, 
     screenY: number, 
     canvas: HTMLCanvasElement, 
-    viewport: { x: number; y: number; zoom: number }
+    viewport: { x: number; y: number; zoom: number; width: number; height: number }
   ): { x: number; y: number } {
+    // Get mouse position relative to canvas
     const rect = canvas.getBoundingClientRect();
     const canvasX = screenX - rect.left;
     const canvasY = screenY - rect.top;
     
     // Convert canvas coordinates to world coordinates
-    const worldX = (canvasX / viewport.zoom) + viewport.x;
-    const worldY = (canvasY / viewport.zoom) + viewport.y;
+    // Canvas origin (0,0) is top-left, world origin is viewport center
+    const screenCenterX = viewport.width / 2;
+    const screenCenterY = viewport.height / 2;
+    
+    const worldX = (canvasX - screenCenterX) / viewport.zoom + viewport.x;
+    const worldY = (canvasY - screenCenterY) / viewport.zoom + viewport.y;
     
     return { x: worldX, y: worldY };
+  }
+
+  // Convert world coordinates to screen coordinates
+  static worldToScreen(
+    worldX: number,
+    worldY: number,
+    viewport: { x: number; y: number; zoom: number; width: number; height: number }
+  ): { x: number; y: number } {
+    const screenCenterX = viewport.width / 2;
+    const screenCenterY = viewport.height / 2;
+    
+    const screenX = (worldX - viewport.x) * viewport.zoom + screenCenterX;
+    const screenY = (worldY - viewport.y) * viewport.zoom + screenCenterY;
+    
+    return { x: screenX, y: screenY };
   }
 
   // Check if a point is inside a node's bounds
@@ -46,7 +66,7 @@ export class MouseInteractions {
   static getResizeHandle(
     worldPos: { x: number; y: number },
     node: NodeSchema,
-    viewport: { x: number; y: number; zoom: number }
+    viewport: { x: number; y: number; zoom: number; width: number; height: number }
   ): ResizeHandle {
     if (!node.visual.selected) {
       return 'none';
@@ -64,7 +84,7 @@ export class MouseInteractions {
     const bottom = nodeY + height / 2;
     
     // Handle detection threshold in world coordinates (adjusted for zoom)
-    const handleSize = 8 / viewport.zoom; // 8 pixels in screen space converted to world space
+    const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8 world units
     
     // Check corners first (they take priority)
     if (Math.abs(worldPos.x - left) <= handleSize && Math.abs(worldPos.y - top) <= handleSize) {
@@ -198,5 +218,26 @@ export class MouseInteractions {
     }
 
     return { width: newWidth, height: newHeight, x: newX, y: newY };
+  }
+
+  // Helper method to convert drag event coordinates to world coordinates
+  static dragEventToWorld(
+    event: React.DragEvent,
+    canvas: HTMLCanvasElement,
+    viewport: { x: number; y: number; zoom: number; width: number; height: number }
+  ): { x: number; y: number } {
+    return this.screenToWorld(event.clientX, event.clientY, canvas, viewport);
+  }
+
+  // Helper method to get mouse position relative to canvas
+  static getCanvasMousePosition(
+    event: MouseEvent | DragEvent,
+    canvas: HTMLCanvasElement
+  ): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
   }
 }

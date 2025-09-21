@@ -1,9 +1,6 @@
-
 /// <reference types="@webgpu/types" />
 import type { DiagramNode, Viewport } from '../types';
 import tgpu from 'typegpu'
-
-
 
 interface NodeInstanceData {
   position: [number, number];
@@ -32,6 +29,181 @@ export class WebGPURenderer {
   private device: GPUDevice | null = null;
   public initialized = false;
   private canvas: HTMLCanvasElement | null = null;
+
+  async testMinimalRendering(): Promise<void> {
+  if (!this.device || !this.context) {
+    console.error('❌ Device or context not initialized');
+    return;
+  }
+
+  console.log('🧪 Starting minimal rendering test...');
+
+  // 1. Test basic draw call with no data
+  try {
+    const commandEncoder = this.device.createCommandEncoder();
+    const textureView = this.context.getCurrentTexture().createView();
+    
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 }, // Bright red clear
+        loadOp: 'clear' as const,
+        storeOp: 'store' as const,
+      }],
+    });
+    
+    renderPass.end();
+    this.device.queue.submit([commandEncoder.finish()]);
+    
+    console.log('✅ Test 1: Basic clear (should see red background)');
+  } catch (error) {
+    console.error('❌ Test 1 failed:', error);
+    return;
+  }
+
+  // Wait a bit then test simple draw
+  setTimeout(() => this.testSimpleDraw(), 100);
+}
+
+async testSimpleDraw(): Promise<void> {
+  console.log('🧪 Test 2: Simple hardcoded triangle...');
+
+  // Create the simplest possible shader
+  const simpleShader = /* wgsl */`
+    @vertex
+    fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4<f32> {
+      // Hardcoded triangle in NDC space (-1 to 1)
+      let positions = array<vec2<f32>, 3>(
+        vec2<f32>(-0.5, -0.5),  // Bottom left
+        vec2<f32>( 0.5, -0.5),  // Bottom right  
+        vec2<f32>( 0.0,  0.5)   // Top center
+      );
+      
+      return vec4<f32>(positions[vertexIndex], 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main() -> @location(0) vec4<f32> {
+      return vec4<f32>(0.0, 1.0, 0.0, 1.0); // Green triangle
+    }
+  `;
+
+  try {
+    const shaderModule = this.device!.createShaderModule({ code: simpleShader });
+    
+    const pipeline = this.device!.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs_main',
+        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }]
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+
+    const commandEncoder = this.device!.createCommandEncoder();
+    const textureView = this.context!.getCurrentTexture().createView();
+    
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 }, // Blue background
+        loadOp: 'clear' as const,
+        storeOp: 'store' as const,
+      }],
+    });
+    
+    renderPass.setPipeline(pipeline);
+    renderPass.draw(3, 1); // 3 vertices, 1 instance
+    renderPass.end();
+    
+    this.device!.queue.submit([commandEncoder.finish()]);
+    
+    console.log('✅ Test 2: Simple triangle (should see green triangle on blue)');
+    
+    // Test instancing next
+    setTimeout(() => this.testInstancing(), 100);
+  } catch (error) {
+    console.error('❌ Test 2 failed:', error);
+  }
+}
+
+async testInstancing(): Promise<void> {
+  console.log('🧪 Test 3: Basic instancing...');
+
+  const instanceShader = /* wgsl */`
+    @vertex
+    fn vs_main(
+      @builtin(vertex_index) vertexIndex: u32,
+      @builtin(instance_index) instanceIndex: u32
+    ) -> @builtin(position) vec4<f32> {
+      // Single triangle
+      let positions = array<vec2<f32>, 3>(
+        vec2<f32>(-0.1, -0.1),
+        vec2<f32>( 0.1, -0.1),  
+        vec2<f32>( 0.0,  0.1)
+      );
+      
+      // Offset each instance
+      let instanceOffset = vec2<f32>(
+        f32(instanceIndex) * 0.4 - 0.4, // -0.4, 0.0, 0.4
+        0.0
+      );
+      
+      let finalPos = positions[vertexIndex] + instanceOffset;
+      return vec4<f32>(finalPos, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main() -> @location(0) vec4<f32> {
+      return vec4<f32>(1.0, 1.0, 0.0, 1.0); // Yellow triangles
+    }
+  `;
+
+  try {
+    const shaderModule = this.device!.createShaderModule({ code: instanceShader });
+    
+    const pipeline = this.device!.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs_main',
+        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }]
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+
+    const commandEncoder = this.device!.createCommandEncoder();
+    const textureView = this.context!.getCurrentTexture().createView();
+    
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 0.2, g: 0.2, b: 0.2, a: 1.0 }, // Gray background
+        loadOp: 'clear' as const,
+        storeOp: 'store' as const,
+      }],
+    });
+    
+    renderPass.setPipeline(pipeline);
+    renderPass.draw(3, 3); // 3 vertices, 3 instances
+    renderPass.end();
+    
+    this.device!.queue.submit([commandEncoder.finish()]);
+    
+    console.log('✅ Test 3: Instancing (should see 3 yellow triangles)');
+  } catch (error) {
+    console.error('❌ Test 3 failed:', error);
+  }
+}
 
   async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {
@@ -64,7 +236,7 @@ export class WebGPURenderer {
 
       await this.setupRenderPipelines();
       this.initialized = true;
-      console.log('Enhanced WebGPU renderer initialized successfully');
+      console.log('Fixed WebGPU renderer initialized successfully');
       return true;
 
     } catch (error) {
@@ -93,7 +265,7 @@ export class WebGPURenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Enhanced WGSL shader for nodes with selection support
+    // Fixed WGSL shader with proper coordinate system
     const nodeShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
@@ -130,22 +302,23 @@ export class WebGPURenderer {
         );
         
         let uvs = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-          vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
+          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
         );
 
         let node = nodeData[instanceIndex];
         let localPos = positions[vertexIndex];
         
         // Add selection padding if selected
-        let selectionPadding = node.isSelected * 4.0; // 4 pixel padding when selected
+        let selectionPadding = node.isSelected * 4.0;
         let adjustedSize = node.size + vec2<f32>(selectionPadding, selectionPadding);
         
+        // Calculate world position
         let worldPos = node.position + localPos * adjustedSize * 0.5;
         
         var output: VertexOutput;
-        let screenPos = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, 0.0, 1.0);
-        output.position = vec4<f32>(screenPos.x, screenPos.y, screenPos.z, screenPos.w);
+        // Apply view-projection matrix
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
         output.color = node.color;
         output.uv = uvs[vertexIndex];
         output.isSelected = node.isSelected;
@@ -159,9 +332,6 @@ export class WebGPURenderer {
         @location(1) uv: vec2<f32>,
         @location(2) isSelected: f32
       ) -> @location(0) vec4<f32> {
-        let center = vec2<f32>(0.5, 0.5);
-        let dist = distance(uv, center);
-        
         // Create rounded rectangle
         let cornerRadius = 0.1;
         let edgeDistance = max(abs(uv.x - 0.5), abs(uv.y - 0.5));
@@ -217,8 +387,8 @@ export class WebGPURenderer {
         );
         
         let uvs = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-          vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
+          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
         );
 
         let handle = handleData[instanceIndex];
@@ -238,8 +408,16 @@ export class WebGPURenderer {
         @location(0) color: vec4<f32>,
         @location(1) uv: vec2<f32>
       ) -> @location(0) vec4<f32> {
-        // Simple square handles
-        return color;
+        // Simple square handles with border
+        let borderWidth = 0.1;
+        let isInBorder = step(borderWidth, uv.x) * step(uv.x, 1.0 - borderWidth) * 
+                        step(borderWidth, uv.y) * step(uv.y, 1.0 - borderWidth);
+        
+        if (isInBorder > 0.5) {
+          return vec4<f32>(0.0, 0.0, 0.0, 1.0); // Black interior
+        } else {
+          return color; // White border
+        }
       }
     `;
 
@@ -367,16 +545,29 @@ export class WebGPURenderer {
       console.log('WebGPU render called:', { 
         visibleNodes: visibleNodes.length, 
         selectedNodes: selectedNodes.length,
-        viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }
+        viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom },
+        canvasSize
       });
 
-      // Log each visible node
-        visibleNodes.forEach((node, i) => {
-          console.log(`  Node ${i}:`, {
-            id: node.id,
-            position: node.data?.position,
-            size: node.visual?.size
-          })});
+        console.log('🔍 DETAILED DRAW CALL DIAGNOSTIC');
+  console.log('=====================================');
+  
+  // Check render pipeline state
+  console.log('🏗️ Render Pipeline State:', {
+    pipeline: !!this.nodeRenderPipeline,
+    bindGroup: !!this.nodeBindGroup,
+    device: !!this.device,
+    context: !!this.context
+  });
+
+  // Check canvas state
+  if (this.canvas) {
+    console.log('🖼️ Canvas State:', {
+      width: this.canvas.width,
+      height: this.canvas.height,
+      actualSize: { width: canvasSize.width, height: canvasSize.height }
+    });
+  }
 
       // Update canvas size if needed
       if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
@@ -404,25 +595,15 @@ export class WebGPURenderer {
         return;
       }
 
-      // Update uniform buffer with viewport transform
-      const aspectRatio = canvasSize.width / canvasSize.height;
-      const zoom = viewport.zoom;
-      
-      const left = viewport.x;
-      const right = viewport.x + (canvasSize.width / zoom);
-      const top = viewport.y;  // Note: top < bottom for Y-down
-      const bottom = viewport.y + (canvasSize.height / zoom);
-
-      const orthoMatrix = this.createOrthographicMatrix(left, right, bottom, top, -1, 1);
-      const viewMatrix = this.createTranslationMatrix(-viewport.x, -viewport.y, 0);
-      const viewProjectionMatrix = this.multiplyMatrices(orthoMatrix, viewMatrix);
+      // Create proper view-projection matrix for 2D rendering
+      const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
 
       this.device.queue.writeBuffer(
         this.uniformBuffer!,
         0,
         new Float32Array([
           ...viewProjectionMatrix,
-          viewport.x, viewport.y, viewport.zoom, aspectRatio
+          viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height
         ])
       );
 
@@ -474,9 +655,9 @@ export class WebGPURenderer {
       }
 
       // Write node data to buffer
-      const flatNodeData = new Float32Array(nodeData.length * 12); // 12 floats per node
+      const flatNodeData = new Float32Array(nodeData.length * 16); // 12 floats per node
       nodeData.forEach((node, i) => {
-        const offset = i * 12;
+        const offset = i * 16;
         flatNodeData[offset] = node.position[0];
         flatNodeData[offset + 1] = node.position[1];
         flatNodeData[offset + 2] = node.size[0];
@@ -493,10 +674,10 @@ export class WebGPURenderer {
 
       this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
 
-      // Generate resize handles for selected nodes (only if we have selected nodes)
+      // Generate resize handles for selected nodes
       const handleData: HandleInstanceData[] = [];
       if (selectedNodes.length > 0) {
-        const handleSize = Math.max(8 / viewport.zoom, 4); // Minimum 4px handles
+        const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8px handles
 
         selectedNodes.forEach(node => {
           if (!node.data || !node.data.position) return;
@@ -599,11 +780,29 @@ export class WebGPURenderer {
 
     } catch (error) {
       console.error('WebGPU render error:', error);
-      // Don't set initialized to false on render errors, just log them
     }
   }
 
-  // ... (keep all the existing helper methods from the previous version)
+  // Fixed view-projection matrix creation for 2D rendering
+  private createViewProjectionMatrix(viewport: Viewport, canvasSize: { width: number; height: number }): number[] {
+    // Create a 2D orthographic projection matrix
+    // We want to map world coordinates directly to screen coordinates
+    
+    // Calculate the visible world bounds based on viewport
+    const worldWidth = canvasSize.width / viewport.zoom;
+    const worldHeight = canvasSize.height / viewport.zoom;
+    
+    const left = viewport.x - worldWidth / 2;
+    const right = viewport.x + worldWidth / 2;
+    const bottom = viewport.y + worldHeight / 2; // Note: Y is flipped for screen coordinates
+    const top = viewport.y - worldHeight / 2;
+    
+    // Create orthographic projection matrix that maps world coords to NDC (-1 to 1)
+    const orthoMatrix = this.createOrthographicMatrix(left, right, bottom, top, -1, 1);
+    
+    return orthoMatrix;
+  }
+
   private createOrthographicMatrix(
     left: number, right: number,
     bottom: number, top: number,
@@ -619,29 +818,6 @@ export class WebGPURenderer {
       0, 0, -2 / depth, 0,
       -(right + left) / width, -(top + bottom) / height, -(far + near) / depth, 1,
     ];
-  }
-
-  private createTranslationMatrix(x: number, y: number, z: number): number[] {
-    return [
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      x, y, z, 1,
-    ];
-  }
-
-  private multiplyMatrices(a: number[], b: number[]): number[] {
-    const result = new Array(16);
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
-        result[i * 4 + j] = 
-          a[i * 4 + 0] * b[0 * 4 + j] +
-          a[i * 4 + 1] * b[1 * 4 + j] +
-          a[i * 4 + 2] * b[2 * 4 + j] +
-          a[i * 4 + 3] * b[3 * 4 + j];
-      }
-    }
-    return result;
   }
 
   private hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
@@ -693,7 +869,7 @@ export class WebGPURenderer {
       this.initialized = false;
       this.canvas = null;
 
-      console.log('Enhanced WebGPU renderer destroyed');
+      console.log('Fixed WebGPU renderer destroyed');
     } catch (error) {
       console.error('Error destroying WebGPU renderer:', error);
     }

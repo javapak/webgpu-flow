@@ -19,7 +19,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   className = '',
   showDebugInfo = false,
   onNodeClick,
-  onNodeDoubleClick,
   onCanvasClick,
   onNodeDropped,
 }) => {

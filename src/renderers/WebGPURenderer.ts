@@ -7,6 +7,7 @@ interface NodeInstanceData {
   size: [number, number];
   color: [number, number, number, number];
   isSelected: number; // 0 or 1
+  shapeType: number;
   padding: [number, number, number]; // padding for alignment
 }
 
@@ -277,6 +278,7 @@ async testInstancing(): Promise<void> {
         size: vec2<f32>,
         color: vec4<f32>,
         isSelected: f32,
+        shapeType: f32,
         padding: vec3<f32>,
       }
 
@@ -288,6 +290,8 @@ async testInstancing(): Promise<void> {
         @location(0) color: vec4<f32>,
         @location(1) uv: vec2<f32>,
         @location(2) isSelected: f32,
+        @location(3) shapeType: f32,
+        @location(4) nodeSize: vec2<f32>
       }
 
       @vertex
@@ -322,37 +326,114 @@ async testInstancing(): Promise<void> {
         output.color = node.color;
         output.uv = uvs[vertexIndex];
         output.isSelected = node.isSelected;
+        output.nodeSize = node.size;
+        output.shapeType = node.shapeType;
         
         return output;
       }
+      
+            // Distance functions for different shapes
+      fn sdRectangle(p: vec2<f32>, b: vec2<f32>) -> f32 {
+        let d = abs(p) - b;
+        return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0);
+      }
 
-      @fragment
-      fn fs_main(
-        @location(0) color: vec4<f32>,
-        @location(1) uv: vec2<f32>,
-        @location(2) isSelected: f32
-      ) -> @location(0) vec4<f32> {
-        // Create rounded rectangle
-        let cornerRadius = 0.1;
-        let edgeDistance = max(abs(uv.x - 0.5), abs(uv.y - 0.5));
-        let roundedEdge = smoothstep(0.45, 0.45 - cornerRadius, edgeDistance);
+      fn sdCircle(p: vec2<f32>, r: f32) -> f32 {
+        return length(p) - r;
+      }
+
+      fn sdDiamond(p: vec2<f32>, b: vec2<f32>) -> f32 {
+        let q = abs(p);
+        let h = b.x + b.y;
+        return (q.x + q.y - h) / sqrt(2.0);
+      }
+
+      fn sdHexagon(p: vec2<f32>, r: f32) -> f32 {
+        let k = vec3<f32>(-0.866025404, 0.5, 0.577350269);
+        let q = abs(p);
+        let qx_k1 = q.x * k.x;
+        let qy_k2 = q.y * k.y;
+        let dot_qk = qx_k1 + qy_k2;
+        let q2 = vec2<f32>(q.x - 2.0 * min(dot_qk, 0.0) * k.x, q.y - 2.0 * min(dot_qk, 0.0) * k.y);
+        let q3 = vec2<f32>(q2.x - clamp(q2.x, -k.z * r, k.z * r), q2.y - r);
+        return length(q3) * sign(q3.y);
+      }
+
+      fn sdRoundedRectangle(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
+        let q = abs(p) - b + r;
+        return min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0))) - r;
+      }
+
+ @fragment
+      fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+        let uv = input.uv * 2.0 - 1.0; // Convert to [-1, 1] range
+        let aspectRatio = input.nodeSize.x / input.nodeSize.y;
+        let p = vec2<f32>(uv.x * aspectRatio, uv.y);
         
-        // Selection border effect
-        if (isSelected > 0.5) {
-          // Create selection border
-          let borderWidth = 0.05;
-          let borderDistance = max(abs(uv.x - 0.5), abs(uv.y - 0.5));
-          let isInBorder = step(0.45 - borderWidth, borderDistance) * step(borderDistance, 0.45);
-          
-          if (isInBorder > 0.5) {
-            // Red selection border
-            return vec4<f32>(0.94, 0.26, 0.26, 1.0) * roundedEdge;
+        var distance: f32;
+        let shapeType = i32(input.shapeType);
+        
+        switch (shapeType) {
+          case 0: { // Rectangle
+            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8));
+          }
+          case 1: { // Circle
+            distance = sdCircle(p, 0.8);
+          }
+          case 2: { // Diamond
+            distance = sdDiamond(p, vec2<f32>(aspectRatio * 0.8, 0.8));
+          }
+          case 3: { // Hexagon
+            distance = sdHexagon(p, 0.8);
+          }
+          case 4: { // Package (rounded rectangle with tabs)
+            let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.7, 0.7), 0.1);
+            let tab = sdRectangle(p + vec2<f32>(0.0, 0.8), vec2<f32>(aspectRatio * 0.3, 0.15));
+            distance = min(mainBody, tab);
+          }
+          case 5: { // Rounded Rectangle
+            distance = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8), 0.15);
+          }
+          case 6: { // Initial Node (circle with thick border)
+            let outer = sdCircle(p, 0.8);
+            let inner = sdCircle(p, 0.6);
+            distance = max(outer, -inner);
+          }
+          case 7: { // Final Node (double circle)
+            let outer = sdCircle(p, 0.8);
+            let inner = sdCircle(p, 0.65);
+            distance = min(outer, max(inner, -sdCircle(p, 0.5)));
+          }
+          case 9: { // Actor (stick figure approximation with circle head)
+            let head = sdCircle(p + vec2<f32>(0.0, 0.4), 0.25);
+            let body = sdRectangle(p, vec2<f32>(0.05, 0.6));
+            distance = min(head, body);
+          }
+          default: { // Default to rectangle
+            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8));
           }
         }
+
+        // Anti-aliasing
+        let alpha = 1.0 - smoothstep(-0.02, 0.02, distance);
         
-        return vec4<f32>(color.rgb, color.a * roundedEdge);
+        // Selection highlight
+        var finalColor = input.color;
+        if (input.isSelected > 0.5) {
+          let selectionGlow = exp(-distance * 8.0) * 0.3;
+          finalColor = mix(finalColor, vec4<f32>(0.3, 0.8, 1.0, 1.0), selectionGlow);
+        }
+        
+        // Border effect
+        let borderWidth = 0.05;
+        let borderAlpha = smoothstep(distance - borderWidth, distance, 0.0) - 
+                         smoothstep(distance, distance + borderWidth, 0.0);
+        finalColor = mix(finalColor, vec4<f32>(0.2, 0.2, 0.2, 1.0), borderAlpha * 0.8);
+        
+        return vec4<f32>(finalColor.rgb, finalColor.a * alpha);
       }
     `;
+
 
     // Shader for resize handles
     const handleShaderCode = /* wgsl */`
@@ -487,7 +568,7 @@ async testInstancing(): Promise<void> {
           },
         }]
       },
-      primitive: { topology: 'triangle-list' as const },
+      primitive: { topology: 'triangle-list' },
     });
 
     this.handleRenderPipeline = this.device.createRenderPipeline({
@@ -515,7 +596,7 @@ async testInstancing(): Promise<void> {
           },
         }]
       },
-      primitive: { topology: 'triangle-list' as const },
+      primitive: { topology: 'triangle-list'},
     });
   }
 
@@ -615,15 +696,17 @@ async testInstancing(): Promise<void> {
           console.warn('Invalid node structure:', node);
           return null;
         }
-
+        type shapeType = keyof typeof SHAPE_TYPES
         const color = this.hexToRgba(node.visual?.color || '#3b82f6');
         const size = node.visual?.size || { width: 100, height: 60 };
+        const shapeType = SHAPE_TYPES[node.visual?.shape as unknown as shapeType] || 0;
         const isSelected = selectedNodeIds.has(node.id) ? 1 : 0;
         
         return {
           position: [node.data.position.x, node.data.position.y],
           size: [size.width, size.height],
           color: [color.r, color.g, color.b, color.a],
+          shapeType,
           isSelected,
           padding: [0, 0, 0], // padding for struct alignment
         };
@@ -875,3 +958,20 @@ async testInstancing(): Promise<void> {
     }
   }
 }
+
+// Export shape types for external use
+export const SHAPE_TYPES = {
+  rectangle: 0,
+  circle: 1,
+  diamond: 2,
+  hexagon: 3,
+  package: 4,
+  roundedRectangle: 5,
+  initialNode: 6,
+  finalNode: 7,
+  oval: 8,
+  actor: 9
+} as const;
+
+
+

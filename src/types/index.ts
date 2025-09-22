@@ -1,5 +1,6 @@
 // index.ts - Main library exports with spatial indexing
 
+import type { SHAPE_TYPES } from '../renderers/WebGPURenderer';
 import type { Point, AABB } from './spatial-indexing/types';
 
 export const GPUBufferUsage = {
@@ -459,7 +460,7 @@ export interface NodeSchema {
   id: string;
   type: string;
   visual: {
-    shape?: 'rectangle' | 'circle' | 'diamond';
+    shape?: keyof typeof SHAPE_TYPES;
     selected?: boolean;
     color?: string;
     size?: { width: number; height: number };

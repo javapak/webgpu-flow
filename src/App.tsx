@@ -2,6 +2,7 @@ import React from 'react';
 import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import { DiagramPerformanceMonitor } from './types';
+import { SHAPE_TYPES } from './renderers/WebGPURenderer';
 
 export const DiagramDemo: React.FC = () => {
 
@@ -65,8 +66,8 @@ export const DiagramDemo: React.FC = () => {
                 label: "Example Database"
               }}
               visual={{ 
-                color: "#ff7300ff", 
-                shape: 'rectangle',
+                color: "#ff00bf99", 
+                shape: "diamond",
                 size: {
                 width: 100, 
                 height: 100,

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { DiagramNode, NodeSchema } from '../types';
 import { useDiagram } from './DiagramProvider';
+import { SHAPE_TYPES } from '../renderers/WebGPURenderer';
 
 // Node component
 interface NodeProps {
@@ -32,7 +33,7 @@ export const Node: React.FC<NodeProps> = ({
           width: 120,
           height: 80},
           color: '#3b82f6',
-          shape: 'rectangle' as const,
+          shape: "diamond",
           ...visual
         },
         data: {

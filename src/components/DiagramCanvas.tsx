@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
-import type { Viewport } from '../types';
 
 interface DiagramCanvasProps {
   width: number;
@@ -52,8 +51,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   });
 
   const zoomRequestRef = useRef<number | null>(null);
-  const pendingViewportRef = useRef<any>(null);
-  const lastZoomTime = useRef(0);
 
   const {
     viewport,
@@ -73,19 +70,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     renderFrame,
   } = useDiagram();
 
-const optimizedSetViewport = useCallback((newViewport: Viewport) => {
-  pendingViewportRef.current = newViewport;
-  
-  if (!zoomRequestRef.current) {
-    zoomRequestRef.current = requestAnimationFrame(() => {
-      if (pendingViewportRef.current) {
-        setViewport(pendingViewportRef.current);
-        pendingViewportRef.current = null;
-      }
-      zoomRequestRef.current = null;
-    });
-  }
-}, [setViewport]);
 
 useEffect(() => {
   return () => {
@@ -263,60 +247,62 @@ useEffect(() => {
       startDrag, selectNode, clearSelection, onNodeClick, onCanvasClick, 
       screenToWorld, interaction.dragState.isDragging, endDrag]);
 
+
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  const touches = Array.from(e.touches);
+  
+  if (touches.length === 1 && !touchState.isPinching) {
+    // Single touch drag - unchanged
+    const touch = touches[0];
+    const canvasPos = getCanvasTouchPos(touch as Touch);
     
-    const touches = Array.from(e.touches);
+    if (interaction.dragState.isDragging) {
+      updateDrag(canvasPos);
+    }
     
-    if (touches.length === 1 && !touchState.isPinching) {
-      // Single touch drag
-      const touch = touches[0];
-      const canvasPos = getCanvasTouchPos(touch as Touch);
-      
-      if (interaction.dragState.isDragging) {
-        updateDrag(canvasPos);
-      }
-      
-    } else if (touches.length === 2 && touchState.isPinching) {
-      // Pinch zoom - simplified and throttled
-      const [touch1, touch2] = touches;
-      const currentDistance = getTouchDistance(touch1 as Touch, touch2 as Touch);
-      const currentCenter = getTouchCenter(touch1 as Touch, touch2 as Touch);
+  } else if (touches.length === 2 && touchState.isPinching) {
+    // Ultra-optimized pinch zoom
+    const [touch1, touch2] = touches;
+    
+    // Pre-calculate squared distances to avoid sqrt until needed
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    const currentDistanceSquared = dx * dx + dy * dy;
+    
+    // Only update if distance changed significantly (reduces unnecessary updates)
+    const lastDistanceSquared = touchState.lastPinchDistance * touchState.lastPinchDistance;
+    const distanceChangeRatio = Math.abs(currentDistanceSquared - lastDistanceSquared) / Math.max(lastDistanceSquared, 1);
+    
+    if (distanceChangeRatio > 0.001) { // Only update if 0.1% change
+      const currentDistance = Math.sqrt(currentDistanceSquared);
       
       if (touchState.lastPinchDistance > 0) {
-        const now = Date.now();
-        if (now - lastZoomTime.current < 50) { // Throttle to 20fps max
-          return;
-        }
-        lastZoomTime.current = now;
-        
-        // Calculate zoom change
+        // Simple zoom factor
         const zoomFactor = currentDistance / touchState.lastPinchDistance;
-        const newZoom = Math.max(0.2, Math.min(3.0, viewport.zoom * zoomFactor));
         
-        // Calculate pan - keep it simple
-        const centerDeltaX = currentCenter.x - touchState.lastPinchCenter.x;
-        const centerDeltaY = currentCenter.y - touchState.lastPinchCenter.y;
+        // Clamp zoom without complex math
+        let newZoom = viewport.zoom * zoomFactor;
+        if (newZoom < 0.2) newZoom = 0.2;
+        if (newZoom > 3.0) newZoom = 3.0;
         
-        // Apply changes with throttling
-        optimizedSetViewport({
+        // Skip center calculation entirely - just zoom at current viewport center
+        // This eliminates the most expensive calculation
+        setViewport({
           zoom: newZoom,
-          x: viewport.x - centerDeltaX / viewport.zoom,
-          y: viewport.y - centerDeltaY / viewport.zoom,
-          width,
-          height
+          x: viewport.x, // Keep current position
+          y: viewport.y,
         });
         
-        // Update state
-        setTouchState(prev => ({
-          ...prev,
-          lastPinchDistance: currentDistance,
-          lastPinchCenter: currentCenter,
-        }));
+        // Minimal state update
+        touchState.lastPinchDistance = currentDistance;
       }
     }
-  }, [touchState, getCanvasTouchPos, interaction.dragState.isDragging, 
-      updateDrag, viewport, optimizedSetViewport]);
+  }
+}, [touchState, getCanvasTouchPos, interaction.dragState.isDragging, 
+    updateDrag, viewport.zoom, setViewport]);
+
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     e.preventDefault();

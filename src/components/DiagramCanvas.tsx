@@ -113,6 +113,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     };
   }, []);
 
+    const getCanvasTouchPos = useCallback((e: React.TouchEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+
+    
+    return {
+      x: e.touches.item(0).clientX - rect.left,
+      y: e.touches.item(0).clientY - rect.top,
+    };
+  }, []);
+
   // Enhanced hit testing that checks for resize handles
   const performHitTest = useCallback((canvasPos: { x: number; y: number }) => {
     const result = hitTestWithHandles(canvasPos);
@@ -246,6 +257,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
   }, [handleWheel]);
 
+
+
+
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -305,6 +319,49 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       canvasRef.current.style.backgroundColor = '#f0f8ff';
     }
   }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    console.log('Touch detected');
+    const canvasPos = getCanvasTouchPos(e);
+    const hitResult = performHitTest(canvasPos);
+    
+    console.log('Screen touch at:', { canvasPos, hitResult, viewport });
+
+    if (hitResult.resizeHandle !== 'none') {
+      // Start resize operation
+      console.log('🔄 Starting resize:', hitResult.resizeHandle);
+      startDrag('resize', canvasPos, hitResult.resizeHandle);
+    if (hitResult.nodes.length > 0) {
+      const topNode = hitResult.nodes[0];
+      console.log('Node hit on touch:', topNode.id);
+      selectNode(topNode);
+      startDrag('node', canvasPos);
+      onNodeClick?.(topNode);
+    } else {
+      console.log('Canvas hit on touch');
+      clearSelection();
+      startDrag('viewport', canvasPos);
+      onCanvasClick?.(hitResult.worldPos);
+      }
+    }
+      
+    }, [getCanvasTouchPos, performHitTest, startDrag, selectNode, clearSelection, onNodeClick, onCanvasClick, viewport]);
+ 
+
+  
+  useEffect(() => {
+    if (canvasRef.current) {
+      canvasRef.current.addEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void, {passive: false})
+    
+      return () => {
+        if (canvasRef.current)
+        canvasRef.current.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
+      }
+    }
+
+  }, [handleTouchMove]);
+
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     if (canvasRef.current && !canvasRef.current.contains(e.relatedTarget as Node)) {

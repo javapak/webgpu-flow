@@ -103,7 +103,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [showDebugInfo, getSpatialDebugInfo]);
 
   // Mouse position helper - returns canvas coordinates
-  const getCanvasMousePos = useCallback((e: React.PointerEvent) => {
+  const getCanvasMousePos = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     
@@ -136,7 +136,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [hitTestWithHandles, screenToWorld, interaction.selectedNodes]);
 
   // Mouse move handler for cursor updates
-  const handleMouseMove = useCallback((e: React.PointerEvent) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const canvasPos = getCanvasMousePos(e);
     const hitResult = performHitTest(canvasPos);
     
@@ -168,7 +168,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [getCanvasMousePos, performHitTest, interaction.dragState, updateDrag, currentCursor]);
 
   // Mouse event handlers
-  const handleMouseDown = useCallback((e: React.PointerEvent) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
     console.log('🖱️ Mouse down');
     const canvasPos = getCanvasMousePos(e);
     const hitResult = performHitTest(canvasPos);
@@ -210,7 +210,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     
-    const canvasPos = getCanvasMousePos(e as unknown as React.PointerEvent);
+    const canvasPos = getCanvasMousePos(e as unknown as React.MouseEvent);
     const worldPosBeforeZoom = screenToWorld(canvasPos);
     
     // Calculate zoom

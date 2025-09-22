@@ -360,6 +360,42 @@ useEffect(() => {
     });
   }, [interaction.dragState.isDragging, endDrag]);
 
+
+  useEffect(() => {
+    if (isMobile && canvasRef.current){
+      canvasRef.current.addEventListener('touchstart', 
+        handleTouchStart as unknown as (e: TouchEvent) => void, {passive: false});
+    }
+    return () =>  canvasRef.current!.removeEventListener('touchstart', handleTouchStart as unknown as (e: TouchEvent) => void);
+  }, [handleTouchStart]);
+
+  useEffect(() => {
+    if (isMobile && canvasRef.current){
+      canvasRef.current.addEventListener('touchmove', 
+        handleTouchMove as unknown as (e: TouchEvent) => void, {passive: false});
+    }
+    return () =>  canvasRef.current!.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
+  }, [handleTouchMove]);
+
+  useEffect(() => {
+    if (isMobile && canvasRef.current){
+      canvasRef.current.addEventListener('touchend', 
+        handleTouchEnd as unknown as (e: TouchEvent) => void, {passive: false});
+    }
+    return () =>  canvasRef.current!.removeEventListener('touchend', handleTouchEnd as unknown as (e: TouchEvent) => void);
+  }, [handleTouchEnd]);
+
+  useEffect(() => {
+    if (isMobile && canvasRef.current){
+      canvasRef.current.addEventListener('touchcancel', 
+        handleTouchCancel as unknown as (e: TouchEvent) => void, {passive: false});
+    }
+    return () =>  canvasRef.current!.removeEventListener('touchcancel', handleTouchCancel as unknown as (e: TouchEvent) => void);
+  }, [handleTouchCancel]);
+
+
+
+
   // Mouse event handlers (for desktop)
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isMobile) return; // Skip on mobile
@@ -541,12 +577,7 @@ useEffect(() => {
           userSelect: 'none',
           backgroundColor: selectedNodeType ? '#f0f8ff' : 'transparent'
         }}
-        // Touch events (mobile)
-        onTouchStart={isMobile ? handleTouchStart : undefined}
-        onTouchMove={isMobile ? handleTouchMove : undefined}
-        onTouchEnd={isMobile ? handleTouchEnd : undefined}
-        onTouchCancel={isMobile ? handleTouchCancel : undefined}
-        
+
         // Mouse events (desktop)
         onPointerDown={!isMobile ? handleMouseDown : undefined}
         onPointerMove={!isMobile ? handleMouseMove : undefined}

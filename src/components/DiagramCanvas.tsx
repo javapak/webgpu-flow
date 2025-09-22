@@ -101,7 +101,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [showDebugInfo, getSpatialDebugInfo]);
 
   // Mouse position helper - returns canvas coordinates
-  const getCanvasMousePos = useCallback((e: React.MouseEvent) => {
+  const getCanvasMousePos = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     
@@ -134,7 +134,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [hitTestWithHandles, screenToWorld, interaction.selectedNodes]);
 
   // Mouse move handler for cursor updates
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handleMouseMove = useCallback((e: React.PointerEvent) => {
     const canvasPos = getCanvasMousePos(e);
     const hitResult = performHitTest(canvasPos);
     
@@ -166,7 +166,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [getCanvasMousePos, performHitTest, interaction.dragState, updateDrag, currentCursor]);
 
   // Mouse event handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((e: React.PointerEvent) => {
     console.log('🖱️ Mouse down');
     const canvasPos = getCanvasMousePos(e);
     const hitResult = performHitTest(canvasPos);
@@ -205,19 +205,11 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
   }, [interaction.dragState.isDragging, endDrag]);
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    const canvasPos = getCanvasMousePos(e);
-    const hitResult = performHitTest(canvasPos);
-    
-    if (hitResult.nodes.length > 0) {
-      onNodeDoubleClick?.(hitResult.nodes[0]);
-    }
-  }, [getCanvasMousePos, performHitTest, onNodeDoubleClick]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     
-    const canvasPos = getCanvasMousePos(e);
+    const canvasPos = getCanvasMousePos(e as unknown as React.PointerEvent);
     const worldPosBeforeZoom = screenToWorld(canvasPos);
     
     // Calculate zoom
@@ -347,11 +339,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         height={height}
         className={`border border-gray-300`}
         style={{ cursor: currentCursor }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        onDoubleClick={handleDoubleClick}
+        onPointerDown={handleMouseDown}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
+        onPointerLeave={handleMouseLeave}
         onWheel={handleWheel}
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}

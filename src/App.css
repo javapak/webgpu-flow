@@ -1,42 +1,305 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+/* Mobile-optimized CSS for WebGPU Flow Diagram */
+
+/* Prevent text selection and context menus during touch interactions */
+.diagram-canvas {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  
+  /* Prevent default touch behaviors */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  
+  /* Smooth interactions */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mobile viewport optimizations */
+@viewport {
+  width: device-width;
+  zoom: 1.0;
+}
+
+/* Prevent zoom on double-tap */
+* {
+  touch-action: manipulation;
+}
+
+/* Safe area support for modern mobile devices */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top);
+  --safe-area-inset-right: env(safe-area-inset-right);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
+  --safe-area-inset-left: env(safe-area-inset-left);
+}
+
+/* Mobile-specific body styles */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed; /* Prevent rubber band scrolling */
+  width: 100%;
+  height: 100%;
+  
+  /* Prevent overscroll on mobile */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile touch targets */
+.mobile-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* High DPI display optimization */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .diagram-canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Mobile landscape orientation */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+  .mobile-header {
+    padding: 8px 16px;
+    font-size: 16px;
+  }
+  
+  .mobile-palette {
+    max-height: 30vh;
+  }
+}
+
+/* Mobile portrait orientation */
+@media screen and (orientation: portrait) and (max-width: 768px) {
+  .mobile-palette {
+    max-height: 45vh;
+  }
+  
+  .node-palette-item {
+    flex: 1 1 calc(50% - 4px);
+  }
+}
+
+/* Tablet optimizations */
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  .diagram-canvas {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #313131ff;
+    --bg-secondary: #404040ff;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --border-color: #555555;
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus styles for keyboard navigation */
+.diagram-element:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+/* Loading states for slow networks */
+.diagram-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+/* Error states */
+.diagram-error {
+  background-color: #ff4444;
+  color: white;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 16px;
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* Performance optimizations */
+.diagram-container {
+  /* Enable hardware acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  
+  /* Optimize repaints */
+  will-change: transform;
+  
+  /* Contain layout */
+  contain: layout style paint;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+/* Smooth scrolling for palette */
+.mobile-palette-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Custom scrollbar for mobile palette */
+.mobile-palette-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.mobile-palette-scroll::-webkit-scrollbar-track {
+  background: #404040ff;
+  border-radius: 2px;
+}
+
+.mobile-palette-scroll::-webkit-scrollbar-thumb {
+  background: #666666;
+  border-radius: 2px;
+}
+
+.mobile-palette-scroll::-webkit-scrollbar-thumb:hover {
+  background: #888888;
+}
+
+/* Responsive text scaling */
+@media screen and (max-width: 480px) {
+  .diagram-text {
+    font-size: 12px;
   }
-  to {
-    transform: rotate(360deg);
+  
+  .diagram-title {
+    font-size: 16px;
+  }
+  
+  .diagram-subtitle {
+    font-size: 11px;
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+/* Prevent selection of UI elements */
+.no-select {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Button styles optimized for touch */
+.mobile-button {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 44px;
+  min-width: 44px;
+  
+  /* Prevent blue highlight on tap */
+  -webkit-tap-highlight-color: transparent;
+  
+  /* Touch feedback */
+  touch-action: manipulation;
+}
+
+.mobile-button:active {
+  transform: scale(0.95);
+  opacity: 0.8;
+}
+
+.mobile-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Responsive grid for node palette */
+.node-palette-grid {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+@media screen and (max-width: 480px) {
+  .node-palette-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 }
 
-.card {
-  padding: 2em;
+@media screen and (min-width: 481px) and (max-width: 768px) {
+  .node-palette-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
 }
 
-.read-the-docs {
-  color: #888;
+/* Canvas container responsive */
+.canvas-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background-color: #2a2a2a;
+  
+  /* Ensure proper sizing */
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  
+  /* Center content */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Status indicators */
+.status-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  z-index: 1000;
+}
+
+.status-indicator.connected {
+  background-color: #22c55e;
+  color: white;
+}
+
+.status-indicator.disconnected {
+  background-color: #ef4444;
+  color: white;
+}
+
+.status-indicator.loading {
+  background-color: #f59e0b;
+  color: white;
 }

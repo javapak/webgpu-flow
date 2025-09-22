@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import { DiagramPerformanceMonitor } from './components/DiagramCanvas';
+import './App.css';
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -258,8 +259,8 @@ export const DiagramDemo: React.FC = () => {
             color: '#cccccc',
             padding: '0 20px 20px'
           }}>
-            <div>💡 Drag nodes from palette to canvas</div>
-            <div>dClick and drag to pan • Scroll to zoom</div>
+            <div>💡Drag nodes from palette to canvas</div>
+            <div>Click and drag to pan • Scroll to zoom</div>
           </div>
         )}
       </div>

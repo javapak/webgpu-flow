@@ -14,7 +14,7 @@ export const DiagramDemo: React.FC = () => {
   };
 
   return (
-    <div style={{width: '100vw', backgroundColor: '#313131ff',}}>
+    <div style={{maxWidth: '90vw', maxHeight: '90vh', backgroundColor: '#313131ff',}}>
     <div style={{ 
       padding: '20px',
       display: 'flex',

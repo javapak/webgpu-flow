@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
+import type { Viewport } from '../types';
 
 interface DiagramCanvasProps {
   width: number;
@@ -50,8 +51,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     lastPinchCenter: { x: 0, y: 0 },
   });
 
-  // Zoom throttling to prevent canvas freeze
-  const zoomThrottleRef = useRef<number | null>(null);
+  const zoomRequestRef = useRef<number | null>(null);
+  const pendingViewportRef = useRef<any>(null);
   const lastZoomTime = useRef(0);
 
   const {
@@ -72,17 +73,19 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     renderFrame,
   } = useDiagram();
 
-  // Throttled viewport update for mobile zoom
-  const throttledSetViewport = useCallback((newViewport: any) => {
-    if (zoomThrottleRef.current) {
-      clearTimeout(zoomThrottleRef.current);
-    }
-    
-    zoomThrottleRef.current = setTimeout(() => {
-      setViewport(newViewport);
-      zoomThrottleRef.current = null;
-    }, 16); // ~60fps
-  }, [setViewport]);
+const optimizedSetViewport = useCallback((newViewport: Viewport) => {
+  pendingViewportRef.current = newViewport;
+  
+  if (!zoomRequestRef.current) {
+    zoomRequestRef.current = requestAnimationFrame(() => {
+      if (pendingViewportRef.current) {
+        setViewport(pendingViewportRef.current);
+        pendingViewportRef.current = null;
+      }
+      zoomRequestRef.current = null;
+    });
+  }
+}, [setViewport]);
 
   // Initialize renderer once
   useEffect(() => {
@@ -288,10 +291,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         const centerDeltaY = currentCenter.y - touchState.lastPinchCenter.y;
         
         // Apply changes with throttling
-        throttledSetViewport({
+        optimizedSetViewport({
           zoom: newZoom,
           x: viewport.x - centerDeltaX / viewport.zoom,
           y: viewport.y - centerDeltaY / viewport.zoom,
+          width,
+          height
         });
         
         // Update state
@@ -303,7 +308,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       }
     }
   }, [touchState, getCanvasTouchPos, interaction.dragState.isDragging, 
-      updateDrag, viewport, throttledSetViewport]);
+      updateDrag, viewport, optimizedSetViewport]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     e.preventDefault();

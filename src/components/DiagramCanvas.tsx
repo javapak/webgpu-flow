@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
-import { MouseInteractions } from '../utils/MouseInteractions';
+import { MouseInteractions, type ResizeHandle } from '../utils/MouseInteractions';
 
 interface DiagramCanvasProps {
   width: number;
@@ -25,6 +25,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [currentCursor, setCurrentCursor] = useState<string>('grab');
   const initializationAttempted = useRef(false);
 
   const {
@@ -32,6 +33,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     interaction,
     addNode,
     hitTestPoint,
+    hitTestWithHandles, // Use the enhanced version
     selectNode,
     clearSelection,
     startDrag,
@@ -110,19 +112,74 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     };
   }, []);
 
+  // Enhanced hit testing that checks for resize handles
+  const performHitTest = useCallback((canvasPos: { x: number; y: number }) => {
+    const result = hitTestWithHandles(canvasPos);
+    
+    // Add world position for compatibility
+    const worldPos = screenToWorld(canvasPos);
+    
+    console.log('🎯 Canvas hit test result:', {
+      canvasPos,
+      worldPos,
+      nodes: result.nodes.length,
+      resizeHandle: result.resizeHandle,
+      selectedNodes: interaction.selectedNodes.length
+    });
+    
+    return {
+      nodes: result.nodes,
+      resizeHandle: result.resizeHandle,
+      worldPos
+    };
+  }, [hitTestWithHandles, screenToWorld, interaction.selectedNodes]);
+
+  // Mouse move handler for cursor updates
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const canvasPos = getCanvasMousePos(e);
+    const hitResult = performHitTest(canvasPos);
+    
+    // Update cursor based on what we're hovering over
+    let newCursor = 'grab';
+    
+    if (interaction.dragState.isDragging) {
+      if (interaction.dragState.dragType === 'resize') {
+        newCursor = MouseInteractions.getCursorForHandle(interaction.dragState.resizeHandle || 'none');
+      } else if (interaction.dragState.dragType === 'node') {
+        newCursor = 'grabbing';
+      } else {
+        newCursor = 'grabbing';
+      }
+      updateDrag(canvasPos);
+    } else {
+      if (hitResult.resizeHandle !== 'none') {
+        newCursor = MouseInteractions.getCursorForHandle(hitResult.resizeHandle);
+      } else if (hitResult.nodes.length > 0) {
+        newCursor = 'grab';
+      } else {
+        newCursor = 'grab';
+      }
+    }
+    
+    if (newCursor !== currentCursor) {
+      setCurrentCursor(newCursor);
+    }
+  }, [getCanvasMousePos, performHitTest, interaction.dragState, updateDrag, currentCursor]);
+
   // Mouse event handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     console.log('🖱️ Mouse down');
     const canvasPos = getCanvasMousePos(e);
+    const hitResult = performHitTest(canvasPos);
     
-    // Convert to world coordinates for hit testing
-    const worldPos = screenToWorld(canvasPos);
-    const hitNodes = hitTestPoint(canvasPos); // This should use canvas coordinates internally
-    
-    console.log('Mouse down:', { canvasPos, worldPos, viewport });
+    console.log('Mouse down:', { canvasPos, hitResult, viewport });
 
-    if (hitNodes.length > 0) {
-      const topNode = hitNodes[0];
+    if (hitResult.resizeHandle !== 'none') {
+      // Start resize operation
+      console.log('🔄 Starting resize:', hitResult.resizeHandle);
+      startDrag('resize', canvasPos, hitResult.resizeHandle);
+    } else if (hitResult.nodes.length > 0) {
+      const topNode = hitResult.nodes[0];
       console.log('🎯 Node hit:', topNode.id);
       selectNode(topNode);
       startDrag('node', canvasPos);
@@ -131,37 +188,32 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       console.log('🌍 Canvas hit');
       clearSelection();
       startDrag('viewport', canvasPos);
-      onCanvasClick?.(worldPos);
+      onCanvasClick?.(hitResult.worldPos);
     }
-  }, [getCanvasMousePos, screenToWorld, hitTestPoint, selectNode, startDrag, clearSelection, onNodeClick, onCanvasClick, viewport]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (interaction.dragState.isDragging) {
-      const canvasPos = getCanvasMousePos(e);
-      updateDrag(canvasPos);
-    }
-  }, [interaction.dragState.isDragging, getCanvasMousePos, updateDrag]);
+  }, [getCanvasMousePos, performHitTest, startDrag, selectNode, clearSelection, onNodeClick, onCanvasClick, viewport]);
 
   const handleMouseUp = useCallback(() => {
     if (interaction.dragState.isDragging) {
+      console.log('🖱️ Mouse up, ending drag:', interaction.dragState.dragType);
       endDrag();
     }
   }, [interaction.dragState.isDragging, endDrag]);
 
   const handleMouseLeave = useCallback(() => {
     if (interaction.dragState.isDragging) {
+      console.log('🖱️ Mouse leave, ending drag');
       endDrag();
     }
   }, [interaction.dragState.isDragging, endDrag]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     const canvasPos = getCanvasMousePos(e);
-    const hitNodes = hitTestPoint(canvasPos);
+    const hitResult = performHitTest(canvasPos);
     
-    if (hitNodes.length > 0) {
-      onNodeDoubleClick?.(hitNodes[0]);
+    if (hitResult.nodes.length > 0) {
+      onNodeDoubleClick?.(hitResult.nodes[0]);
     }
-  }, [getCanvasMousePos, hitTestPoint, onNodeDoubleClick]);
+  }, [getCanvasMousePos, performHitTest, onNodeDoubleClick]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -265,36 +317,49 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     );
   };
 
-  
-
   return (
     <div>
       <div className={`relative ${className}`}>
-              {showDebugInfo && (
+        {showDebugInfo && (
           <div>
-            <div>Initialized: {isRendererInitialized() ? 'Yes' : 'No'}, Zoom: {viewport.zoom.toFixed(2)}x, Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)}), Canvas Size: {width}x{height} <div>Selected: {interaction.selectedNodes.length}, {debugInfo && (<span>Spatial Items: {debugInfo.totalItems}, Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</span>)}</div>
+            <div>
+              Initialized: {isRendererInitialized() ? 'Yes' : 'No'}, 
+              Zoom: {viewport.zoom.toFixed(2)}x, 
+              Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)}), 
+              Canvas Size: {width}x{height}
+              <div>
+                Selected: {interaction.selectedNodes.length}, 
+                Dragging: {interaction.dragState.isDragging ? interaction.dragState.dragType : 'No'}, 
+                {interaction.dragState.resizeHandle && `Handle: ${interaction.dragState.resizeHandle}`}
+                {debugInfo && (
+                  <span>
+                    , Spatial Items: {debugInfo.totalItems}, 
+                    Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )}
       </div>
-        <canvas
-          ref={canvasRef}
-          width={width}
-          height={height}
-          className="border border-gray-300 cursor-grab active:cursor-grabbing"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
-          onDoubleClick={handleDoubleClick}
-          onWheel={handleWheel}
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        />
-      </div>
-
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        className={`border border-gray-300`}
+        style={{ cursor: currentCursor }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onDoubleClick={handleDoubleClick}
+        onWheel={handleWheel}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      />
+    </div>
   );
 };
 

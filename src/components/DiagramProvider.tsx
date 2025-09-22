@@ -1,6 +1,7 @@
 import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef } from "react";
 import { useSpatialIndex, type SpatialDiagramHook } from "../hooks/useSpatialIndex";
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
+import { MouseInteractions, type ResizeHandle } from "../utils/MouseInteractions";
 import type { Viewport, DiagramState, DiagramNode, DiagramEdge } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
 
@@ -12,6 +13,7 @@ export interface DiagramContextValue extends DiagramState {
   updateNode: (node: DiagramNode) => void;
   getVisibleNodes: () => DiagramNode[];
   hitTestPoint: (screenPoint: Point) => DiagramNode[];
+  hitTestWithHandles: (screenPoint: Point) => { nodes: DiagramNode[]; resizeHandle: ResizeHandle };
   
   // Viewport methods
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;
@@ -23,7 +25,7 @@ export interface DiagramContextValue extends DiagramState {
   clearSelection: () => void;
   
   // Interaction methods
-  startDrag: (type: 'node' | 'viewport', screenPoint: Point) => void;
+  startDrag: (type: 'node' | 'viewport' | 'resize', screenPoint: Point, resizeHandle?: ResizeHandle) => void;
   updateDrag: (screenPoint: Point) => void;
   endDrag: () => void;
   
@@ -49,9 +51,25 @@ type DiagramAction =
   | { type: 'SET_VIEWPORT'; viewport: Partial<Viewport> }
   | { type: 'SELECT_NODE'; node: DiagramNode | null }
   | { type: 'CLEAR_SELECTION' }
-  | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'selection'; startPos: Point }
+  | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize'; startPos: Point; resizeHandle?: ResizeHandle }
   | { type: 'UPDATE_DRAG'; currentPos: Point }
   | { type: 'END_DRAG' };
+
+// Extended interaction state to include resize info
+interface ExtendedInteractionState {
+  selectedNodes: DiagramNode[];
+  selectedEdges: DiagramEdge[];
+  dragState: {
+    isDragging: boolean;
+    dragType: 'node' | 'viewport' | 'resize' | null;
+    startPos: Point | null;
+    lastPos: Point | null;
+    resizeHandle?: ResizeHandle;
+    originalSize?: { width: number; height: number };
+    originalPosition?: { x: number; y: number };
+  };
+  mode: 'select' | 'pan' | 'connect' | 'edit';
+}
 
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
   console.log('Reducer action:', action.type, action);
@@ -120,8 +138,31 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
 
     case 'SELECT_NODE':
       console.log('Selecting node:', action.node?.id || 'none');
+      
+      // Update the selected node to have visual.selected = true
+      let updatedNodes = state.nodes;
+      if (action.node) {
+        updatedNodes = state.nodes.map(node => ({
+          ...node,
+          visual: {
+            ...node.visual,
+            selected: node.id === action.node!.id
+          }
+        }));
+      } else {
+        // Clear all selections
+        updatedNodes = state.nodes.map(node => ({
+          ...node,
+          visual: {
+            ...node.visual,
+            selected: false
+          }
+        }));
+      }
+      
       return {
         ...state,
+        nodes: updatedNodes,
         interaction: {
           ...state.interaction,
           selectedNodes: action.node ? [action.node] : [],
@@ -130,8 +171,19 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
 
     case 'CLEAR_SELECTION':
       console.log('Clearing selection');
+      
+      // Clear all visual selection indicators
+      const clearedNodes = state.nodes.map(node => ({
+        ...node,
+        visual: {
+          ...node.visual,
+          selected: false
+        }
+      }));
+      
       return {
         ...state,
+        nodes: clearedNodes,
         interaction: {
           ...state.interaction,
           selectedNodes: [],
@@ -139,6 +191,28 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'START_DRAG':
+      const selectedNode = state.interaction.selectedNodes[0];
+      
+      console.log('🚀 Starting drag:', {
+        dragType: action.dragType,
+        resizeHandle: action.resizeHandle,
+        selectedNode: selectedNode?.id,
+        startPos: action.startPos
+      });
+      
+      // For resize operations, capture the original size and position
+      let originalSize, originalPosition;
+      if (action.dragType === 'resize' && selectedNode) {
+        originalSize = selectedNode.data.size ? { ...selectedNode.data.size } : { width: 100, height: 60 };
+        originalPosition = selectedNode.data.position ? { ...selectedNode.data.position } : { x: 0, y: 0 };
+        
+        console.log('🚀 Resize drag setup:', {
+          originalSize,
+          originalPosition,
+          resizeHandle: action.resizeHandle
+        });
+      }
+      
       return {
         ...state,
         interaction: {
@@ -148,6 +222,9 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             dragType: action.dragType,
             startPos: action.startPos,
             lastPos: action.startPos,
+            resizeHandle: action.resizeHandle,
+            originalSize,
+            originalPosition,
           },
         },
       };
@@ -212,6 +289,108 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             },
           },
         };
+      } else if (
+        state.interaction.dragState.dragType === 'resize' &&
+        state.interaction.selectedNodes.length > 0 &&
+        state.interaction.dragState.resizeHandle &&
+        state.interaction.dragState.originalSize &&
+        state.interaction.dragState.originalPosition
+      ) {
+        // Handle resize logic
+        const selectedNode = state.interaction.selectedNodes[0];
+        const { resizeHandle, originalSize, originalPosition } = state.interaction.dragState;
+        
+        console.log('🔄 Processing resize drag:', {
+          resizeHandle,
+          originalSize,
+          originalPosition,
+          currentPos: action.currentPos,
+          startPos: state.interaction.dragState.startPos,
+          deltaX: action.currentPos.x - (state.interaction.dragState.startPos?.x || 0),
+          deltaY: action.currentPos.y - (state.interaction.dragState.startPos?.y || 0)
+        });
+        
+        // Convert screen delta to world delta for resizing
+        const worldDeltaX = deltaX / state.viewport.zoom;
+        const worldDeltaY = deltaY / state.viewport.zoom;
+        
+        // Calculate cumulative delta from start position
+        const totalDeltaX = (action.currentPos.x - state.interaction.dragState.startPos!.x) / state.viewport.zoom;
+        const totalDeltaY = (action.currentPos.y - state.interaction.dragState.startPos!.y) / state.viewport.zoom;
+        
+        console.log('🔄 Resize deltas:', {
+          screenDelta: { x: deltaX, y: deltaY },
+          worldDelta: { x: worldDeltaX, y: worldDeltaY },
+          totalDelta: { x: totalDeltaX, y: totalDeltaY }
+        });
+        
+        // Check if this shape should lock aspect ratio
+        
+        
+        console.log('🔄 Calling calculateResize with:', {
+          handle: resizeHandle,
+          totalDeltaX,
+          totalDeltaY,
+          originalSize,
+          originalPosition,
+          lockAspectRatio: false
+        });
+        
+        const newDimensions = MouseInteractions.calculateResize(
+          resizeHandle,
+          totalDeltaX,
+          totalDeltaY,
+          originalSize.width,
+          originalSize.height,
+          originalPosition.x,
+          originalPosition.y,
+          40, // minWidth
+          30, // minHeight
+          false
+          
+        );
+        
+        console.log('🔄 New dimensions calculated:', newDimensions);
+        
+        const updatedNode = {
+          ...selectedNode,
+          data: {
+            ...selectedNode.data,
+            position: {
+              x: newDimensions.x,
+              y: newDimensions.y,
+            },
+            size: {
+              width: newDimensions.width,
+              height: newDimensions.height,
+            },
+          },
+          visual: {
+            ...selectedNode.visual,
+            selected: true, // Maintain selection
+            size: {
+              width: newDimensions.width,
+              height: newDimensions.height,
+            }
+          }
+        };
+
+        console.log('🔄 Updated node:', updatedNode);
+
+        return {
+          ...state,
+          nodes: state.nodes.map(node =>
+            node.id === selectedNode.id ? updatedNode : node
+          ),
+          interaction: {
+            ...state.interaction,
+            selectedNodes: [updatedNode],
+            dragState: {
+              ...state.interaction.dragState,
+              lastPos: action.currentPos,
+            },
+          },
+        };
       }
 
       return state;
@@ -226,6 +405,9 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             dragType: null,
             startPos: null,
             lastPos: null,
+            resizeHandle: undefined,
+            originalSize: undefined,
+            originalPosition: undefined,
           },
         },
       };
@@ -284,29 +466,33 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
 
   // Fixed coordinate transformation utilities
   const screenToWorld = useCallback((screenPoint: Point): Point => {
+    // Use current state from ref to avoid stale closures
+    const currentState = stateRef.current;
     // Convert screen coordinates to world coordinates
     // Screen origin (0,0) is top-left, world origin (0,0) is center
-    const screenCenterX = state.viewport.width / 2;
-    const screenCenterY = state.viewport.height / 2;
+    const screenCenterX = currentState.viewport.width / 2;
+    const screenCenterY = currentState.viewport.height / 2;
     
     // Convert screen point relative to center, then scale by zoom and add viewport offset
-    const worldX = (screenPoint.x - screenCenterX) / state.viewport.zoom + state.viewport.x;
-    const worldY = (screenPoint.y - screenCenterY) / state.viewport.zoom + state.viewport.y;
+    const worldX = (screenPoint.x - screenCenterX) / currentState.viewport.zoom + currentState.viewport.x;
+    const worldY = (screenPoint.y - screenCenterY) / currentState.viewport.zoom + currentState.viewport.y;
     
     return { x: worldX, y: worldY };
-  }, [state.viewport]);
+  }, [stateRef]);
 
   const worldToScreen = useCallback((worldPoint: Point): Point => {
+    // Use current state from ref to avoid stale closures
+    const currentState = stateRef.current;
     // Convert world coordinates to screen coordinates
-    const screenCenterX = state.viewport.width / 2;
-    const screenCenterY = state.viewport.height / 2;
+    const screenCenterX = currentState.viewport.width / 2;
+    const screenCenterY = currentState.viewport.height / 2;
     
     // Transform world point relative to viewport, scale by zoom, then offset to screen center
-    const screenX = (worldPoint.x - state.viewport.x) * state.viewport.zoom + screenCenterX;
-    const screenY = (worldPoint.y - state.viewport.y) * state.viewport.zoom + screenCenterY;
+    const screenX = (worldPoint.x - currentState.viewport.x) * currentState.viewport.zoom + screenCenterX;
+    const screenY = (worldPoint.y - currentState.viewport.y) * currentState.viewport.zoom + screenCenterY;
     
     return { x: screenX, y: screenY };
-  }, [state.viewport]);
+  }, [stateRef]);
 
   // Get only visible nodes for efficient rendering
   const getVisibleNodes = useCallback(() => {
@@ -393,7 +579,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     }
   }, [scheduleRender]);
 
-  // Hit testing using spatial index
+  // Enhanced hit testing that also checks for resize handles
   const hitTestPoint = useCallback((screenPoint: Point) => {
     const worldPoint = screenToWorld(screenPoint);
     const hits = spatial.hitTest(worldPoint);
@@ -406,6 +592,57 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     });
     return hits;
   }, [spatial, screenToWorld, state.viewport]);
+
+  // Separate function for enhanced hit testing with resize handles
+  const hitTestWithHandles = useCallback((screenPoint: Point) => {
+    const worldPoint = screenToWorld(screenPoint);
+    
+    // Use the most current state from stateRef to avoid stale closures
+    const currentState = stateRef.current;
+    
+    // First check if we're hitting a resize handle of a selected node
+    if (currentState.interaction.selectedNodes.length > 0) {
+      const selectedNode = currentState.interaction.selectedNodes[0];
+      
+      // Ensure the node has the selected visual property set
+      const nodeWithSelection = {
+        ...selectedNode,
+        visual: {
+          ...selectedNode.visual,
+          selected: true // Force this to be true for hit testing
+        }
+      };
+      
+      // Debug: Log what we're checking
+      console.log('Checking resize handle for selected node:', {
+        nodeId: selectedNode.id,
+        nodePos: selectedNode.data.position,
+        nodeSize: selectedNode.data.size,
+        worldPoint,
+        viewport: currentState.viewport,
+        hasSelectedFlag: nodeWithSelection.visual?.selected
+      });
+      
+      const resizeHandle = MouseInteractions.getResizeHandle(
+        worldPoint,
+        nodeWithSelection as any, // Type assertion needed for the interface mismatch
+        currentState.viewport
+      );
+      
+      if (resizeHandle !== 'none') {
+        console.log('✅ Hit resize handle:', resizeHandle);
+        return { nodes: [selectedNode], resizeHandle };
+      }
+    }
+    
+    // Then check for node hits
+    const hits = spatial.hitTest(worldPoint);
+    console.log('Regular hit test result:', { 
+      hits: hits.length, 
+      hitIds: hits.map(n => n.id) 
+    });
+    return { nodes: hits, resizeHandle: 'none' as ResizeHandle };
+  }, [spatial, screenToWorld, stateRef]); // Use stateRef instead of state dependencies
 
   // Node methods
   const addNode = useCallback((node: DiagramNode) => {
@@ -452,9 +689,9 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     dispatch({ type: 'CLEAR_SELECTION' });
   }, []);
 
-  // Interaction methods
-  const startDrag = useCallback((type: 'node' | 'viewport' | 'selection', screenPoint: Point) => {
-    dispatch({ type: 'START_DRAG', dragType: type, startPos: screenPoint });
+  // Enhanced interaction methods
+  const startDrag = useCallback((type: 'node' | 'viewport' | 'resize', screenPoint: Point, resizeHandle?: ResizeHandle) => {
+    dispatch({ type: 'START_DRAG', dragType: type, startPos: screenPoint, resizeHandle });
   }, []);
 
   const updateDrag = useCallback((screenPoint: Point) => {
@@ -487,11 +724,12 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     console.log('State updated:', {
       nodeCount: state.nodes.length,
       selectedCount: state.interaction.selectedNodes.length,
+      dragState: state.interaction.dragState,
       viewport: state.viewport,
       nodes: state.nodes.map(n => ({ id: n.id, pos: n.data.position })),
       selected: state.interaction.selectedNodes.map(n => n.id)
     });
-  }, [state.nodes, state.interaction.selectedNodes, state.viewport]);
+  }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 
   // Rebuild spatial index when nodes change
   useEffect(() => {
@@ -526,7 +764,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     updateEdge,
     // Spatial methods
     getVisibleNodes,
-    hitTestPoint,
+    hitTestPoint, // Keep the basic version for compatibility
+    hitTestWithHandles, // Add the enhanced version
     // Viewport methods
     setViewport,
     screenToWorld,
@@ -555,6 +794,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     updateEdge,
     getVisibleNodes,
     hitTestPoint,
+    hitTestWithHandles,
     setViewport,
     screenToWorld,
     worldToScreen,

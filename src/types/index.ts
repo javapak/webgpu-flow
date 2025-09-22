@@ -1,6 +1,7 @@
 // index.ts - Main library exports with spatial indexing
 
 import type { SHAPE_TYPES } from '../renderers/WebGPURenderer';
+import type { ResizeHandle } from '../utils/MouseInteractions';
 import type { Point, AABB } from './spatial-indexing/types';
 
 export const GPUBufferUsage = {
@@ -85,9 +86,13 @@ export interface InteractionState {
   selectedEdges: DiagramEdge[];
   dragState: {
     isDragging: boolean;
-    dragType: 'node' | 'viewport' | 'selection' | null;
+    dragType: 'node' | 'viewport' | 'resize' | null;
     startPos: Point | null;
     lastPos: Point | null;
+    // Resize-specific properties
+    resizeHandle?: ResizeHandle;
+    originalSize?: { width: number; height: number };
+    originalPosition?: { x: number; y: number };
   };
   mode: 'select' | 'pan' | 'connect' | 'edit';
 }
@@ -105,12 +110,6 @@ export {
   type SpatialDiagramHook,
 
 } from '../hooks/useSpatialIndex';
-
-
-// Component exports
-export {
-  DiagramPerformanceMonitor,
-} from '../components/DiagramCanvas';
 
 // WebGPU renderer exports
 export {

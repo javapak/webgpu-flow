@@ -68,7 +68,8 @@ export class MouseInteractions {
     node: NodeSchema,
     viewport: { x: number; y: number; zoom: number; width: number; height: number }
   ): ResizeHandle {
-    if (!node.visual.selected) {
+    if (!node.visual?.selected) {
+      console.log('❌ Node not selected, no handles');
       return 'none';
     }
 
@@ -86,34 +87,52 @@ export class MouseInteractions {
     // Handle detection threshold in world coordinates (adjusted for zoom)
     const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8 world units
     
+    console.log('🔍 Resize handle check:', {
+      nodeId: node.id,
+      worldPos,
+      nodeBounds: { left, right, top, bottom },
+      handleSize,
+      selected: node.visual?.selected
+    });
+    
     // Check corners first (they take priority)
     if (Math.abs(worldPos.x - left) <= handleSize && Math.abs(worldPos.y - top) <= handleSize) {
+      console.log('✅ Hit handle: nw');
       return 'nw';
     }
     if (Math.abs(worldPos.x - right) <= handleSize && Math.abs(worldPos.y - top) <= handleSize) {
+      console.log('✅ Hit handle: ne');
       return 'ne';
     }
     if (Math.abs(worldPos.x - left) <= handleSize && Math.abs(worldPos.y - bottom) <= handleSize) {
+      console.log('✅ Hit handle: sw');
       return 'sw';
     }
     if (Math.abs(worldPos.x - right) <= handleSize && Math.abs(worldPos.y - bottom) <= handleSize) {
+      console.log('✅ Hit handle: se');
       return 'se';
     }
     
-    // Check edges
-    if (Math.abs(worldPos.x - left) <= handleSize && worldPos.y >= top - handleSize && worldPos.y <= bottom + handleSize) {
-      return 'w';
-    }
-    if (Math.abs(worldPos.x - right) <= handleSize && worldPos.y >= top - handleSize && worldPos.y <= bottom + handleSize) {
-      return 'e';
-    }
-    if (Math.abs(worldPos.y - top) <= handleSize && worldPos.x >= left - handleSize && worldPos.x <= right + handleSize) {
-      return 'n';
-    }
-    if (Math.abs(worldPos.y - bottom) <= handleSize && worldPos.x >= left - handleSize && worldPos.x <= right + handleSize) {
-      return 's';
+    // Check edges (only if shape allows free resizing)
+      if (Math.abs(worldPos.x - left) <= handleSize && worldPos.y >= top - handleSize && worldPos.y <= bottom + handleSize) {
+        console.log('✅ Hit handle: w');
+        return 'w';
+      }
+      if (Math.abs(worldPos.x - right) <= handleSize && worldPos.y >= top - handleSize && worldPos.y <= bottom + handleSize) {
+        console.log('✅ Hit handle: e');
+        return 'e';
+      }
+      if (Math.abs(worldPos.y - top) <= handleSize && worldPos.x >= left - handleSize && worldPos.x <= right + handleSize) {
+        console.log('✅ Hit handle: n');
+        return 'n';
+      }
+      if (Math.abs(worldPos.y - bottom) <= handleSize && worldPos.x >= left - handleSize && worldPos.x <= right + handleSize) {
+        console.log('✅ Hit handle: s');
+        return 's';
+      
     }
     
+    console.log('❌ No handle hit');
     return 'none';
   }
 
@@ -151,7 +170,25 @@ export class MouseInteractions {
     return null;
   }
 
-  // Calculate new node dimensions based on resize handle and mouse movement
+  // Helper to get shape type
+  private static getShapeType(shape?: string): number {
+    const SHAPE_TYPES = {
+      rectangle: 0,
+      circle: 1,
+      diamond: 2,
+      hexagon: 3,
+      package: 4,
+      roundedRectangle: 5,
+      initialNode: 6,
+      finalNode: 7,
+      oval: 8,
+      actor: 9
+    } as const;
+    
+    return SHAPE_TYPES[shape as keyof typeof SHAPE_TYPES] ?? 0;
+  }
+
+  // Calculate new node dimensions with aspect ratio locking support
   static calculateResize(
     handle: ResizeHandle,
     deltaX: number,
@@ -161,63 +198,146 @@ export class MouseInteractions {
     currentX: number,
     currentY: number,
     minWidth: number = 40,
-    minHeight: number = 30
+    minHeight: number = 30,
+    lockAspectRatio: boolean = false
   ): { width: number; height: number; x: number; y: number } {
     let newWidth = currentWidth;
     let newHeight = currentHeight;
     let newX = currentX;
     let newY = currentY;
 
-    switch (handle) {
-      case 'e':
-        newWidth = Math.max(minWidth, currentWidth + deltaX);
-        break;
-      case 'w':
-        newWidth = Math.max(minWidth, currentWidth - deltaX);
-        if (newWidth > minWidth) {
-          newX = currentX + deltaX / 2;
+    if (lockAspectRatio) {
+      // For aspect ratio locked shapes, maintain perfect 1:1 ratio for circles
+      const originalAspectRatio = currentWidth / currentHeight;
+      const isCircle = Math.abs(originalAspectRatio - 1.0) < 0.1; // Nearly square = circle
+      
+      switch (handle) {
+        case 'se': {
+          // Southeast: use the larger absolute delta for uniform scaling
+          const scaleFactor = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+          const direction = (deltaX + deltaY) > 0 ? 1 : -1;
+          
+          newWidth = Math.max(minWidth, currentWidth + scaleFactor * direction);
+          
+          if (isCircle) {
+            newHeight = newWidth; // Perfect 1:1 for circles
+          } else {
+            newHeight = Math.max(minHeight, newWidth / originalAspectRatio);
+          }
+          break;
         }
-        break;
-      case 's':
-        newHeight = Math.max(minHeight, currentHeight + deltaY);
-        break;
-      case 'n':
-        newHeight = Math.max(minHeight, currentHeight - deltaY);
-        if (newHeight > minHeight) {
-          newY = currentY + deltaY / 2;
+        case 'nw': {
+          // Northwest: resize in opposite direction
+          const scaleFactor = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+          const direction = (deltaX + deltaY) < 0 ? 1 : -1;
+          
+          newWidth = Math.max(minWidth, currentWidth + scaleFactor * direction);
+          
+          if (isCircle) {
+            newHeight = newWidth; // Perfect 1:1 for circles
+          } else {
+            newHeight = Math.max(minHeight, newWidth / originalAspectRatio);
+          }
+          
+          // Adjust position for northwest resize
+          newX = currentX - (newWidth - currentWidth) / 2;
+          newY = currentY - (newHeight - currentHeight) / 2;
+          break;
         }
-        break;
-      case 'se':
-        newWidth = Math.max(minWidth, currentWidth + deltaX);
-        newHeight = Math.max(minHeight, currentHeight + deltaY);
-        break;
-      case 'sw':
-        newWidth = Math.max(minWidth, currentWidth - deltaX);
-        newHeight = Math.max(minHeight, currentHeight + deltaY);
-        if (newWidth > minWidth) {
-          newX = currentX + deltaX / 2;
+        case 'ne': {
+          // Northeast: X positive, Y negative
+          const scaleFactor = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+          const direction = (deltaX - deltaY) > 0 ? 1 : -1;
+          
+          newWidth = Math.max(minWidth, currentWidth + scaleFactor * direction);
+          
+          if (isCircle) {
+            newHeight = newWidth; // Perfect 1:1 for circles
+          } else {
+            newHeight = Math.max(minHeight, newWidth / originalAspectRatio);
+          }
+          
+          // Adjust Y position for northeast resize
+          newY = currentY - (newHeight - currentHeight) / 2;
+          break;
         }
-        break;
-      case 'ne':
-        newWidth = Math.max(minWidth, currentWidth + deltaX);
-        newHeight = Math.max(minHeight, currentHeight - deltaY);
-        if (newHeight > minHeight) {
-          newY = currentY + deltaY / 2;
+        case 'sw': {
+          // Southwest: X negative, Y positive
+          const scaleFactor = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+          const direction = (-deltaX + deltaY) > 0 ? 1 : -1;
+          
+          newWidth = Math.max(minWidth, currentWidth + scaleFactor * direction);
+          
+          if (isCircle) {
+            newHeight = newWidth; // Perfect 1:1 for circles
+          } else {
+            newHeight = Math.max(minHeight, newWidth / originalAspectRatio);
+          }
+          
+          // Adjust X position for southwest resize
+          newX = currentX - (newWidth - currentWidth) / 2;
+          break;
         }
-        break;
-      case 'nw':
-        newWidth = Math.max(minWidth, currentWidth - deltaX);
-        newHeight = Math.max(minHeight, currentHeight - deltaY);
-        if (newWidth > minWidth) {
-          newX = currentX + deltaX / 2;
-        }
-        if (newHeight > minHeight) {
-          newY = currentY + deltaY / 2;
-        }
-        break;
+      }
+    } else {
+      // Free resizing for shapes that don't need locked aspect ratio
+      switch (handle) {
+        case 'e':
+          newWidth = Math.max(minWidth, currentWidth + deltaX);
+          break;
+        case 'w':
+          newWidth = Math.max(minWidth, currentWidth - deltaX);
+          if (newWidth > minWidth) {
+            newX = currentX + deltaX / 2;
+          }
+          break;
+        case 's':
+          newHeight = Math.max(minHeight, currentHeight + deltaY);
+          break;
+        case 'n':
+          newHeight = Math.max(minHeight, currentHeight - deltaY);
+          if (newHeight > minHeight) {
+            newY = currentY + deltaY / 2;
+          }
+          break;
+        case 'se':
+          newWidth = Math.max(minWidth, currentWidth + deltaX);
+          newHeight = Math.max(minHeight, currentHeight + deltaY);
+          break;
+        case 'sw':
+          newWidth = Math.max(minWidth, currentWidth - deltaX);
+          newHeight = Math.max(minHeight, currentHeight + deltaY);
+          if (newWidth > minWidth) {
+            newX = currentX + deltaX / 2;
+          }
+          break;
+        case 'ne':
+          newWidth = Math.max(minWidth, currentWidth + deltaX);
+          newHeight = Math.max(minHeight, currentHeight - deltaY);
+          if (newHeight > minHeight) {
+            newY = currentY + deltaY / 2;
+          }
+          break;
+        case 'nw':
+          newWidth = Math.max(minWidth, currentWidth - deltaX);
+          newHeight = Math.max(minHeight, currentHeight - deltaY);
+          if (newWidth > minWidth) {
+            newX = currentX + deltaX / 2;
+          }
+          if (newHeight > minHeight) {
+            newY = currentY + deltaY / 2;
+          }
+          break;
+      }
     }
 
     return { width: newWidth, height: newHeight, x: newX, y: newY };
+  }
+
+  // Helper method to check if a shape should lock aspect ratio
+  static shouldLockAspectRatio(shape?: string): boolean {
+    const shapeType = this.getShapeType(shape);
+    return shapeType === 1 || shapeType === 6 || shapeType === 7; // Circle, Initial, Final
   }
 
   // Helper method to convert drag event coordinates to world coordinates

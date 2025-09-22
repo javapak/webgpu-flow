@@ -1,7 +1,7 @@
 import React from 'react';
 import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
-import { DiagramPerformanceMonitor } from './types';
+import { DiagramPerformanceMonitor } from './components/DiagramCanvas'
 import { SHAPE_TYPES } from './renderers/WebGPURenderer';
 
 export const DiagramDemo: React.FC = () => {
@@ -67,7 +67,7 @@ export const DiagramDemo: React.FC = () => {
               }}
               visual={{ 
                 color: "#ff00bf99", 
-                shape: "diamond",
+                shape: "circle",
                 size: {
                 width: 100, 
                 height: 100,
@@ -85,7 +85,7 @@ export const DiagramDemo: React.FC = () => {
               }}
               visual={{ 
                 color: "#004dc8", 
-                shape: 'rectangle',
+                shape: 'circle',
                 size: {
                 width: 100, 
                 height: 100,

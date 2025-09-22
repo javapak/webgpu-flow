@@ -22,189 +22,17 @@ export class WebGPURenderer {
   private context: GPUCanvasContext | null = null;
   private nodeRenderPipeline: GPURenderPipeline | null = null;
   private handleRenderPipeline: GPURenderPipeline | null = null;
+  private gridRenderPipeline: GPURenderPipeline | null = null;
   private nodeBuffer: GPUBuffer | null = null;
   private handleBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer | null = null;
+  private gridUniformBuffer: GPUBuffer | null = null;
   private nodeBindGroup: GPUBindGroup | null = null;
   private handleBindGroup: GPUBindGroup | null = null;
+  private gridBindGroup: GPUBindGroup | null = null;
   private device: GPUDevice | null = null;
   public initialized = false;
   private canvas: HTMLCanvasElement | null = null;
-
-  async testMinimalRendering(): Promise<void> {
-  if (!this.device || !this.context) {
-    console.error('❌ Device or context not initialized');
-    return;
-  }
-
-  console.log('🧪 Starting minimal rendering test...');
-
-  // 1. Test basic draw call with no data
-  try {
-    const commandEncoder = this.device.createCommandEncoder();
-    const textureView = this.context.getCurrentTexture().createView();
-    
-    const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: textureView,
-        clearValue: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 }, // Bright red clear
-        loadOp: 'clear' as const,
-        storeOp: 'store' as const,
-      }],
-    });
-    
-    renderPass.end();
-    this.device.queue.submit([commandEncoder.finish()]);
-    
-    console.log('✅ Test 1: Basic clear (should see red background)');
-  } catch (error) {
-    console.error('❌ Test 1 failed:', error);
-    return;
-  }
-
-  // Wait a bit then test simple draw
-  setTimeout(() => this.testSimpleDraw(), 100);
-}
-
-async testSimpleDraw(): Promise<void> {
-  console.log('🧪 Test 2: Simple hardcoded triangle...');
-
-  // Create the simplest possible shader
-  const simpleShader = /* wgsl */`
-    @vertex
-    fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4<f32> {
-      // Hardcoded triangle in NDC space (-1 to 1)
-      let positions = array<vec2<f32>, 3>(
-        vec2<f32>(-0.5, -0.5),  // Bottom left
-        vec2<f32>( 0.5, -0.5),  // Bottom right  
-        vec2<f32>( 0.0,  0.5)   // Top center
-      );
-      
-      return vec4<f32>(positions[vertexIndex], 0.0, 1.0);
-    }
-
-    @fragment
-    fn fs_main() -> @location(0) vec4<f32> {
-      return vec4<f32>(0.0, 1.0, 0.0, 1.0); // Green triangle
-    }
-  `;
-
-  try {
-    const shaderModule = this.device!.createShaderModule({ code: simpleShader });
-    
-    const pipeline = this.device!.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vs_main',
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fs_main',
-        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }]
-      },
-      primitive: { topology: 'triangle-list' },
-    });
-
-    const commandEncoder = this.device!.createCommandEncoder();
-    const textureView = this.context!.getCurrentTexture().createView();
-    
-    const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: textureView,
-        clearValue: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 }, // Blue background
-        loadOp: 'clear' as const,
-        storeOp: 'store' as const,
-      }],
-    });
-    
-    renderPass.setPipeline(pipeline);
-    renderPass.draw(3, 1); // 3 vertices, 1 instance
-    renderPass.end();
-    
-    this.device!.queue.submit([commandEncoder.finish()]);
-    
-    console.log('✅ Test 2: Simple triangle (should see green triangle on blue)');
-    
-    // Test instancing next
-    setTimeout(() => this.testInstancing(), 100);
-  } catch (error) {
-    console.error('❌ Test 2 failed:', error);
-  }
-}
-
-async testInstancing(): Promise<void> {
-  console.log('🧪 Test 3: Basic instancing...');
-
-  const instanceShader = /* wgsl */`
-    @vertex
-    fn vs_main(
-      @builtin(vertex_index) vertexIndex: u32,
-      @builtin(instance_index) instanceIndex: u32
-    ) -> @builtin(position) vec4<f32> {
-      // Single triangle
-      let positions = array<vec2<f32>, 3>(
-        vec2<f32>(-0.1, -0.1),
-        vec2<f32>( 0.1, -0.1),  
-        vec2<f32>( 0.0,  0.1)
-      );
-      
-      // Offset each instance
-      let instanceOffset = vec2<f32>(
-        f32(instanceIndex) * 0.4 - 0.4, // -0.4, 0.0, 0.4
-        0.0
-      );
-      
-      let finalPos = positions[vertexIndex] + instanceOffset;
-      return vec4<f32>(finalPos, 0.0, 1.0);
-    }
-
-    @fragment
-    fn fs_main() -> @location(0) vec4<f32> {
-      return vec4<f32>(1.0, 1.0, 0.0, 1.0); // Yellow triangles
-    }
-  `;
-
-  try {
-    const shaderModule = this.device!.createShaderModule({ code: instanceShader });
-    
-    const pipeline = this.device!.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vs_main',
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fs_main',
-        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }]
-      },
-      primitive: { topology: 'triangle-list' },
-    });
-
-    const commandEncoder = this.device!.createCommandEncoder();
-    const textureView = this.context!.getCurrentTexture().createView();
-    
-    const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: textureView,
-        clearValue: { r: 0.2, g: 0.2, b: 0.2, a: 1.0 }, // Gray background
-        loadOp: 'clear' as const,
-        storeOp: 'store' as const,
-      }],
-    });
-    
-    renderPass.setPipeline(pipeline);
-    renderPass.draw(3, 3); // 3 vertices, 3 instances
-    renderPass.end();
-    
-    this.device!.queue.submit([commandEncoder.finish()]);
-    
-    console.log('✅ Test 3: Instancing (should see 3 yellow triangles)');
-  } catch (error) {
-    console.error('❌ Test 3 failed:', error);
-  }
-}
 
   async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {
@@ -256,8 +84,13 @@ async testInstancing(): Promise<void> {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
+    this.gridUniformBuffer = this.device.createBuffer({
+      size: 80, // Same size as main uniform buffer
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     this.nodeBuffer = this.device.createBuffer({
-      size: 1000 * 48, // Support up to 1000 nodes (12 floats * 4 bytes each)
+      size: 1000 * 64, // Support up to 1000 nodes (16 floats * 4 bytes each = 64 bytes per node)
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -266,7 +99,7 @@ async testInstancing(): Promise<void> {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Fixed WGSL shader with proper coordinate system
+    // Fixed WGSL shader with proper shape handling
     const nodeShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
@@ -332,7 +165,7 @@ async testInstancing(): Promise<void> {
         return output;
       }
       
-            // Distance functions for different shapes
+      // Distance functions for different shapes
       fn sdRectangle(p: vec2<f32>, b: vec2<f32>) -> f32 {
         let d = abs(p) - b;
         return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0);
@@ -364,78 +197,183 @@ async testInstancing(): Promise<void> {
         return min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0))) - r;
       }
 
- @fragment
+      fn sdOval(p: vec2<f32>, ab: vec2<f32>) -> f32 {
+        let p2 = p * p;
+        let ab2 = ab * ab;
+        return (p2.x / ab2.x + p2.y / ab2.y - 1.0);
+      }
+
+      fn sdActor(p: vec2<f32>) -> f32 {
+        // Simplified stick figure - head (circle) + body (rectangle) - fixed Y axis
+        let head = sdCircle(p + vec2<f32>(0.0, -0.4), 0.2); // Fixed Y
+        let body = sdRectangle(p + vec2<f32>(0.0, 0.1), vec2<f32>(0.15, 0.4)); // Fixed Y
+        return min(head, body);
+      }
+
+      @fragment
       fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let uv = input.uv * 2.0 - 1.0; // Convert to [-1, 1] range
         let aspectRatio = input.nodeSize.x / input.nodeSize.y;
+        
+        // For shapes that should maintain aspect ratio, use different coordinates
         let p = vec2<f32>(uv.x * aspectRatio, uv.y);
+        let p_square = uv; // For shapes that should ignore aspect ratio
         
         var distance: f32;
-        let shapeType = i32(input.shapeType);
+        let shapeType = i32(input.shapeType + 0.5); // Round to nearest integer
         
+        // Clean switch statement with proper aspect ratio handling
         switch (shapeType) {
-          case 0: { // Rectangle
+          case 0: { // Rectangle - respects aspect ratio
             distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8));
           }
-          case 1: { // Circle
-            distance = sdCircle(p, 0.8);
+          case 1: { // Circle - ignores aspect ratio to stay circular
+            distance = sdCircle(p_square, 0.8);
           }
-          case 2: { // Diamond
-            distance = sdDiamond(p, vec2<f32>(aspectRatio * 0.8, 0.8));
+          case 2: { // Diamond - respects aspect ratio  
+            distance = sdDiamond(uv, vec2<f32>(0, 1));
           }
-          case 3: { // Hexagon
-            distance = sdHexagon(p, 0.8);
+          case 3: { // Hexagon - uses average to stay roughly hexagonal
+            let avgRadius = 0.7 * sqrt(aspectRatio);
+            distance = sdHexagon(p_square, avgRadius);
           }
-          case 4: { // Package (rounded rectangle with tabs)
-            let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.7, 0.7), 0.1);
-            let tab = sdRectangle(p + vec2<f32>(0.0, 0.8), vec2<f32>(aspectRatio * 0.3, 0.15));
+          case 4: { // Package - respects aspect ratio (fixed Y axis)
+            let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.7, 0.6), 0.1);
+            let tab = sdRectangle(p + vec2<f32>(0.0, -0.75), vec2<f32>(aspectRatio * 0.3, 0.1)); // Fixed Y
             distance = min(mainBody, tab);
           }
-          case 5: { // Rounded Rectangle
+          case 5: { // Rounded Rectangle - respects aspect ratio
             distance = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8), 0.15);
           }
-          case 6: { // Initial Node (circle with thick border)
-            let outer = sdCircle(p, 0.8);
-            let inner = sdCircle(p, 0.6);
-            distance = max(outer, -inner);
+          case 6: { // Initial Node - stays circular
+            distance = sdCircle(p_square, 0.7);
           }
-          case 7: { // Final Node (double circle)
-            let outer = sdCircle(p, 0.8);
-            let inner = sdCircle(p, 0.65);
-            distance = min(outer, max(inner, -sdCircle(p, 0.5)));
+          case 7: { // Final Node - stays circular with ring
+            let outer = sdCircle(p_square, 0.8);
+            let inner = sdCircle(p_square, 0.6);
+            distance = max(outer, -inner); // Ring shape
           }
-          case 9: { // Actor (stick figure approximation with circle head)
-            let head = sdCircle(p + vec2<f32>(0.0, 0.4), 0.25);
-            let body = sdRectangle(p, vec2<f32>(0.05, 0.6));
-            distance = min(head, body);
+          case 8: { // Oval - designed for aspect ratio
+            distance = sdOval(p, vec2<f32>(aspectRatio * 0.8, 0.6));
+          }
+          case 9: { // Actor - stays roughly proportional
+            distance = sdActor(p_square);
           }
           default: { // Default to rectangle
             distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8));
           }
         }
 
-        // Anti-aliasing
-        let alpha = 1.0 - smoothstep(-0.02, 0.02, distance);
+        // Anti-aliasing with better smoothing
+        let smoothWidth = 0.02;
+        let alpha = 1.0 - smoothstep(-smoothWidth, smoothWidth, distance);
         
-        // Selection highlight
-        var finalColor = input.color;
-        if (input.isSelected > 0.5) {
-          let selectionGlow = exp(-distance * 8.0) * 0.3;
-          finalColor = mix(finalColor, vec4<f32>(0.3, 0.8, 1.0, 1.0), selectionGlow);
+        // Discard pixels that are completely transparent
+        if (alpha < 0.01) {
+          discard;
         }
         
-        // Border effect
-        let borderWidth = 0.05;
-        let borderAlpha = smoothstep(distance - borderWidth, distance, 0.0) - 
-                         smoothstep(distance, distance + borderWidth, 0.0);
-        finalColor = mix(finalColor, vec4<f32>(0.2, 0.2, 0.2, 1.0), borderAlpha * 0.8);
+        var finalColor = input.color;
+        
+        // Selection highlight
+        if (input.isSelected > 0.5) {
+          let selectionGlow = exp(-abs(distance) * 6.0) * 0.4;
+          let selectionColor = vec4<f32>(0.2, 0.7, 1.0, 1.0);
+          finalColor = mix(finalColor, selectionColor, selectionGlow);
+        }
+        
+        // Border effect for better definition
+        let borderWidth = 0.0;
+        let borderDistance = abs(distance + borderWidth);
+        let borderAlpha = 1.0 - smoothstep(0.0, borderWidth, borderDistance);
+        let borderColor = vec4<f32>(0.1, 0.1, 0.1, 1.0);
+        finalColor = mix(finalColor, borderColor, borderAlpha * 0.6);
         
         return vec4<f32>(finalColor.rgb, finalColor.a * alpha);
       }
     `;
 
+    // Grid shader for background grid
+    const gridShaderCode = /* wgsl */`
+      struct Uniforms {
+        viewProjection: mat4x4<f32>,
+        viewport: vec4<f32>, // x, y, zoom, aspect
+      }
 
-    // Shader for resize handles
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) color: vec4<f32>,
+      }
+
+      @vertex
+      fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+        // Generate grid lines dynamically
+        let gridSize = 50.0; // Grid spacing in world units
+        let lineWidth = 1.0 / uniforms.viewport.z; // Thinner lines when zoomed out
+        
+        // Calculate grid bounds
+        let worldWidth = 800.0 / uniforms.viewport.z;
+        let worldHeight = 600.0 / uniforms.viewport.z;
+        let left = uniforms.viewport.x - worldWidth / 2.0;
+        let right = uniforms.viewport.x + worldWidth / 2.0;
+        let top = uniforms.viewport.y - worldHeight / 2.0;
+        let bottom = uniforms.viewport.y + worldHeight / 2.0;
+        
+        // Calculate which grid lines to draw
+        let startX = floor(left / gridSize) * gridSize;
+        let endX = ceil(right / gridSize) * gridSize;
+        let startY = floor(top / gridSize) * gridSize;
+        let endY = ceil(bottom / gridSize) * gridSize;
+        
+        // Create grid lines as quads
+        let linesX = i32((endX - startX) / gridSize) + 1;
+        let linesY = i32((endY - startY) / gridSize) + 1;
+        let totalLines = linesX + linesY;
+        let verticesPerLine = 6; // 2 triangles per line
+        
+        let lineIndex = vertexIndex / u32(verticesPerLine);
+        let vertexInLine = vertexIndex % u32(verticesPerLine);
+        
+        var worldPos: vec2<f32>;
+        
+        if (lineIndex < u32(linesX)) {
+          // Vertical line
+          let x = startX + f32(lineIndex) * gridSize;
+          if (vertexInLine == 0u) { worldPos = vec2<f32>(x - lineWidth/2.0, top); }
+          else if (vertexInLine == 1u) { worldPos = vec2<f32>(x + lineWidth/2.0, top); }
+          else if (vertexInLine == 2u) { worldPos = vec2<f32>(x - lineWidth/2.0, bottom); }
+          else if (vertexInLine == 3u) { worldPos = vec2<f32>(x + lineWidth/2.0, top); }
+          else if (vertexInLine == 4u) { worldPos = vec2<f32>(x + lineWidth/2.0, bottom); }
+          else { worldPos = vec2<f32>(x - lineWidth/2.0, bottom); }
+        } else {
+          // Horizontal line
+          let lineIdx = lineIndex - u32(linesX);
+          let y = startY + f32(lineIdx) * gridSize;
+          if (vertexInLine == 0u) { worldPos = vec2<f32>(left, y - lineWidth/2.0); }
+          else if (vertexInLine == 1u) { worldPos = vec2<f32>(right, y - lineWidth/2.0); }
+          else if (vertexInLine == 2u) { worldPos = vec2<f32>(left, y + lineWidth/2.0); }
+          else if (vertexInLine == 3u) { worldPos = vec2<f32>(right, y - lineWidth/2.0); }
+          else if (vertexInLine == 4u) { worldPos = vec2<f32>(right, y + lineWidth/2.0); }
+          else { worldPos = vec2<f32>(left, y + lineWidth/2.0); }
+        }
+        
+        var output: VertexOutput;
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
+        
+        // Grid color - lighter when zoomed out
+        let alpha = clamp(uniforms.viewport.z * 0.3, 0.1, 0.3);
+        output.color = vec4<f32>(0.7, 0.7, 0.7, alpha);
+        
+        return output;
+      }
+
+      @fragment
+      fn fs_main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {
+        return color;
+      }
+    `;
     const handleShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
@@ -490,20 +428,21 @@ async testInstancing(): Promise<void> {
         @location(1) uv: vec2<f32>
       ) -> @location(0) vec4<f32> {
         // Simple square handles with border
-        let borderWidth = 0.1;
-        let isInBorder = step(borderWidth, uv.x) * step(uv.x, 1.0 - borderWidth) * 
-                        step(borderWidth, uv.y) * step(uv.y, 1.0 - borderWidth);
+        let borderWidth = 0.15;
+        let center = abs(uv - 0.5);
+        let isInBorder = step(center.x, 0.5 - borderWidth) * step(center.y, 0.5 - borderWidth);
         
         if (isInBorder > 0.5) {
-          return vec4<f32>(0.0, 0.0, 0.0, 1.0); // Black interior
+          return vec4<f32>(0.1, 0.1, 0.1, 1.0); // Dark interior
         } else {
-          return color; // White border
+          return color; // Bright border
         }
       }
     `;
 
     const nodeShaderModule = this.device.createShaderModule({ code: nodeShaderCode });
     const handleShaderModule = this.device.createShaderModule({ code: handleShaderCode });
+    const gridShaderModule = this.device.createShaderModule({ code: gridShaderCode });
 
     // Create bind group layouts
     const bindGroupLayout = this.device.createBindGroupLayout({
@@ -517,6 +456,17 @@ async testInstancing(): Promise<void> {
           binding: 1,
           visibility: GPUShaderStage.VERTEX,
           buffer: { type: 'read-only-storage' as const }
+        }
+      ]
+    });
+
+    // Grid bind group layout (only needs uniforms, no storage)
+    const gridBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'uniform' as const }
         }
       ]
     });
@@ -538,9 +488,20 @@ async testInstancing(): Promise<void> {
       ]
     });
 
+    this.gridBindGroup = this.device.createBindGroup({
+      layout: gridBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.gridUniformBuffer } }
+      ]
+    });
+
     // Create render pipelines
     const pipelineLayout = this.device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout]
+    });
+
+    const gridPipelineLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [gridBindGroupLayout]
     });
 
     this.nodeRenderPipeline = this.device.createRenderPipeline({
@@ -598,6 +559,34 @@ async testInstancing(): Promise<void> {
       },
       primitive: { topology: 'triangle-list'},
     });
+
+    this.gridRenderPipeline = this.device.createRenderPipeline({
+      layout: gridPipelineLayout,
+      vertex: {
+        module: gridShaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: gridShaderModule,
+        entryPoint: 'fs_main',
+        targets: [{ 
+          format: navigator.gpu.getPreferredCanvasFormat(),
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+          },
+        }]
+      },
+      primitive: { topology: 'triangle-list' },
+    });
   }
 
   render(
@@ -623,38 +612,10 @@ async testInstancing(): Promise<void> {
         return;
       }
 
-      console.log('WebGPU render called:', { 
-        visibleNodes: visibleNodes.length, 
-        selectedNodes: selectedNodes.length,
-        viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom },
-        canvasSize
-      });
-
-        console.log('🔍 DETAILED DRAW CALL DIAGNOSTIC');
-  console.log('=====================================');
-  
-  // Check render pipeline state
-  console.log('🏗️ Render Pipeline State:', {
-    pipeline: !!this.nodeRenderPipeline,
-    bindGroup: !!this.nodeBindGroup,
-    device: !!this.device,
-    context: !!this.context
-  });
-
-  // Check canvas state
-  if (this.canvas) {
-    console.log('🖼️ Canvas State:', {
-      width: this.canvas.width,
-      height: this.canvas.height,
-      actualSize: { width: canvasSize.width, height: canvasSize.height }
-    });
-  }
-
       // Update canvas size if needed
       if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
         this.canvas.width = canvasSize.width;
         this.canvas.height = canvasSize.height;
-        console.log('Canvas resized to:', canvasSize);
       }
 
       // Early exit if no nodes to render
@@ -679,8 +640,18 @@ async testInstancing(): Promise<void> {
       // Create proper view-projection matrix for 2D rendering
       const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
 
+      // Update both uniform buffers
       this.device.queue.writeBuffer(
         this.uniformBuffer!,
+        0,
+        new Float32Array([
+          ...viewProjectionMatrix,
+          viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height
+        ])
+      );
+
+      this.device.queue.writeBuffer(
+        this.gridUniformBuffer!,
         0,
         new Float32Array([
           ...viewProjectionMatrix,
@@ -696,10 +667,18 @@ async testInstancing(): Promise<void> {
           console.warn('Invalid node structure:', node);
           return null;
         }
-        type shapeType = keyof typeof SHAPE_TYPES
+        
         const color = this.hexToRgba(node.visual?.color || '#3b82f6');
         const size = node.visual?.size || { width: 100, height: 60 };
-        const shapeType = SHAPE_TYPES[node.visual?.shape as unknown as shapeType] || 0;
+        
+        // Debug: Log what shape we're getting
+        console.log('Node shape debug:', {
+          nodeId: node.id,
+          rawShape: node.visual?.shape,
+          shapeType: SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0
+        });
+        
+        const shapeType = SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0;
         const isSelected = selectedNodeIds.has(node.id) ? 1 : 0;
         
         return {
@@ -717,8 +696,11 @@ async testInstancing(): Promise<void> {
         return;
       }
 
+      // Debug: Log the first few nodes to see what we're actually sending
+      console.log('First node data being sent to GPU:', nodeData.slice(0, 3));
+
       // Resize node buffer if needed
-      const requiredNodeSize = nodeData.length * 48; // 12 floats * 4 bytes
+      const requiredNodeSize = nodeData.length * 64; // 16 floats * 4 bytes = 64 bytes per node
       if (requiredNodeSize > this.nodeBuffer!.size) {
         console.log('Resizing node buffer from', this.nodeBuffer!.size, 'to', requiredNodeSize * 2);
         
@@ -737,27 +719,37 @@ async testInstancing(): Promise<void> {
         });
       }
 
-      // Write node data to buffer
-      const flatNodeData = new Float32Array(nodeData.length * 16); // 12 floats per node
+      // Write node data to buffer - MUST match WGSL struct layout exactly!
+      const flatNodeData = new Float32Array(nodeData.length * 16); // 16 floats per node to match struct
       nodeData.forEach((node, i) => {
         const offset = i * 16;
+        // position: vec2<f32>
         flatNodeData[offset] = node.position[0];
         flatNodeData[offset + 1] = node.position[1];
+        // size: vec2<f32>  
         flatNodeData[offset + 2] = node.size[0];
         flatNodeData[offset + 3] = node.size[1];
+        // color: vec4<f32>
         flatNodeData[offset + 4] = node.color[0];
         flatNodeData[offset + 5] = node.color[1];
         flatNodeData[offset + 6] = node.color[2];
         flatNodeData[offset + 7] = node.color[3];
+        // isSelected: f32
         flatNodeData[offset + 8] = node.isSelected;
-        flatNodeData[offset + 9] = node.padding[0];
-        flatNodeData[offset + 10] = node.padding[1];
-        flatNodeData[offset + 11] = node.padding[2];
+        // shapeType: f32 - This is the critical one!
+        flatNodeData[offset + 9] = node.shapeType;
+        // padding: vec3<f32> (to align to 16-float boundary)
+        flatNodeData[offset + 10] = node.padding[0];
+        flatNodeData[offset + 11] = node.padding[1];
+        flatNodeData[offset + 12] = node.padding[2];
+        flatNodeData[offset + 13] = 0; // Extra padding
+        flatNodeData[offset + 14] = 0; // Extra padding  
+        flatNodeData[offset + 15] = 0; // Extra padding
       });
 
       this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
 
-      // Generate resize handles for selected nodes
+      // Generate resize handles for selected nodes with aspect ratio locking
       const handleData: HandleInstanceData[] = [];
       if (selectedNodes.length > 0) {
         const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8px handles
@@ -765,30 +757,36 @@ async testInstancing(): Promise<void> {
         selectedNodes.forEach(node => {
           if (!node.data || !node.data.position) return;
           
-          const size = node.visual?.size || { width: 100, height: 60 };
+          const size = node.visual?.size || { width: 100, height: 100 };
           const { x, y } = node.data.position;
           const halfWidth = size.width / 2;
           const halfHeight = size.height / 2;
-
-          // Create 8 resize handles around the node
-          const handles = [
-            // Corners
-            { x: x - halfWidth, y: y - halfHeight }, // top-left
-            { x: x + halfWidth, y: y - halfHeight }, // top-right
-            { x: x - halfWidth, y: y + halfHeight }, // bottom-left
-            { x: x + halfWidth, y: y + halfHeight }, // bottom-right
-            // Edges
-            { x: x, y: y - halfHeight },             // top
-            { x: x, y: y + halfHeight },             // bottom
-            { x: x - halfWidth, y: y },              // left
-            { x: x + halfWidth, y: y },              // right
-          ];
+          
+          let handles: { x: number; y: number; type: string }[] = [];
+          
+            handles = [
+              // Corners
+              { x: x - halfWidth, y: y - halfHeight, type: 'corner' }, // top-left
+              { x: x + halfWidth, y: y - halfHeight, type: 'corner' }, // top-right
+              { x: x - halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-left
+              { x: x + halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-right
+              // Edges
+              { x: x, y: y - halfHeight, type: 'edge' },             // top
+              { x: x, y: y + halfHeight, type: 'edge' },             // bottom
+              { x: x - halfWidth, y: y, type: 'edge' },              // left
+              { x: x + halfWidth, y: y, type: 'edge' },              // right
+            ];
+          
 
           handles.forEach(handle => {
+            // Different colors for different handle types
+            const isCorner = handle.type === 'corner';
+            const handleColor: [number, number, number, number] = isCorner ? [1.0, 1.0, 1.0, 1.0] : [0.8, 0.8, 1.0, 1.0]; // White for corners, light blue for edges
+            
             handleData.push({
               position: [handle.x, handle.y],
               size: [handleSize, handleSize],
-              color: [1.0, 1.0, 1.0, 1.0], // White handles
+              color: handleColor,
             });
           });
         });
@@ -841,6 +839,27 @@ async testInstancing(): Promise<void> {
           storeOp: 'store' as const,
         }],
       });
+
+      // Render grid first (background)
+      if (this.gridRenderPipeline) {
+        renderPass.setPipeline(this.gridRenderPipeline);
+        renderPass.setBindGroup(0, this.gridBindGroup!);
+        
+        // Calculate number of grid lines to render
+        const gridSize = 50.0;
+        const worldWidth = canvasSize.width / viewport.zoom;
+        const worldHeight = canvasSize.height / viewport.zoom;
+        const left = viewport.x - worldWidth / 2;
+        const right = viewport.x + worldWidth / 2;
+        const top = viewport.y - worldHeight / 2;
+        const bottom = viewport.y + worldHeight / 2;
+        
+        const linesX = Math.floor((right - left) / gridSize) + 1;
+        const linesY = Math.floor((bottom - top) / gridSize) + 1;
+        const totalVertices = (linesX + linesY) * 6; // 6 vertices per line
+        
+        renderPass.draw(totalVertices, 1);
+      }
 
       // Render nodes
       if (nodeData.length > 0) {
@@ -942,12 +961,19 @@ async testInstancing(): Promise<void> {
         this.uniformBuffer = null;
       }
 
+      if (this.gridUniformBuffer) {
+        this.gridUniformBuffer.destroy();
+        this.gridUniformBuffer = null;
+      }
+
       this.root = null;
       this.context = null;
       this.nodeRenderPipeline = null;
       this.handleRenderPipeline = null;
+      this.gridRenderPipeline = null;
       this.nodeBindGroup = null;
       this.handleBindGroup = null;
+      this.gridBindGroup = null;
       this.device = null;
       this.initialized = false;
       this.canvas = null;
@@ -972,6 +998,3 @@ export const SHAPE_TYPES = {
   oval: 8,
   actor: 9
 } as const;
-
-
-

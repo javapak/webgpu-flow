@@ -55,21 +55,6 @@ type DiagramAction =
   | { type: 'UPDATE_DRAG'; currentPos: Point }
   | { type: 'END_DRAG' };
 
-// Extended interaction state to include resize info
-interface ExtendedInteractionState {
-  selectedNodes: DiagramNode[];
-  selectedEdges: DiagramEdge[];
-  dragState: {
-    isDragging: boolean;
-    dragType: 'node' | 'viewport' | 'resize' | null;
-    startPos: Point | null;
-    lastPos: Point | null;
-    resizeHandle?: ResizeHandle;
-    originalSize?: { width: number; height: number };
-    originalPosition?: { x: number; y: number };
-  };
-  mode: 'select' | 'pan' | 'connect' | 'edit';
-}
 
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
   console.log('Reducer action:', action.type, action);

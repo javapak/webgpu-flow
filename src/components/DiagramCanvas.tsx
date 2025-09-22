@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
-import { MouseInteractions, type ResizeHandle } from '../utils/MouseInteractions';
+import { MouseInteractions } from '../utils/MouseInteractions';
 
 interface DiagramCanvasProps {
   width: number;
@@ -32,7 +32,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     viewport,
     interaction,
     addNode,
-    hitTestPoint,
     hitTestWithHandles, // Use the enhanced version
     selectNode,
     clearSelection,

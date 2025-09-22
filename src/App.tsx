@@ -2,7 +2,6 @@ import React from 'react';
 import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import { DiagramPerformanceMonitor } from './components/DiagramCanvas'
-import { SHAPE_TYPES } from './renderers/WebGPURenderer';
 
 export const DiagramDemo: React.FC = () => {
 

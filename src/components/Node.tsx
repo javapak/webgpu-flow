@@ -1,8 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { DiagramNode, NodeSchema } from '../types';
 import { useDiagram } from './DiagramProvider';
-import { SHAPE_TYPES } from '../renderers/WebGPURenderer';
-
 // Node component
 interface NodeProps {
   id: string;

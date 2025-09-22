@@ -87,6 +87,14 @@ const optimizedSetViewport = useCallback((newViewport: Viewport) => {
   }
 }, [setViewport]);
 
+useEffect(() => {
+  return () => {
+    if (zoomRequestRef.current) {
+      cancelAnimationFrame(zoomRequestRef.current);
+    }
+  };
+}, []);
+
   // Initialize renderer once
   useEffect(() => {
     if (!canvasRef.current || initializationAttempted.current) {

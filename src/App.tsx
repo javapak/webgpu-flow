@@ -14,13 +14,14 @@ export const DiagramDemo: React.FC = () => {
   };
 
   return (
-    <div style={{maxWidth: '90vw', maxHeight: '90vh', backgroundColor: '#313131ff',}}>
+    <div style={{backgroundColor: '#313131ff',}}>
     <div style={{ 
       padding: '20px',
       display: 'flex',
       backgroundColor: 'inherit',
       gap: '20px',
-      minWidth: '50%'
+      maxWidth: '90%',
+      maxHeight: '90%'
     }}>
       <div style={{ flex: '0 0 auto' }}>
         <NodePalette 
@@ -45,11 +46,11 @@ export const DiagramDemo: React.FC = () => {
           position: 'relative'
         }}>
           <DiagramProvider >
-            <DiagramPerformanceMonitor />
+            
 
             <DiagramCanvas 
-              width={800} 
-              height={600}
+              width={window.innerWidth - 500}
+              height={window.innerHeight - 300}
               onNodeDropped={handleNodeDropped}
               showDebugInfo
             
@@ -91,6 +92,7 @@ export const DiagramDemo: React.FC = () => {
                 }
               }}
             />
+            <DiagramPerformanceMonitor />
             
           </DiagramProvider>
         </div>
@@ -102,6 +104,7 @@ export const DiagramDemo: React.FC = () => {
           fontSize: '14px',
           color: '#313131'
         }}>
+          
           
         </div>
       </div>

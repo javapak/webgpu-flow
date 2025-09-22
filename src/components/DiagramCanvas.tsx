@@ -31,7 +31,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     viewport,
     interaction,
     addNode,
-    hitTestWithHandles, // Use the enhanced version
+    hitTestWithHandles,
     selectNode,
     clearSelection,
     startDrag,
@@ -71,22 +71,25 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     initCanvas();
   }, [initializeRenderer]);
 
+  // Update viewport size when canvas size changes
+  useEffect(() => {
+    console.log('📐 Canvas size changed:', { width, height });
+    setViewport({ width, height });
+  }, [width, height, setViewport]);
+
+  // Trigger render when viewport changes
   useEffect(() => {
     if (isRendererInitialized() && canvasRef.current) {
       console.log('🔄 VIEWPORT CHANGED, triggering render:', {
         x: viewport.x,
         y: viewport.y, 
-        zoom: viewport.zoom
+        zoom: viewport.zoom,
+        width: viewport.width,
+        height: viewport.height
       });
       renderFrame();
     }
-  }, [viewport.x, viewport.y, viewport.zoom, isRendererInitialized, renderFrame]);
-  
-
-  // Update viewport size when canvas size changes
-  useEffect(() => {
-    setViewport({ width, height });
-  }, [width, height, setViewport]);
+  }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, renderFrame]);
 
   // Update debug info periodically
   useEffect(() => {
@@ -117,7 +120,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // Add world position for compatibility
     const worldPos = screenToWorld(canvasPos);
     
-    console.log('🎯 Canvas hit test result:', {
+    console.log('Canvas hit test result:', {
       canvasPos,
       worldPos,
       nodes: result.nodes.length,
@@ -204,8 +207,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
   }, [interaction.dragState.isDragging, endDrag]);
 
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     
     const canvasPos = getCanvasMousePos(e as unknown as React.PointerEvent);
@@ -216,9 +218,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
     
     // Calculate new viewport position to keep mouse point fixed
+    // Use current viewport dimensions for accurate calculation
     const worldPosAfterZoom = {
-      x: (canvasPos.x - width / 2) / newZoom + viewport.x,
-      y: (canvasPos.y - height / 2) / newZoom + viewport.y,
+      x: (canvasPos.x - viewport.width / 2) / newZoom + viewport.x,
+      y: (canvasPos.y - viewport.height / 2) / newZoom + viewport.y,
     };
     
     const deltaX = worldPosAfterZoom.x - worldPosBeforeZoom.x;
@@ -229,7 +232,19 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       x: viewport.x + deltaX,
       y: viewport.y + deltaY,
     });
-  }, [getCanvasMousePos, screenToWorld, viewport, width, height, setViewport]);
+  }, [getCanvasMousePos, screenToWorld, viewport, setViewport]);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      canvasRef.current.addEventListener('wheel', handleWheel, {passive: false})
+    
+      return () => {
+        if (canvasRef.current)
+        canvasRef.current.removeEventListener('wheel', handleWheel);
+      }
+    }
+
+  }, [handleWheel]);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -309,14 +324,29 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
   return (
     <div>
-      <div className={`relative ${className}`}>
+
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        style={{ cursor: currentCursor }}
+        onPointerDown={handleMouseDown}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
+        onPointerLeave={handleMouseLeave}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      />
+    <div className={`relative ${className}`}>
         {showDebugInfo && (
           <div>
             <div>
               Initialized: {isRendererInitialized() ? 'Yes' : 'No'}, 
               Zoom: {viewport.zoom.toFixed(2)}x, 
               Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)}), 
-              Canvas Size: {width}x{height}
+              Canvas Size: {viewport.width}x{viewport.height} (actual: {width}x{height})
               <div>
                 Selected: {interaction.selectedNodes.length}, 
                 Dragging: {interaction.dragState.isDragging ? interaction.dragState.dragType : 'No'}, 
@@ -332,22 +362,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           </div>
         )}
       </div>
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        className={`border border-gray-300`}
-        style={{ cursor: currentCursor }}
-        onPointerDown={handleMouseDown}
-        onPointerMove={handleMouseMove}
-        onPointerUp={handleMouseUp}
-        onPointerLeave={handleMouseLeave}
-        onWheel={handleWheel}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      />
     </div>
   );
 };

@@ -84,8 +84,9 @@ export class WebGPURenderer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
+    // Grid uniform buffer now includes canvas size
     this.gridUniformBuffer = this.device.createBuffer({
-      size: 80, // Same size as main uniform buffer
+      size: 96, // mat4x4 (64 bytes) + vec4 viewport (16 bytes) + vec4 canvas size (16 bytes)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -293,11 +294,12 @@ export class WebGPURenderer {
       }
     `;
 
-    // Grid shader for background grid
+    // Updated grid shader for dynamic canvas sizing
     const gridShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
         viewport: vec4<f32>, // x, y, zoom, aspect
+        canvasSize: vec4<f32>, // width, height, padding, padding
       }
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -309,62 +311,75 @@ export class WebGPURenderer {
 
       @vertex
       fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-        // Generate grid lines dynamically
+        // Grid configuration
         let gridSize = 50.0; // Grid spacing in world units
-        let lineWidth = 1.0 / uniforms.viewport.z; // Thinner lines when zoomed out
+        let lineWidth = max(1.0 / uniforms.viewport.z, 0.5); // Adaptive line width
         
-        // Calculate grid bounds
-        let worldWidth = 800.0 / uniforms.viewport.z;
-        let worldHeight = 600.0 / uniforms.viewport.z;
+        // Get actual canvas dimensions from uniform
+        let canvasWidth = uniforms.canvasSize.x;
+        let canvasHeight = uniforms.canvasSize.y;
+        
+        // Calculate visible world bounds based on current viewport and zoom
+        let worldWidth = canvasWidth / uniforms.viewport.z;
+        let worldHeight = canvasHeight / uniforms.viewport.z;
         let left = uniforms.viewport.x - worldWidth / 2.0;
         let right = uniforms.viewport.x + worldWidth / 2.0;
         let top = uniforms.viewport.y - worldHeight / 2.0;
         let bottom = uniforms.viewport.y + worldHeight / 2.0;
         
-        // Calculate which grid lines to draw
-        let startX = floor(left / gridSize) * gridSize;
-        let endX = ceil(right / gridSize) * gridSize;
-        let startY = floor(top / gridSize) * gridSize;
-        let endY = ceil(bottom / gridSize) * gridSize;
+        // Extend bounds slightly to ensure grid covers entire view
+        let margin = gridSize * 2.0;
+        let gridLeft = floor((left - margin) / gridSize) * gridSize;
+        let gridRight = ceil((right + margin) / gridSize) * gridSize;
+        let gridTop = floor((top - margin) / gridSize) * gridSize;
+        let gridBottom = ceil((bottom + margin) / gridSize) * gridSize;
         
-        // Create grid lines as quads
-        let linesX = i32((endX - startX) / gridSize) + 1;
-        let linesY = i32((endY - startY) / gridSize) + 1;
-        let totalLines = linesX + linesY;
+        // Calculate number of lines
+        let numVerticalLines = i32((gridRight - gridLeft) / gridSize) + 1;
+        let numHorizontalLines = i32((gridBottom - gridTop) / gridSize) + 1;
         let verticesPerLine = 6; // 2 triangles per line
         
+        // Determine which line and which vertex within that line
         let lineIndex = vertexIndex / u32(verticesPerLine);
         let vertexInLine = vertexIndex % u32(verticesPerLine);
         
         var worldPos: vec2<f32>;
         
-        if (lineIndex < u32(linesX)) {
+        if (lineIndex < u32(numVerticalLines)) {
           // Vertical line
-          let x = startX + f32(lineIndex) * gridSize;
-          if (vertexInLine == 0u) { worldPos = vec2<f32>(x - lineWidth/2.0, top); }
-          else if (vertexInLine == 1u) { worldPos = vec2<f32>(x + lineWidth/2.0, top); }
-          else if (vertexInLine == 2u) { worldPos = vec2<f32>(x - lineWidth/2.0, bottom); }
-          else if (vertexInLine == 3u) { worldPos = vec2<f32>(x + lineWidth/2.0, top); }
-          else if (vertexInLine == 4u) { worldPos = vec2<f32>(x + lineWidth/2.0, bottom); }
-          else { worldPos = vec2<f32>(x - lineWidth/2.0, bottom); }
+          let x = gridLeft + f32(lineIndex) * gridSize;
+          switch (vertexInLine) {
+            case 0u: { worldPos = vec2<f32>(x - lineWidth/2.0, gridTop); }
+            case 1u: { worldPos = vec2<f32>(x + lineWidth/2.0, gridTop); }
+            case 2u: { worldPos = vec2<f32>(x - lineWidth/2.0, gridBottom); }
+            case 3u: { worldPos = vec2<f32>(x + lineWidth/2.0, gridTop); }
+            case 4u: { worldPos = vec2<f32>(x + lineWidth/2.0, gridBottom); }
+            case 5u: { worldPos = vec2<f32>(x - lineWidth/2.0, gridBottom); }
+            default: { worldPos = vec2<f32>(x, gridTop); }
+          }
         } else {
           // Horizontal line
-          let lineIdx = lineIndex - u32(linesX);
-          let y = startY + f32(lineIdx) * gridSize;
-          if (vertexInLine == 0u) { worldPos = vec2<f32>(left, y - lineWidth/2.0); }
-          else if (vertexInLine == 1u) { worldPos = vec2<f32>(right, y - lineWidth/2.0); }
-          else if (vertexInLine == 2u) { worldPos = vec2<f32>(left, y + lineWidth/2.0); }
-          else if (vertexInLine == 3u) { worldPos = vec2<f32>(right, y - lineWidth/2.0); }
-          else if (vertexInLine == 4u) { worldPos = vec2<f32>(right, y + lineWidth/2.0); }
-          else { worldPos = vec2<f32>(left, y + lineWidth/2.0); }
+          let lineIdx = lineIndex - u32(numVerticalLines);
+          let y = gridTop + f32(lineIdx) * gridSize;
+          switch (vertexInLine) {
+            case 0u: { worldPos = vec2<f32>(gridLeft, y - lineWidth/2.0); }
+            case 1u: { worldPos = vec2<f32>(gridRight, y - lineWidth/2.0); }
+            case 2u: { worldPos = vec2<f32>(gridLeft, y + lineWidth/2.0); }
+            case 3u: { worldPos = vec2<f32>(gridRight, y - lineWidth/2.0); }
+            case 4u: { worldPos = vec2<f32>(gridRight, y + lineWidth/2.0); }
+            case 5u: { worldPos = vec2<f32>(gridLeft, y + lineWidth/2.0); }
+            default: { worldPos = vec2<f32>(gridLeft, y); }
+          }
         }
         
         var output: VertexOutput;
         output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
         
-        // Grid color - lighter when zoomed out
-        let alpha = clamp(uniforms.viewport.z * 0.3, 0.1, 0.3);
-        output.color = vec4<f32>(0.7, 0.7, 0.7, alpha);
+        // Grid color - adaptive opacity based on zoom
+        let baseAlpha = 0.25;
+        let zoomFactor = uniforms.viewport.z;
+        let alpha = clamp(baseAlpha * min(zoomFactor * 0.8, 1.2), 0.08, 0.4);
+        output.color = vec4<f32>(0.6, 0.6, 0.6, alpha);
         
         return output;
       }
@@ -374,6 +389,7 @@ export class WebGPURenderer {
         return color;
       }
     `;
+
     const handleShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
@@ -460,7 +476,7 @@ export class WebGPURenderer {
       ]
     });
 
-    // Grid bind group layout (only needs uniforms, no storage)
+    // Grid bind group layout needs to match the new uniform structure
     const gridBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         {
@@ -620,7 +636,7 @@ export class WebGPURenderer {
 
       // Early exit if no nodes to render
       if (visibleNodes.length === 0) {
-        // Still clear the canvas
+        // Still clear the canvas and render grid
         const commandEncoder = this.device.createCommandEncoder();
         const textureView = this.context.getCurrentTexture().createView();
         
@@ -632,6 +648,10 @@ export class WebGPURenderer {
             storeOp: 'store' as const,
           }],
         });
+
+        // Still render grid even without nodes
+        this.renderGrid(renderPass, viewport, canvasSize);
+        
         renderPass.end();
         this.device.queue.submit([commandEncoder.finish()]);
         return;
@@ -640,7 +660,7 @@ export class WebGPURenderer {
       // Create proper view-projection matrix for 2D rendering
       const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
 
-      // Update both uniform buffers
+      // Update uniform buffers
       this.device.queue.writeBuffer(
         this.uniformBuffer!,
         0,
@@ -650,12 +670,14 @@ export class WebGPURenderer {
         ])
       );
 
+      // Update grid uniform buffer with canvas dimensions
       this.device.queue.writeBuffer(
         this.gridUniformBuffer!,
         0,
         new Float32Array([
           ...viewProjectionMatrix,
-          viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height
+          viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height,
+          canvasSize.width, canvasSize.height, 0, 0 // Canvas size + padding
         ])
       );
 
@@ -749,7 +771,7 @@ export class WebGPURenderer {
 
       this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
 
-      // Generate resize handles for selected nodes with aspect ratio locking
+      // Generate resize handles for selected nodes
       const handleData: HandleInstanceData[] = [];
       if (selectedNodes.length > 0) {
         const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8px handles
@@ -762,21 +784,18 @@ export class WebGPURenderer {
           const halfWidth = size.width / 2;
           const halfHeight = size.height / 2;
           
-          let handles: { x: number; y: number; type: string }[] = [];
-          
-            handles = [
-              // Corners
-              { x: x - halfWidth, y: y - halfHeight, type: 'corner' }, // top-left
-              { x: x + halfWidth, y: y - halfHeight, type: 'corner' }, // top-right
-              { x: x - halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-left
-              { x: x + halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-right
-              // Edges
-              { x: x, y: y - halfHeight, type: 'edge' },             // top
-              { x: x, y: y + halfHeight, type: 'edge' },             // bottom
-              { x: x - halfWidth, y: y, type: 'edge' },              // left
-              { x: x + halfWidth, y: y, type: 'edge' },              // right
-            ];
-          
+          const handles = [
+            // Corners
+            { x: x - halfWidth, y: y - halfHeight, type: 'corner' }, // top-left
+            { x: x + halfWidth, y: y - halfHeight, type: 'corner' }, // top-right
+            { x: x - halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-left
+            { x: x + halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-right
+            // Edges
+            { x: x, y: y - halfHeight, type: 'edge' },             // top
+            { x: x, y: y + halfHeight, type: 'edge' },             // bottom
+            { x: x - halfWidth, y: y, type: 'edge' },              // left
+            { x: x + halfWidth, y: y, type: 'edge' },              // right
+          ];
 
           handles.forEach(handle => {
             // Different colors for different handle types
@@ -841,25 +860,7 @@ export class WebGPURenderer {
       });
 
       // Render grid first (background)
-      if (this.gridRenderPipeline) {
-        renderPass.setPipeline(this.gridRenderPipeline);
-        renderPass.setBindGroup(0, this.gridBindGroup!);
-        
-        // Calculate number of grid lines to render
-        const gridSize = 50.0;
-        const worldWidth = canvasSize.width / viewport.zoom;
-        const worldHeight = canvasSize.height / viewport.zoom;
-        const left = viewport.x - worldWidth / 2;
-        const right = viewport.x + worldWidth / 2;
-        const top = viewport.y - worldHeight / 2;
-        const bottom = viewport.y + worldHeight / 2;
-        
-        const linesX = Math.floor((right - left) / gridSize) + 1;
-        const linesY = Math.floor((bottom - top) / gridSize) + 1;
-        const totalVertices = (linesX + linesY) * 6; // 6 vertices per line
-        
-        renderPass.draw(totalVertices, 1);
-      }
+      this.renderGrid(renderPass, viewport, canvasSize);
 
       // Render nodes
       if (nodeData.length > 0) {
@@ -882,6 +883,47 @@ export class WebGPURenderer {
 
     } catch (error) {
       console.error('WebGPU render error:', error);
+    }
+  }
+
+  // Helper method to render grid with proper vertex calculation
+  private renderGrid(renderPass: GPURenderPassEncoder, viewport: Viewport, canvasSize: { width: number; height: number }) {
+    if (!this.gridRenderPipeline) return;
+
+    // Calculate grid vertices dynamically based on current viewport and canvas size
+    const gridSize = 50.0;
+    const worldWidth = canvasSize.width / viewport.zoom;
+    const worldHeight = canvasSize.height / viewport.zoom;
+    const left = viewport.x - worldWidth / 2;
+    const right = viewport.x + worldWidth / 2;
+    const top = viewport.y - worldHeight / 2;
+    const bottom = viewport.y + worldHeight / 2;
+    
+    // Add margin and snap to grid
+    const margin = gridSize * 2;
+    const gridLeft = Math.floor((left - margin) / gridSize) * gridSize;
+    const gridRight = Math.ceil((right + margin) / gridSize) * gridSize;
+    const gridTop = Math.floor((top - margin) / gridSize) * gridSize;
+    const gridBottom = Math.ceil((bottom + margin) / gridSize) * gridSize;
+    
+    const numVerticalLines = Math.floor((gridRight - gridLeft) / gridSize) + 1;
+    const numHorizontalLines = Math.floor((gridBottom - gridTop) / gridSize) + 1;
+    const totalVertices = (numVerticalLines + numHorizontalLines) * 6; // 6 vertices per line
+
+    console.log('Grid calculation:', {
+      canvasSize,
+      viewport,
+      worldBounds: { left, right, top, bottom },
+      gridBounds: { gridLeft, gridRight, gridTop, gridBottom },
+      lines: { vertical: numVerticalLines, horizontal: numHorizontalLines },
+      totalVertices
+    });
+
+    if (totalVertices > 0) {
+      renderPass.setPipeline(this.gridRenderPipeline);
+      renderPass.setBindGroup(0, this.gridBindGroup!);
+      renderPass.draw(totalVertices, 1);
+      console.log('Grid rendered with', totalVertices, 'vertices');
     }
   }
 

@@ -76,13 +76,6 @@ export class TextureAtlas {
     this.ctx.fillStyle = color;
     this.ctx.textAlign = 'left';
     this.ctx.textBaseline = 'top';
-    
-    // Add text shadow for better visibility
-    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    this.ctx.shadowBlur = 2;
-    this.ctx.shadowOffsetX = 1;
-    this.ctx.shadowOffsetY = 1;
-    
     this.ctx.fillText(text, this.currentX + 4, this.currentY + 4);
     
     // Reset shadow

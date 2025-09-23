@@ -76,10 +76,10 @@ export class LabelRenderer {
           vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
         );
         
-        let uvs = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
-          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
-        );
+      let uvs = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
+      );
 
         let label = labelData[instanceIndex];
         let localPos = positions[vertexIndex];
@@ -198,59 +198,66 @@ export class LabelRenderer {
     });
   }
 
-  prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstanceData[] {
-    // Collect nodes with labels
-    const nodesWithLabels = visibleNodes.filter(node => 
-      node.data.label && node.data.label.trim().length > 0
-    );
+prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstanceData[] {
+  const nodesWithLabels = visibleNodes.filter(node => 
+    node.data.label && node.data.label.trim().length > 0
+  );
 
-    if (nodesWithLabels.length === 0) {
-      return [];
-    }
-
-    const labelDataArray: LabelInstanceData[] = [];
-
-    // Prepare all labels and add to atlas
-    for (const node of nodesWithLabels) {
-      const label = node.data.label!.trim();
-      const fontSize = 14;
-      const textColor = '#ffffff';
-
-      try {
-        // Add text to atlas
-        const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
-        if (!atlasEntry) continue; // Atlas full
-
-        // Calculate label size in world coordinates
-        const textScale = Math.max(0.5, Math.min(2.0, 1.0 / viewport.zoom));
-        const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
-        const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
-
-        // Position label at the center of the node
-        const labelX = node.data.position.x;
-        const labelY = node.data.position.y;
-
-        // Calculate UV coordinates in atlas (normalized 0-1)
-        const atlasSize = this.textAtlas.getAtlasSize();
-        const u1 = atlasEntry.x / atlasSize;
-        const v1 = atlasEntry.y / atlasSize;
-        const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
-        const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
-
-        labelDataArray.push({
-          texCoords: [u1, v1, u2, v2],
-          color: [1, 1, 1, 1],
-          position: [labelX, labelY],
-          size: [labelWorldWidth, labelWorldHeight]
-        });
-
-      } catch (error) {
-        console.error('Error preparing label:', label, error);
-      }
-    }
-
-    return labelDataArray;
+  if (nodesWithLabels.length === 0) {
+    return [];
   }
+
+  const labelDataArray: LabelInstanceData[] = [];
+
+  for (const node of nodesWithLabels) {
+    const label = node.data.label!.trim();
+    const fontSize = 56;
+    const textColor = '#ffffff';
+
+    try {
+      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
+      if (!atlasEntry) continue;
+
+      const textScale = viewport.zoom * 0.5;
+      const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
+      const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
+
+      // Position at node center
+      const labelX = node.data.position.x;
+      const labelY = node.data.position.y;
+
+      // FIX: Ensure UV coordinates are properly normalized
+      const atlasSize = this.textAtlas.getAtlasSize();
+      const u1 = atlasEntry.x / atlasSize;
+      const v1 = atlasEntry.y / atlasSize;
+      const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
+      const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
+
+      // DEBUG: Log the values to see what we're sending
+      console.log('Label entry:', {
+        text: label,
+        position: [labelX, labelY],
+        size: [labelWorldWidth, labelWorldHeight],
+        uv: [u1, v1, u2, v2],
+        atlasEntry: { x: atlasEntry.x, y: atlasEntry.y, w: atlasEntry.width, h: atlasEntry.height }
+      });
+
+      labelDataArray.push({
+        texCoords: [u1, v1, u2, v2],
+        color: [1, 1, 1, 1], // Pure white
+        position: [labelX, labelY],
+        size: [labelWorldWidth, labelWorldHeight]
+      });
+
+    } catch (error) {
+      console.error('Error preparing label:', label, error);
+    }
+  }
+
+  console.log(`Prepared ${labelDataArray.length} labels for rendering`);
+  return labelDataArray;
+}
+
 
   render(renderPass: GPURenderPassEncoder, labelData: LabelInstanceData[]): void {
     if (!this.labelRenderPipeline || !this.labelBuffer || labelData.length === 0) {

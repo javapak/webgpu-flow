@@ -1,4 +1,5 @@
 import React from 'react';
+import VisualPropertyEditor from './VisualPropertyEditor';
 
 export interface NodeType {
   id: string;
@@ -159,7 +160,7 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
               gap: isMobileDevice ? '6px' : '8px',
               padding: isMobileDevice ? '8px 12px' : '12px',
               backgroundColor: isMobileDevice ? '#555555' : '#ffffff',
-              border: `1px solid ${isMobileDevice ? '#666666' : '#dee2e6'}`,
+              border: `1px solid ${isMobileDevice ? '#777777' : '#dee2e6'}`,
               borderRadius: '6px',
               cursor: 'grab',
               userSelect: 'none',
@@ -259,6 +260,8 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
           </div>
         ))}
       </div>
+
+      {isMobileDevice && <VisualPropertyEditor/>}
       
       <div style={{
         marginTop: '16px',

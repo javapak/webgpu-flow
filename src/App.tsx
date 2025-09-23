@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
+import '@mantine/core/styles.css'
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
 
@@ -211,7 +212,7 @@ export const DiagramDemo: React.FC = () => {
               position={{ x: 0, y: 0 }}
               data={{ 
                 tableName: "users",
-                label: "jeff"
+                label: "Example label"
               }}
               visual={{ 
                 color: "#004dc8", 
@@ -223,7 +224,7 @@ export const DiagramDemo: React.FC = () => {
               }}
             />
             
-              <VisualPropertyEditor/>
+              {!isMobile && <VisualPropertyEditor/>}
           </DiagramProvider>
         </div>
 

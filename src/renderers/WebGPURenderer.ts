@@ -873,23 +873,21 @@ export class WebGPURenderer {
         renderPass.draw(6, handleData.length);
       }
 
-        if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
-      try {
-        const labelData = visibleNodes
-          .filter(node => node.data?.label)
-          .map(node => ({
-            position: [node.data!.position!.x, node.data!.position!.y] as [number, number],
-            size: [14, 14] as [number, number],
-            color: [0, 0, 0, 1] as [number, number, number, number], 
-            texCoords: [0, 0, 1, 1] as [number, number, number, number],
-            text: node.data!.label! 
-          }));
-
-        this.labelRenderer.render(renderPass, labelData);
-      } catch (error) {
-        console.error('Error rendering labels:', error);
-      }
+      if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
+  try {
+    // FIX: Call prepareLabelData correctly
+    const labelData = this.labelRenderer.prepareLabelData(visibleNodes, viewport);
+    
+    if (labelData.length > 0) {
+      console.log('About to render labels:', labelData.length);
+      this.labelRenderer.render(renderPass, labelData);
+    } else {
+      console.log('No label data to render');
     }
+  } catch (error) {
+    console.error('Error rendering labels:', error);
+  }
+}
 
       renderPass.end();
       this.device.queue.submit([commandEncoder.finish()]);

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
-import { DiagramPerformanceMonitor } from './components/DiagramCanvas';
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
 

@@ -6,8 +6,8 @@ export interface LabelInstanceData {
   // Reordered to match WGSL struct for alignment
   texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
   color: [number, number, number, number];     // Text color
-  position: [number, number];     // World position
-  size: [number, number];         // Label size in world units
+  position: [number, number]; // World position
+  size: [number, number]; // Label size in world units
 }
 
 export class LabelRenderer {

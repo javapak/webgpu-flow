@@ -1,7 +1,7 @@
 /// <reference types="@webgpu/types" />
 import type { DiagramNode, Viewport } from '../types';
 import tgpu from 'typegpu'
-import { LabelRenderer, type LabelInstanceData } from './LabelRenderer';
+import { LabelRenderer } from './LabelRenderer';
 
 interface NodeInstanceData {
   position: [number, number];

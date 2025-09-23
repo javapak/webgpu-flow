@@ -195,7 +195,6 @@ export const DiagramDemo: React.FC = () => {
               position={{ x: 0, y: isMobile ? 100 : 200 }}
               data={{ 
                 tableName: "users",
-                label: "Example Database"
               }}
               visual={{ 
                 color: "#ff00bf99", 
@@ -213,7 +212,7 @@ export const DiagramDemo: React.FC = () => {
               position={{ x: 0, y: 0 }}
               data={{ 
                 tableName: "users",
-                label: "Example Database"
+                label: "jeff"
               }}
               visual={{ 
                 color: "#004dc8", 

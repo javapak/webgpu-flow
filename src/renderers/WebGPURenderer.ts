@@ -1,6 +1,7 @@
 /// <reference types="@webgpu/types" />
 import type { DiagramNode, Viewport } from '../types';
 import tgpu from 'typegpu'
+import { LabelRenderer, type LabelInstanceData } from './LabelRenderer';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -33,6 +34,8 @@ export class WebGPURenderer {
   private device: GPUDevice | null = null;
   public initialized = false;
   private canvas: HTMLCanvasElement | null = null;
+  private labelRenderer: LabelRenderer | null = null;
+
 
   async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {
@@ -63,9 +66,20 @@ export class WebGPURenderer {
         alphaMode: 'premultiplied',
       });
 
+
+
       await this.setupRenderPipelines();
       this.initialized = true;
       console.log('Fixed WebGPU renderer initialized successfully');
+
+    try {
+      this.labelRenderer = new LabelRenderer(this.device!, this.uniformBuffer!);
+      await this.labelRenderer.initialize();
+      console.log('Label renderer initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize label renderer:', error);
+      // Label rendering is optional, continue without it
+    }
       return true;
 
     } catch (error) {
@@ -147,12 +161,9 @@ export class WebGPURenderer {
         let node = nodeData[instanceIndex];
         let localPos = positions[vertexIndex];
         
-        // Add selection padding if selected
-        let selectionPadding = node.isSelected * 4.0;
-        let adjustedSize = node.size + vec2<f32>(selectionPadding, selectionPadding);
+        let nodeSize = node.size;
         
-        // Calculate world position
-        let worldPos = node.position + localPos * adjustedSize * 0.5;
+        let worldPos = node.position + localPos * nodeSize * 0.5;
         
         var output: VertexOutput;
         // Apply view-projection matrix
@@ -225,48 +236,48 @@ export class WebGPURenderer {
         
         // Clean switch statement with proper aspect ratio handling
         switch (shapeType) {
-          case 0: { // Rectangle - respects aspect ratio
-            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8));
+          case 0: { // Rectangle - use full bounds
+            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95));
           }
-          case 1: { // Circle - ignores aspect ratio to stay circular
-            distance = sdCircle(p_square, 0.8);
+          case 1: { // Circle - use full bounds
+            distance = sdCircle(p_square, 0.95);
           }
-          case 2: { // Diamond - respects aspect ratio  
-            distance = sdDiamond(uv, vec2<f32>(0, 1));
+          case 2: { // Diamond - use full bounds  
+            distance = sdDiamond(uv, vec2<f32>(0, 0.95));
           }
-          case 3: { // Hexagon - uses average to stay roughly hexagonal
-            let avgRadius = 0.7 * sqrt(aspectRatio);
+          case 3: { // Hexagon - use full bounds
+            let avgRadius = 0.9 * sqrt(aspectRatio);
             distance = sdHexagon(p_square, avgRadius);
           }
-          case 4: { // Package - respects aspect ratio (fixed Y axis)
-            let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.7, 0.6), 0.1);
-            let tab = sdRectangle(p + vec2<f32>(0.0, -0.75), vec2<f32>(aspectRatio * 0.3, 0.1)); // Fixed Y
+          case 4: { // Package - use full bounds
+            let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.85, 0.75), 0.1);
+            let tab = sdRectangle(p + vec2<f32>(0.0, -0.85), vec2<f32>(aspectRatio * 0.4, 0.1));
             distance = min(mainBody, tab);
           }
-          case 5: { // Rounded Rectangle - respects aspect ratio
-            distance = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8), 0.15);
+          case 5: { // Rounded Rectangle - use full bounds
+            distance = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95), 0.1);
           }
-          case 6: { // Initial Node - stays circular
-            distance = sdCircle(p_square, 0.7);
+          case 6: { // Initial Node - use full bounds
+            distance = sdCircle(p_square, 0.95);
           }
-          case 7: { // Final Node - stays circular with ring
-            let outer = sdCircle(p_square, 0.8);
-            let inner = sdCircle(p_square, 0.6);
+          case 7: { // Final Node - use full bounds with ring
+            let outer = sdCircle(p_square, 0.95);
+            let inner = sdCircle(p_square, 0.7);
             distance = max(outer, -inner); // Ring shape
           }
-          case 8: { // Oval - designed for aspect ratio
-            distance = sdOval(p, vec2<f32>(aspectRatio * 0.8, 0.6));
+          case 8: { // Oval - use full bounds
+            distance = sdOval(p, vec2<f32>(aspectRatio * 0.95, 0.85));
           }
-          case 9: { // Actor - stays roughly proportional
+          case 9: { // Actor - use full bounds
             distance = sdActor(p_square);
           }
           default: { // Default to rectangle
-            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.8, 0.8));
+            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95));
           }
-        }
+      }
 
         // Anti-aliasing with better smoothing
-        let smoothWidth = 0.02;
+        let smoothWidth = 0.00975;
         let alpha = 1.0 - smoothstep(-smoothWidth, smoothWidth, distance);
         
         // Discard pixels that are completely transparent
@@ -771,7 +782,6 @@ export class WebGPURenderer {
 
       this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
 
-      // Generate resize handles for selected nodes
       const handleData: HandleInstanceData[] = [];
       if (selectedNodes.length > 0) {
         const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8px handles
@@ -780,37 +790,24 @@ export class WebGPURenderer {
           if (!node.data || !node.data.position) return;
           
           const size = node.visual?.size || { width: 100, height: 100 };
+          const shape = node.visual?.shape || 'rectangle';
           const { x, y } = node.data.position;
-          const halfWidth = size.width / 2;
-          const halfHeight = size.height / 2;
           
-          const handles = [
-            // Corners
-            { x: x - halfWidth, y: y - halfHeight, type: 'corner' }, // top-left
-            { x: x + halfWidth, y: y - halfHeight, type: 'corner' }, // top-right
-            { x: x - halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-left
-            { x: x + halfWidth, y: y + halfHeight, type: 'corner' }, // bottom-right
-            // Edges
-            { x: x, y: y - halfHeight, type: 'edge' },             // top
-            { x: x, y: y + halfHeight, type: 'edge' },             // bottom
-            { x: x - halfWidth, y: y, type: 'edge' },              // left
-            { x: x + halfWidth, y: y, type: 'edge' },              // right
-          ];
-
-          handles.forEach(handle => {
-            // Different colors for different handle types
-            const isCorner = handle.type === 'corner';
-            const handleColor: [number, number, number, number] = isCorner ? [1.0, 1.0, 1.0, 1.0] : [0.8, 0.8, 1.0, 1.0]; // White for corners, light blue for edges
+          // Get shape-specific handle positions
+          const handlePositions = this.getShapeHandlePositions(x, y, size.width, size.height, shape);
+          
+          handlePositions.forEach(handlePos => {
+            const isCorner = handlePos.type === 'corner';
+            const handleColor: [number, number, number, number] = isCorner ? [1.0, 1.0, 1.0, 1.0] : [0.8, 0.8, 1.0, 1.0];
             
             handleData.push({
-              position: [handle.x, handle.y],
+              position: [handlePos.x, handlePos.y],
               size: [handleSize, handleSize],
               color: handleColor,
             });
           });
         });
       }
-
       // Update handle buffer if we have handles
       if (handleData.length > 0) {
         const requiredHandleSize = handleData.length * 32;
@@ -876,6 +873,24 @@ export class WebGPURenderer {
         renderPass.draw(6, handleData.length);
       }
 
+        if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
+      try {
+        const labelData = visibleNodes
+          .filter(node => node.data?.label)
+          .map(node => ({
+            position: [node.data!.position!.x, node.data!.position!.y] as [number, number],
+            size: [14, 14] as [number, number],
+            color: [0, 0, 0, 1] as [number, number, number, number], 
+            texCoords: [0, 0, 1, 1] as [number, number, number, number],
+            text: node.data!.label! 
+          }));
+
+        this.labelRenderer.render(renderPass, labelData);
+      } catch (error) {
+        console.error('Error rendering labels:', error);
+      }
+    }
+
       renderPass.end();
       this.device.queue.submit([commandEncoder.finish()]);
 
@@ -884,6 +899,20 @@ export class WebGPURenderer {
     } catch (error) {
       console.error('WebGPU render error:', error);
     }
+  }
+
+  clearTextAtlas(): void {
+    if (this.labelRenderer) {
+      this.labelRenderer.clearAtlas();
+    }
+  }
+
+  getTextAtlasStats() {
+    return this.labelRenderer?.getAtlasStats() || null;
+  }
+
+  getTextAtlasDebugCanvas(): HTMLCanvasElement | null {
+    return this.labelRenderer?.getDebugCanvas() || null;
   }
 
   // Helper method to render grid with proper vertex calculation
@@ -927,21 +956,16 @@ export class WebGPURenderer {
     }
   }
 
-  // Fixed view-projection matrix creation for 2D rendering
   private createViewProjectionMatrix(viewport: Viewport, canvasSize: { width: number; height: number }): number[] {
-    // Create a 2D orthographic projection matrix
-    // We want to map world coordinates directly to screen coordinates
-    
-    // Calculate the visible world bounds based on viewport
+
     const worldWidth = canvasSize.width / viewport.zoom;
     const worldHeight = canvasSize.height / viewport.zoom;
     
     const left = viewport.x - worldWidth / 2;
     const right = viewport.x + worldWidth / 2;
-    const bottom = viewport.y + worldHeight / 2; // Note: Y is flipped for screen coordinates
+    const bottom = viewport.y + worldHeight / 2;
     const top = viewport.y - worldHeight / 2;
     
-    // Create orthographic projection matrix that maps world coords to NDC (-1 to 1)
     const orthoMatrix = this.createOrthographicMatrix(left, right, bottom, top, -1, 1);
     
     return orthoMatrix;
@@ -997,6 +1021,11 @@ export class WebGPURenderer {
         this.handleBuffer.destroy();
         this.handleBuffer = null;
       }
+
+      if (this.labelRenderer) {
+        this.labelRenderer.destroy();
+        this.labelRenderer = null;
+      }
       
       if (this.uniformBuffer) {
         this.uniformBuffer.destroy();
@@ -1025,6 +1054,105 @@ export class WebGPURenderer {
       console.error('Error destroying WebGPU renderer:', error);
     }
   }
+
+ private getShapeHandlePositions(
+  centerX: number, 
+  centerY: number, 
+  width: number, 
+  height: number, 
+  shape: string
+): Array<{x: number, y: number, type: 'corner' | 'edge'}> {
+  const handles: Array<{x: number, y: number, type: 'corner' | 'edge'}> = [];
+  
+  switch (shape) {
+    case 'circle':
+    case 'initialNode':
+    case 'finalNode': {
+      // Circles work well with radial handles
+      const radius = Math.max(width, height) / 2 * 0.95;
+      handles.push(
+        { x: centerX, y: centerY - radius, type: 'edge' },        // North
+        { x: centerX + radius, y: centerY, type: 'edge' },        // East
+        { x: centerX, y: centerY + radius, type: 'edge' },        // South
+        { x: centerX - radius, y: centerY, type: 'edge' },        // West
+        // Diagonal handles for better control
+        { x: centerX + radius * 0.707, y: centerY - radius * 0.707, type: 'corner' }, // NE
+        { x: centerX + radius * 0.707, y: centerY + radius * 0.707, type: 'corner' },  // SE
+        { x: centerX - radius * 0.707, y: centerY + radius * 0.707, type: 'corner' },  // SW
+        { x: centerX - radius * 0.707, y: centerY - radius * 0.707, type: 'corner' },  // NW
+      );
+      return handles;
+    }
+    
+    case 'diamond': {
+      const halfWidth = width / 2 * 0.95;
+      const halfHeight = height / 2 * 0.95;
+      handles.push(
+        { x: centerX, y: centerY - halfHeight, type: 'corner' },     // Top
+        { x: centerX + halfWidth, y: centerY, type: 'corner' },      // Right
+        { x: centerX, y: centerY + halfHeight, type: 'corner' },     // Bottom
+        { x: centerX - halfWidth, y: centerY, type: 'corner' },      // Left
+        { x: centerX + halfWidth * 0.5, y: centerY - halfHeight * 0.5, type: 'edge' },
+        { x: centerX + halfWidth * 0.5, y: centerY + halfHeight * 0.5, type: 'edge' },
+        { x: centerX - halfWidth * 0.5, y: centerY + halfHeight * 0.5, type: 'edge' },
+        { x: centerX - halfWidth * 0.5, y: centerY - halfHeight * 0.5, type: 'edge' },
+      );
+      return handles;
+    }
+    
+    case 'hexagon': {
+      const radius = Math.max(width, height) / 2 * 0.9;
+      const angles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+      
+      angles.forEach(angle => {
+        handles.push({
+          x: centerX + radius * Math.cos(angle),
+          y: centerY + radius * Math.sin(angle),
+          type: 'corner'
+        });
+      });
+      return handles;
+    }
+    
+    case 'oval': {
+      const a = width / 2 * 0.95;
+      const b = height / 2 * 0.85;
+      
+      handles.push(
+        { x: centerX, y: centerY - b, type: 'edge' },        // Top
+        { x: centerX + a, y: centerY, type: 'edge' },        // Right
+        { x: centerX, y: centerY + b, type: 'edge' },        // Bottom
+        { x: centerX - a, y: centerY, type: 'edge' },        // Left
+        { x: centerX + a * 0.707, y: centerY - b * 0.707, type: 'corner' },
+        { x: centerX + a * 0.707, y: centerY + b * 0.707, type: 'corner' },
+        { x: centerX - a * 0.707, y: centerY + b * 0.707, type: 'corner' },
+        { x: centerX - a * 0.707, y: centerY - b * 0.707, type: 'corner' },
+      );
+      return handles;
+    }
+    
+    default: {
+      // Default bounding box handles for all other shapes
+      const halfWidth = width / 2 * 0.95; 
+      const halfHeight = height / 2 * 0.95;
+      
+      handles.push(
+        // Standard 8-point bounding box handles
+        // Corners
+        { x: centerX - halfWidth, y: centerY - halfHeight, type: 'corner' }, // top-left
+        { x: centerX + halfWidth, y: centerY - halfHeight, type: 'corner' }, // top-right
+        { x: centerX - halfWidth, y: centerY + halfHeight, type: 'corner' }, // bottom-left
+        { x: centerX + halfWidth, y: centerY + halfHeight, type: 'corner' }, // bottom-right
+        // Edges
+        { x: centerX, y: centerY - halfHeight, type: 'edge' },             // top
+        { x: centerX, y: centerY + halfHeight, type: 'edge' },             // bottom
+        { x: centerX - halfWidth, y: centerY, type: 'edge' },              // left
+        { x: centerX + halfWidth, y: centerY, type: 'edge' },              // right
+      );
+      return handles;
+    }
+  }
+}
 }
 
 // Export shape types for external use

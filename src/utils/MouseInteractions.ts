@@ -62,79 +62,186 @@ export class MouseInteractions {
            worldPos.y <= bottom;
   }
 
-  // Check if a point is near a resize handle of a selected node
-  static getResizeHandle(
-    worldPos: { x: number; y: number },
-    node: NodeSchema,
-    viewport: { x: number; y: number; zoom: number; width: number; height: number }
-  ): ResizeHandle {
-    if (!node.visual?.selected) {
-      console.log('❌ Node not selected, no handles');
-      return 'none';
-    }
-
-    const nodeX = node.data.position?.x || 0;
-    const nodeY = node.data.position?.y || 0;
-    const width = node.visual.size?.width || 120;
-    const height = node.visual.size?.height || 80;
-    
-    // Get node bounds in world coordinates
-    const left = nodeX - width / 2;
-    const right = nodeX + width / 2;
-    const top = nodeY - height / 2;
-    const bottom = nodeY + height / 2;
-    
-    // Handle detection threshold in world coordinates (adjusted for zoom)
-    const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8 world units
-    
-    console.log('🔍 Resize handle check:', {
-      nodeId: node.id,
-      worldPos,
-      nodeBounds: { left, right, top, bottom },
-      handleSize,
-      selected: node.visual?.selected
-    });
-    
-    // Check corners first (they take priority)
-    if (Math.abs(worldPos.x - left) <= handleSize && Math.abs(worldPos.y - top) <= handleSize) {
-      console.log('✅ Hit handle: nw');
-      return 'nw';
-    }
-    if (Math.abs(worldPos.x - right) <= handleSize && Math.abs(worldPos.y - top) <= handleSize) {
-      console.log('✅ Hit handle: ne');
-      return 'ne';
-    }
-    if (Math.abs(worldPos.x - left) <= handleSize && Math.abs(worldPos.y - bottom) <= handleSize) {
-      console.log('✅ Hit handle: sw');
-      return 'sw';
-    }
-    if (Math.abs(worldPos.x - right) <= handleSize && Math.abs(worldPos.y - bottom) <= handleSize) {
-      console.log('✅ Hit handle: se');
-      return 'se';
-    }
-    
-    // Check edges (only if shape allows free resizing)
-      if (Math.abs(worldPos.x - left) <= handleSize && worldPos.y >= top - handleSize && worldPos.y <= bottom + handleSize) {
-        console.log('✅ Hit handle: w');
-        return 'w';
-      }
-      if (Math.abs(worldPos.x - right) <= handleSize && worldPos.y >= top - handleSize && worldPos.y <= bottom + handleSize) {
-        console.log('✅ Hit handle: e');
-        return 'e';
-      }
-      if (Math.abs(worldPos.y - top) <= handleSize && worldPos.x >= left - handleSize && worldPos.x <= right + handleSize) {
-        console.log('✅ Hit handle: n');
-        return 'n';
-      }
-      if (Math.abs(worldPos.y - bottom) <= handleSize && worldPos.x >= left - handleSize && worldPos.x <= right + handleSize) {
-        console.log('✅ Hit handle: s');
-        return 's';
-      
-    }
-    
-    console.log('❌ No handle hit');
+static getResizeHandle(
+  worldPos: { x: number; y: number },
+  node: NodeSchema,
+  viewport: { x: number; y: number; zoom: number; width: number; height: number }
+): ResizeHandle {
+  if (!node.visual?.selected) {
+    console.log('❌ Node not selected, no handles');
     return 'none';
   }
+
+  const nodeX = node.data.position?.x || 0;
+  const nodeY = node.data.position?.y || 0;
+  const width = node.visual.size?.width || 120;
+  const height = node.visual.size?.height || 80;
+  const shape = node.visual.shape || 'rectangle';
+  
+  // Handle detection threshold in world coordinates (adjusted for zoom)
+  const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8 world units
+  
+  console.log('🔍 Shape-aware resize handle check:', {
+    nodeId: node.id,
+    worldPos,
+    shape,
+    handleSize,
+    selected: node.visual?.selected
+  });
+  
+  // Get shape-specific handle positions using the same logic as the renderer
+  const handlePositions = this.getShapeHandlePositions(nodeX, nodeY, width, height, shape);
+  
+  // Check each handle position
+  for (const handlePos of handlePositions) {
+    const distance = Math.sqrt(
+      Math.pow(worldPos.x - handlePos.x, 2) + 
+      Math.pow(worldPos.y - handlePos.y, 2)
+    );
+    
+    if (distance <= handleSize) {
+      // Determine handle type based on position relative to center
+      const handle = this.determineHandleType(handlePos.x, handlePos.y, nodeX, nodeY, width, height, shape);
+      console.log('✅ Hit handle:', handle, 'at position:', handlePos);
+      return handle;
+    }
+  }
+  
+  console.log('❌ No handle hit');
+  return 'none';
+}
+
+private static getShapeHandlePositions(
+  centerX: number, 
+  centerY: number, 
+  width: number, 
+  height: number, 
+  shape: string
+): Array<{x: number, y: number, type: 'corner' | 'edge'}> {
+  const handles: Array<{x: number, y: number, type: 'corner' | 'edge'}> = [];
+  
+  // Simple shapes that benefit from custom handle positioning
+  switch (shape) {
+    case 'circle':
+    case 'initialNode':
+    case 'finalNode': {
+      const radius = Math.max(width, height) / 2 * 0.95;
+      handles.push(
+        { x: centerX, y: centerY - radius, type: 'edge' },
+        { x: centerX + radius, y: centerY, type: 'edge' },
+        { x: centerX, y: centerY + radius, type: 'edge' },
+        { x: centerX - radius, y: centerY, type: 'edge' },
+        { x: centerX + radius * 0.707, y: centerY - radius * 0.707, type: 'corner' },
+        { x: centerX + radius * 0.707, y: centerY + radius * 0.707, type: 'corner' },
+        { x: centerX - radius * 0.707, y: centerY + radius * 0.707, type: 'corner' },
+        { x: centerX - radius * 0.707, y: centerY - radius * 0.707, type: 'corner' },
+      );
+      return handles;
+    }
+    
+    case 'diamond': {
+      const halfWidth = width / 2 * 0.95;
+      const halfHeight = height / 2 * 0.95;
+      handles.push(
+        { x: centerX, y: centerY - halfHeight, type: 'corner' },
+        { x: centerX + halfWidth, y: centerY, type: 'corner' },
+        { x: centerX, y: centerY + halfHeight, type: 'corner' },
+        { x: centerX - halfWidth, y: centerY, type: 'corner' },
+        { x: centerX + halfWidth * 0.5, y: centerY - halfHeight * 0.5, type: 'edge' },
+        { x: centerX + halfWidth * 0.5, y: centerY + halfHeight * 0.5, type: 'edge' },
+        { x: centerX - halfWidth * 0.5, y: centerY + halfHeight * 0.5, type: 'edge' },
+        { x: centerX - halfWidth * 0.5, y: centerY - halfHeight * 0.5, type: 'edge' },
+      );
+      return handles;
+    }
+    
+    case 'hexagon': {
+      const radius = Math.max(width, height) / 2 * 0.9;
+      const angles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+      
+      angles.forEach(angle => {
+        handles.push({
+          x: centerX + radius * Math.cos(angle),
+          y: centerY + radius * Math.sin(angle),
+          type: 'corner'
+        });
+      });
+      return handles;
+    }
+    
+    case 'oval': {
+      const a = width / 2 * 0.95;
+      const b = height / 2 * 0.85;
+      
+      handles.push(
+        { x: centerX, y: centerY - b, type: 'edge' },
+        { x: centerX + a, y: centerY, type: 'edge' },
+        { x: centerX, y: centerY + b, type: 'edge' },
+        { x: centerX - a, y: centerY, type: 'edge' },
+        { x: centerX + a * 0.707, y: centerY - b * 0.707, type: 'corner' },
+        { x: centerX + a * 0.707, y: centerY + b * 0.707, type: 'corner' },
+        { x: centerX - a * 0.707, y: centerY + b * 0.707, type: 'corner' },
+        { x: centerX - a * 0.707, y: centerY - b * 0.707, type: 'corner' },
+      );
+      return handles;
+    }
+    
+    // All other shapes use reliable bounding box handles
+    default: {
+      const halfWidth = width / 2 * 0.95;
+      const halfHeight = height / 2 * 0.95;
+      
+      handles.push(
+        { x: centerX - halfWidth, y: centerY - halfHeight, type: 'corner' },
+        { x: centerX + halfWidth, y: centerY - halfHeight, type: 'corner' },
+        { x: centerX - halfWidth, y: centerY + halfHeight, type: 'corner' },
+        { x: centerX + halfWidth, y: centerY + halfHeight, type: 'corner' },
+        { x: centerX, y: centerY - halfHeight, type: 'edge' },
+        { x: centerX, y: centerY + halfHeight, type: 'edge' },
+        { x: centerX - halfWidth, y: centerY, type: 'edge' },
+        { x: centerX + halfWidth, y: centerY, type: 'edge' },
+      );
+      return handles;
+    }
+  }
+}
+
+// Add helper method to determine handle type from position
+private static determineHandleType(
+  handleX: number, 
+  handleY: number, 
+  centerX: number, 
+  centerY: number,
+  width: number,
+  height: number,
+  shape: string
+): ResizeHandle {
+  const tolerance = 0.1; // Small tolerance for floating point comparison
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  
+  // Calculate relative position
+  const relX = handleX - centerX;
+  const relY = handleY - centerY;
+  
+  // For most shapes, we can determine handle type by relative position
+  if (Math.abs(relX) < tolerance) {
+    // Vertical handles
+    return relY < 0 ? 'n' : 's';
+  } else if (Math.abs(relY) < tolerance) {
+    // Horizontal handles
+    return relX < 0 ? 'w' : 'e';
+  } else {
+    // Corner handles
+    if (relX < 0 && relY < 0) return 'nw';
+    if (relX > 0 && relY < 0) return 'ne';
+    if (relX < 0 && relY > 0) return 'sw';
+    if (relX > 0 && relY > 0) return 'se';
+  }
+  
+  return 'none';
+}
+
 
   // Get cursor style for resize handle
   static getCursorForHandle(handle: ResizeHandle): string {

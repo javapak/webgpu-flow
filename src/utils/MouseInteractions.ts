@@ -217,9 +217,7 @@ private static determineHandleType(
   shape: string
 ): ResizeHandle {
   const tolerance = 0.1; // Small tolerance for floating point comparison
-  const halfWidth = width / 2;
-  const halfHeight = height / 2;
-  
+  console.log(width, shape, height);
   // Calculate relative position
   const relX = handleX - centerX;
   const relY = handleY - centerY;

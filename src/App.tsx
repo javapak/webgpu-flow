@@ -3,6 +3,7 @@ import { DiagramProvider, DiagramCanvas, Node } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import { DiagramPerformanceMonitor } from './components/DiagramCanvas';
 import './App.css';
+import VisualPropertyEditor from './components/VisualPropertyEditor';
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -185,7 +186,6 @@ export const DiagramDemo: React.FC = () => {
               width={canvasSize.width}
               height={canvasSize.height}
               onNodeDropped={handleNodeDropped}
-              showDebugInfo={!isMobile} // Hide debug info on mobile
             />
             
             {/* Example nodes - adjusted for mobile */}
@@ -224,8 +224,7 @@ export const DiagramDemo: React.FC = () => {
               }}
             />
             
-            {/* Performance monitor - desktop only */}
-            {!isMobile && <DiagramPerformanceMonitor />}
+              <VisualPropertyEditor/>
           </DiagramProvider>
         </div>
 

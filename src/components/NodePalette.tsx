@@ -1,6 +1,4 @@
 import React from 'react';
-import VisualPropertyEditor from './VisualPropertyEditor';
-import { DiagramProvider } from './DiagramProvider';
 
 export interface NodeType {
   id: string;
@@ -119,7 +117,6 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
   };
 
   return (
-    <DiagramProvider>
     <div style={{
       width: isMobileDevice ? '100%' : '200px',
       backgroundColor: isMobileDevice ? 'transparent' : '#f8f9fa',
@@ -128,6 +125,7 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
       padding: isMobileDevice ? '12px 16px' : '16px',
       marginRight: isMobileDevice ? 0 : '20px'
     }}>
+
       <h3 style={{ 
         margin: '0 0 16px 0', 
         fontSize: isMobileDevice ? '14px' : '16px', 
@@ -263,7 +261,6 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
         ))}
       </div>
 
-      {isMobileDevice && <VisualPropertyEditor/>}
       
       <div style={{
         marginTop: '16px',
@@ -280,6 +277,5 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
         )}
       </div>
     </div>
-    </DiagramProvider>
   );
 };

@@ -1,6 +1,7 @@
 // src/renderers/LabelRenderer.ts
 import { TextureAtlas } from './TextureAtlas';
 import type { DiagramNode, Viewport } from '../types';
+import { Z_LAYERS } from '../utils/DepthConstants';
 
 export interface LabelInstanceData {
   // Reordered to match WGSL struct for alignment
@@ -92,7 +93,7 @@ export class LabelRenderer {
         let atlasUV = mix(label.texCoords.xy, label.texCoords.zw, uv);
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.LABELS} , 1.0);
         output.uv = atlasUV;
         output.color = label.color;
         
@@ -146,6 +147,8 @@ export class LabelRenderer {
     });
 
     this.labelRenderPipeline = this.device.createRenderPipeline({
+      label: 'label-render-pipeline',
+
       layout: labelPipelineLayout,
       vertex: {
         module: labelShaderModule,
@@ -171,6 +174,11 @@ export class LabelRenderer {
         }]
       },
       primitive: { topology: 'triangle-list' },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      }
     });
 
     // Create bind group (will be updated when atlas texture is ready)
@@ -198,6 +206,28 @@ export class LabelRenderer {
     });
   }
 
+private hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
+    const cleanHex = hex.replace('#', '');
+    
+    if (cleanHex.length === 8) {
+      return {
+        r: parseInt(cleanHex.substring(0, 2), 16) / 255,
+        g: parseInt(cleanHex.substring(2, 4), 16) / 255,
+        b: parseInt(cleanHex.substring(4, 6), 16) / 255,
+        a: parseInt(cleanHex.substring(6, 8), 16) / 255,
+      };
+    } else if (cleanHex.length === 6) {
+      return {
+        r: parseInt(cleanHex.substring(0, 2), 16) / 255,
+        g: parseInt(cleanHex.substring(2, 4), 16) / 255,
+        b: parseInt(cleanHex.substring(4, 6), 16) / 255,
+        a: 1.0,
+      };
+    } else {
+      return { r: 0.23, g: 0.51, b: 0.96, a: 1.0 };
+    }
+  }
+
 prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstanceData[] {
   const nodesWithLabels = visibleNodes.filter(node => 
     node.data.label && node.data.label.trim().length > 0
@@ -211,14 +241,17 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
 
   for (const node of nodesWithLabels) {
     const label = node.data.label!.trim();
-    const fontSize = 56;
-    const textColor = '#ffffff';
+    const fontSize = 64;
+    const textColor = '#ffffffff';
 
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
       if (!atlasEntry) continue;
-
-      const textScale = viewport.zoom * 0.5;
+      let textScale = viewport.zoom * 125 * 0.00175;;
+      if  (node.data.size?.width) {
+        textScale = viewport.zoom * node.data.size!.width * 0.00175;
+      }
+      
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
       const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
 
@@ -233,7 +266,8 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
       const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
       const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
 
-      // DEBUG: Log the values to see what we're sending
+      const textColorRGBA = this.hexToRgba(textColor);
+
       console.log('Label entry:', {
         text: label,
         position: [labelX, labelY],
@@ -244,7 +278,7 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
 
       labelDataArray.push({
         texCoords: [u1, v1, u2, v2],
-        color: [1, 1, 1, 1], // Pure white
+        color: [textColorRGBA.r, textColorRGBA.g, textColorRGBA.b, textColorRGBA.a],
         position: [labelX, labelY],
         size: [labelWorldWidth, labelWorldHeight]
       });

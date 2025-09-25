@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { DiagramNode, NodeSchema } from '../types';
+import type { DiagramNode } from '../types';
 import { useDiagram } from './DiagramProvider';
 // Node component
 interface NodeProps {
@@ -7,7 +7,7 @@ interface NodeProps {
   type: string;
   position?: { x: number; y: number };
   data?: any;
-  visual?: NodeSchema['visual'];
+  visual?: DiagramNode['visual'];
 }
 
 export const Node: React.FC<NodeProps> = ({ 
@@ -23,7 +23,7 @@ export const Node: React.FC<NodeProps> = ({
   useEffect(() => {
     // Only add the node once
     if (!hasAddedRef.current) {
-      const node: NodeSchema = {
+      const node: DiagramNode = {
         id,
         type,
         visual: {

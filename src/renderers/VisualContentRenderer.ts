@@ -1,11 +1,12 @@
-import type { DiagramNode, Viewport } from '../types';
+import type { DiagramNode } from '../types';
 import { VisualContentAtlas } from './VisualContentAtlas';
+import { Z_LAYERS } from '../utils/DepthConstants';
 
 export interface VisualInstanceData {
-  texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
-  color: [number, number, number, number];     // Tint color (white = no tint)
-  position: [number, number];                  // World position
-  size: [number, number];                      // Visual size in world units
+  texCoords: [number, number, number, number];
+  color: [number, number, number, number];
+  position: [number, number];
+  size: [number, number];
 }
 
 export class VisualContentRenderer {
@@ -23,22 +24,21 @@ export class VisualContentRenderer {
   }
 
   async initialize(): Promise<void> {
+    console.log('🎨 VisualContentRenderer.initialize() called');
     await this.setupVisualRenderPipeline();
-    console.log('VisualContentRenderer initialized successfully');
+    console.log('🎨 VisualContentRenderer initialized successfully');
   }
 
   private async setupVisualRenderPipeline() {
-    // Visual content buffer for batched visual data
     this.visualBuffer = this.device.createBuffer({
-      size: 1000 * 64, // Same as label renderer - 16 floats * 4 bytes = 64 bytes per visual
+      size: 1000 * 48,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Visual content shader - very similar to label shader
     const visualShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
-        viewport: vec4<f32>, // x, y, zoom, aspect
+        viewport: vec4<f32>,
       }
 
       struct VisualData {
@@ -64,26 +64,25 @@ export class VisualContentRenderer {
         @builtin(vertex_index) vertexIndex: u32,
         @builtin(instance_index) instanceIndex: u32
       ) -> VertexOutput {
-      let positions = array<vec2<f32>, 6>(
+        let positions = array<vec2<f32>, 6>(
           vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
           vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
         );
         
-      let uvs = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
-      );
+        let uvs = array<vec2<f32>, 6>(
+          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
+        );
 
         let visual = visualData[instanceIndex];
         let localPos = positions[vertexIndex];
         let uv = uvs[vertexIndex];
         
-        let worldPos = visual.position + localPos * visual.size * 0.5;
-
+        let worldPos = visual.position + localPos * visual.size * 0.7;
         let atlasUV = mix(visual.texCoords.xy, visual.texCoords.zw, uv);
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.005, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.VISUALS}, 1.0);
         output.uv = atlasUV;
         output.color = visual.color;
         
@@ -96,20 +95,19 @@ export class VisualContentRenderer {
         @location(1) color: vec4<f32>
       ) -> @location(0) vec4<f32> {
         let visualSample = textureSample(visualAtlas, visualSampler, uv);
+        let finalColor = visualSample * color;
         
-        let sampledColor = visualSample * color;
         
-        if (sampledColor.a < 0.01) {
+        if (finalColor.a < 0.01) {
           discard;
         }
         
-        return sampledColor;
+        return finalColor;
       }
     `;
 
     const visualShaderModule = this.device.createShaderModule({ code: visualShaderCode });
 
-    // Create bind group layout
     const visualBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         {
@@ -135,12 +133,12 @@ export class VisualContentRenderer {
       ]
     });
 
-    // Create render pipeline
     const visualPipelineLayout = this.device.createPipelineLayout({
       bindGroupLayouts: [visualBindGroupLayout]
     });
 
     this.visualRenderPipeline = this.device.createRenderPipeline({
+      label: 'visual-render-pipeline',
       layout: visualPipelineLayout,
       vertex: {
         module: visualShaderModule,
@@ -166,9 +164,14 @@ export class VisualContentRenderer {
         }]
       },
       primitive: { topology: 'triangle-list' },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less', 
+      }
+
     });
 
-    // Create initial bind group
     this.updateBindGroup();
   }
 
@@ -193,147 +196,185 @@ export class VisualContentRenderer {
     });
   }
 
-  destroy() {
-    this.visualAtlas.destroy();
-  }
-
-  prepareVisualData(visibleNodes: DiagramNode[], viewport: Viewport): VisualInstanceData[] {
-    // Filter nodes that have visual content
+  prepareVisualData(visibleNodes: DiagramNode[]): VisualInstanceData[] {
+    console.log('🎨 prepareVisualData called with', visibleNodes.length, 'nodes');
+    
     const nodesWithVisuals = visibleNodes.filter(node => 
-      node.visual?.visualContent && node.visual.visualContent.content
+      node.visual?.visualContent || 
+      node.visual?.icon || 
+      node.data?.emoji || 
+      node.data?.icon
     );
 
+    console.log('🎨 Nodes with visuals found:', nodesWithVisuals.length);
+
     if (nodesWithVisuals.length === 0) {
+      console.log('🎨 No nodes with visual content found');
       return [];
     }
 
     const visualDataArray: VisualInstanceData[] = [];
 
-    // Process each node with visual content
     for (const node of nodesWithVisuals) {
-      const icon = node.visual?.visualContent!;
-      
+      console.log('🎨 Processing node:', node.id, node);
       try {
         let atlasEntry = null;
+        let iconSize = 64;
         
-        // Add content to atlas based on type
-        switch (icon.type) {
-          case 'image':
-            atlasEntry = this.visualAtlas.addImage(icon.content, icon.size || {width: 64, height: 64});
-            break;
-          case 'svg':
-            atlasEntry = this.visualAtlas.addSVG(icon.content, icon.size.width || 64, icon.size.height || 64);
-            break;
-          case 'emoji':
-            atlasEntry = this.visualAtlas.addEmoji(icon.content, icon.size || 64);
-            break;
-          default:
-            console.warn('Unknown visual content type:', icon.type);
-            continue;
+        let content = '';
+        let type = 'emoji';
+        
+        if (node.visual?.visualContent) {
+          content = node.visual.visualContent.content;
+          type = node.visual.visualContent.type;
+          iconSize = node.visual.visualContent.size?.width || 64;
+          console.log('🎨 Using visualContent:', content, type);
+        } else if (node.visual?.icon) {
+          content = node.visual.icon;
+          type = 'emoji';
+          console.log('🎨 Using visual.icon:', content);
+        } else if (node.data?.emoji) {
+          content = node.data.emoji;
+          type = 'emoji';
+          console.log('🎨 Using data.emoji:', content);
+        } else if (node.data?.icon) {
+          content = node.data.icon;
+          type = 'emoji';
+          console.log('🎨 Using data.icon:', content);
         }
-        
-        if (!atlasEntry) {
-          console.warn('Failed to add visual content to atlas:', icon.content);
+
+        if (!content) {
+          console.log('🎨 No content found for node:', node.id);
           continue;
         }
 
-        // Calculate visual size in world coordinates
+        if (type === 'emoji' || content.length <= 2) {
+          atlasEntry = this.visualAtlas.addEmoji(content, iconSize);
+        } else {
+          const color = node.visual?.color || '#3b82f6';
+          atlasEntry = this.visualAtlas.addColoredShape('circle', color, iconSize);
+        }
+        
+        if (!atlasEntry) {
+          console.warn('🎨 Failed to add visual content to atlas:', content);
+          continue;
+        }
 
-        const iconSize = icon.size || {width: 64, height: 64};
-        const visualScale = Math.max(0.3, Math.min(1.5, 1.0 / viewport.zoom));
-        const visualWorldWidth = (iconSize.width * visualScale) / viewport.zoom;
-        const visualWorldHeight = (iconSize.height * visualScale) / viewport.zoom;
+        // Make visuals much larger and more visible
+        const visualScale = 0.5; // Fixed large scale
+        const visualWorldWidth = iconSize * visualScale;
+        const visualWorldHeight = iconSize * visualScale;
 
-        // Position visual content relative to node
-        const nodeSize = node.data.size || { width: 100, height: 60 };
         const visualX = node.data.position.x;
-        const visualY = node.data.position.y - nodeSize.height/2 - visualWorldHeight/2 - 10; // Above node
+        const visualY = node.data.position.y;
 
-        // Calculate UV coordinates in atlas
         const atlasSize = this.visualAtlas.getAtlasSize();
         const u1 = atlasEntry.x / atlasSize;
-        const v1 = atlasEntry.y / atlasSize;
         const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
-        const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
+        const v1 = (atlasEntry.y + atlasEntry.height) / atlasSize;  // Flip V
+        const v2 = atlasEntry.y / atlasSize;                        // Flip V
 
         visualDataArray.push({
           texCoords: [u1, v1, u2, v2],
-          color: [1, 1, 1, 1], 
+          color: [1, 1, 1, 1],
           position: [visualX, visualY],
           size: [visualWorldWidth, visualWorldHeight]
         });
 
-        console.log(`Added visual: ${icon.type} at (${visualX}, ${visualY})`);
+        console.log(`🎨 Added visual: ${type}:"${content}" at (${visualX}, ${visualY}) size:(${visualWorldWidth}, ${visualWorldHeight}) UV:(${u1}, ${v1}, ${u2}, ${v2})`);
 
       } catch (error) {
-        console.error('Error preparing visual content:', icon.content, error);
+        console.error('🎨 Error preparing visual content:', error);
       }
     }
 
+    console.log(`🎨 Final visual data array:`, visualDataArray);
+    console.log(`🎨 Prepared ${visualDataArray.length} visuals for rendering`);
     return visualDataArray;
   }
-   render(renderPass: GPURenderPassEncoder, visualData: VisualInstanceData[]): void {
+
+  render(renderPass: GPURenderPassEncoder, visualData: VisualInstanceData[]): void {
+    console.log(`🎨 render() called with ${visualData.length} visual items`);
+    
     if (!this.visualRenderPipeline || !this.visualBuffer || visualData.length === 0) {
+      console.log('🎨 Skipping render - missing pipeline or buffer or no data');
       return;
     }
 
-    // Update atlas texture on GPU
     this.visualAtlas.updateGPUTexture();
-
-    // Update bind group if needed
     this.updateBindGroup();
 
-    // Prepare batched visual data for GPU (same format as labels)
-    const flatVisualData = new Float32Array(visualData.length * 16); // 16 floats per visual for alignment
+    console.log('🎨 First visual item debug:', visualData[0]);
+
+    const flatVisualData = new Float32Array(visualData.length * 12);
     visualData.forEach((visual, i) => {
-      const offset = i * 16;
-      // texCoords: vec4<f32>
+      const offset = i * 12;
       flatVisualData[offset + 0] = visual.texCoords[0];
       flatVisualData[offset + 1] = visual.texCoords[1];
       flatVisualData[offset + 2] = visual.texCoords[2];
       flatVisualData[offset + 3] = visual.texCoords[3];
-      // color: vec4<f32>
       flatVisualData[offset + 4] = visual.color[0];
       flatVisualData[offset + 5] = visual.color[1];
       flatVisualData[offset + 6] = visual.color[2];
       flatVisualData[offset + 7] = visual.color[3];
-      // position: vec2<f32> + padding
       flatVisualData[offset + 8] = visual.position[0];
       flatVisualData[offset + 9] = visual.position[1];
-      flatVisualData[offset + 10] = 0; // padding
-      flatVisualData[offset + 11] = 0; // padding
-      // size: vec2<f32> + padding
-      flatVisualData[offset + 12] = visual.size[0];
-      flatVisualData[offset + 13] = visual.size[1];
-      flatVisualData[offset + 14] = 0; // padding
-      flatVisualData[offset + 15] = 0; // padding
+      flatVisualData[offset + 10] = visual.size[0];
+      flatVisualData[offset + 11] = visual.size[1];
     });
 
-    // Resize buffer if needed
-    const requiredSize = visualData.length * 64; // 16 floats * 4 bytes = 64 bytes per visual
+    const requiredSize = visualData.length * 48;
     if (requiredSize > this.visualBuffer.size) {
       this.visualBuffer.destroy();
       this.visualBuffer = this.device.createBuffer({
-        size: requiredSize * 2, // Double for growth
+        size: requiredSize * 2,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       });
       this.updateBindGroup();
     }
 
-    // Upload visual data to GPU
     this.device.queue.writeBuffer(this.visualBuffer, 0, flatVisualData);
 
-    // Render all visuals in one batch
-    try {
     renderPass.setPipeline(this.visualRenderPipeline);
     renderPass.setBindGroup(0, this.visualBindGroup!);
     renderPass.draw(6, visualData.length);
-    }
-    catch (e) {
-      console.log('Something went bad with the render ):', e)
-    }
 
-    console.log(`Rendered ${visualData.length} visual elements in batch`);
+    console.log(`🎨 Rendered ${visualData.length} visual elements in batch`);
   }
 
+  clearAtlas(): void {
+    this.visualAtlas.clear();
+  }
+
+  getAtlasStats() {
+    return this.visualAtlas.getStats();
+  }
+
+  getDebugCanvas(): HTMLCanvasElement {
+    return this.visualAtlas.getDebugCanvas();
+  }
+
+  // DEBUG: Add this method to check the atlas
+  debugShowAtlas(): void {
+    const canvas = this.visualAtlas.getDebugCanvas();
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.body.appendChild(canvas.cloneNode(true));
+      newWindow.document.title = 'Visual Atlas Debug';
+    }
+  }
+
+  destroy() {
+    if (this.visualAtlas) {
+      this.visualAtlas.destroy();
+    }
+
+    if (this.visualBuffer) {
+      this.visualBuffer.destroy();
+      this.visualBuffer = null;
+    }
+
+    this.visualRenderPipeline = null;
+    this.visualBindGroup = null;
+  }
 }

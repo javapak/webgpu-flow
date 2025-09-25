@@ -188,49 +188,83 @@ export const DiagramDemo: React.FC = () => {
             alignItems: 'center'
           }}>
 
-              <DiagramCanvas 
-                width={canvasSize.width}
-                height={canvasSize.height}
-                onNodeDropped={handleNodeDropped}
-              />
+          <DiagramCanvas 
+            width={canvasSize.width}
+            height={canvasSize.height}
+            onNodeDropped={handleNodeDropped}
+          />
               
-              {/* Example nodes - adjusted for mobile */}
-              <Node 
-                id="mobile-example-1" 
-                type="database" 
-                position={{ x: 0, y: isMobile ? 100 : 200 }}
-                data={{ 
-                  tableName: "users",
-                }}
-                visual={{ 
-                  color: "#ff00bf99", 
-                  shape: "circle",
-                  size: {
-                    width: isMobile ? 80 : 100,
-                    height: isMobile ? 80 : 100,
-                  }
-                }}
-              />
 
-              <Node 
-                id="mobile-example-2" 
-                type="database" 
-                position={{ x: 0, y: 0 }}
-                data={{ 
-                  tableName: "users",
-                  label: "Example label"
-                }}
-                visual={{ 
-                  color: "#004dc8", 
-                  shape: 'circle',
-                  size: {
-                    width: isMobile ? 80 : 100,
-                    height: isMobile ? 80 : 100,
-                  }
-                }}
-              />
+
+          <Node 
+          id="emoji-test-1" 
+          type="test" 
+          position={{ x: -200, y: -100 }} 
+          data={{ label: "User" }}
+          visual={{ 
+          color: "#33ff0022", 
+          shape: "circle", 
+          size: { width: 100, height: 100 },
+          visualContent: { 
+          type: 'emoji', 
+          content: '👤', 
+          size: { width: 64, height: 64 }
+          }
+        }} 
+      />
+      
+      <Node 
+        id="emoji-test-2" 
+        type="test" 
+        position={{ x: 0, y: -100 }} 
+        data={{ label: "Database" }}
+        visual={{ 
+          color: "#dd32ff22", 
+          shape: "rectangle", 
+          size: { width: 120, height: 80 },
+          visualContent: { 
+            type: 'emoji', 
+            content: '🗄️', 
+            size: { width: 64, height: 64 }
+          }
+        }} 
+      />
+
+      <Node 
+        id="emoji-test-3" 
+        type="test" 
+        position={{ x: 200, y: -100 }} 
+        data={{ label: "Cloud" }}
+        visual={{ 
+          color: "#06b8d472", 
+          shape: "oval", 
+          size: { width: 130, height: 80 },
+          visualContent: { 
+            type: 'emoji', 
+            content: '☁️', 
+            size: { width: 64, height: 64 }
+          }
+        }} 
+      />
+
+     
+
+      <Node 
+        id="svg-test-2" 
+        type="test" 
+        position={{ x: 0, y: 100 }} 
+        data={{ label: "Decision" }}
+        visual={{ 
+          color: "#ef4444", 
+          shape: "diamond", 
+          size: { width: 120, height: 150 },
+
+        }} 
+      />
+
+
               
-                {!isMobile && <VisualPropertyEditor/>}
+          {!isMobile && <VisualPropertyEditor/>}
             
           </div>
 

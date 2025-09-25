@@ -1,14 +1,8 @@
-// VisualContentAtlas.ts - Dedicated atlas for images and SVGs
-
 export interface VisualAtlasEntry {
-  texture: GPUTexture;
   x: number;
   y: number;
   width: number;
   height: number;
-  originalWidth: number;  // Keep track of original dimensions
-  originalHeight: number;
-  type: 'image' | 'svg';
 }
 
 export class VisualContentAtlas {
@@ -18,8 +12,8 @@ export class VisualContentAtlas {
   private device: GPUDevice;
   private entries: Map<string, VisualAtlasEntry> = new Map();
   
-  // Atlas configuration - larger for visual content
-  private readonly ATLAS_SIZE = 2048; // 2K atlas for images/SVGs
+  // Atlas configuration
+  private readonly ATLAS_SIZE = 1024; // Keep it simple like TextureAtlas
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;
@@ -32,11 +26,12 @@ export class VisualContentAtlas {
     this.canvas.height = this.ATLAS_SIZE;
     this.ctx = this.canvas.getContext('2d')!;
     
-    // High-quality rendering for images
+    // High quality rendering
+    this.ctx.textRendering = 'optimizeLegibility';
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = 'high';
     
-    // Clear with transparent background
+    // Clear to transparent
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);
     this.createGPUTexture();
   }
@@ -53,204 +48,141 @@ export class VisualContentAtlas {
     });
   }
 
-  // Add image from URL
-  addImage(url: string, maxSize: {width: number, height: number} = {width: 128, height: 128}): VisualAtlasEntry | null {
-    const cacheKey = `img-${url}-${maxSize}`;
+  // Simple emoji/text rendering (synchronous)
+  addEmoji(emoji: string, size: number = 64): VisualAtlasEntry | null {
+    const cacheKey = `emoji-${emoji}-${size}`;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;
     }
 
-    try {
-      const img = this.loadImage(url);
-      return this.addImageElement(img, cacheKey, maxSize);
-    } catch (error) {
-      console.error('Failed to load image:', url, error);
-      return null;
-    }
-  }
+    const padding = 4;
+    const totalSize = size + padding * 2;
 
-  // Add image from HTMLImageElement or ImageBitmap
-  addImageElement(
-    img: HTMLImageElement | ImageBitmap, 
-    cacheKey: string, 
-    maxSize: {width: number, height: number} = {width: 128, height: 128}
-  ): VisualAtlasEntry | null {
-    const originalWidth = img.width;
-    const originalHeight = img.height;
-    
-    // Calculate scaled dimensions while preserving aspect ratio
-    const scale = Math.min(maxSize.width / originalWidth, maxSize.height / originalHeight, 1);
-    const scaledWidth = Math.ceil(originalWidth * scale);
-    const scaledHeight = Math.ceil(originalHeight * scale);
-
-    if (!this.canFit(scaledWidth, scaledHeight)) {
-      console.warn('Image too large for visual atlas:', cacheKey);
-      return null;
-    }
-
-    const entry = this.allocateSpace(scaledWidth, scaledHeight, originalWidth, originalHeight, 'image');
-    
-    // Draw image flipped for WebGPU coordinate system
-    this.ctx.save();
-    this.ctx.translate(entry.x + scaledWidth/2, entry.y + scaledHeight/2);
-    this.ctx.scale(1, -1); // Flip Y for WebGPU
-    this.ctx.translate(-scaledWidth/2, -scaledHeight/2);
-    
-    this.ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
-    
-    this.ctx.restore();
-    
-    this.entries.set(cacheKey, entry);
-    this.needsUpdate = true;
-    console.log(`Added image to visual atlas: ${scaledWidth}x${scaledHeight}`);
-    return entry;
-  }
-
-  // Add SVG from string
-  addSVG(svgString: string, width: number = 64, height: number = 64): VisualAtlasEntry | null {
-    const cacheKey = `svg-${this.hashString(svgString)}-${width}x${height}`;
-    
-    if (this.entries.has(cacheKey)) {
-      return this.entries.get(cacheKey)!;
-    }
-
-    if (!this.canFit(width, height)) {
-      console.warn('SVG too large for visual atlas');
-      return null;
-    }
-
-    try {
-      const img = this.svgToImage(svgString, width, height);
-      return this.addImageElement(img, cacheKey, {width, height});
-    } catch (error) {
-      console.error('Failed to render SVG:', error);
-      return null;
-    }
-  }
-
-  // Add emoji or unicode symbol (renders as image)
-  addEmoji(emoji: string, size: {width: number, height: number} = {width: 64, height: 64}, color: string = '#000000'): VisualAtlasEntry | null {
-    const cacheKey = `emoji-${emoji}-${size}-${color}`;
-    
-    if (this.entries.has(cacheKey)) {
-      return this.entries.get(cacheKey)!;
-    }
-
-    if (!this.canFit(size.width, size.height)) {
-      console.warn('Emoji too large for visual atlas');
-      return null;
-    }
-
-    const entry = this.allocateSpace(size.width, size.height, size.width, size.height, 'image');
-    
-    // Draw emoji flipped for WebGPU
-    this.ctx.save();
-    this.ctx.translate(entry.x + size.width/2, entry.y + size.height/2);
-    this.ctx.scale(1, -1);
-    this.ctx.translate(-size/2, -size/2);
-    
-    // Clear background
-    this.ctx.clearRect(0, 0, size.width, size.height);
-    
-    // Draw emoji
-    this.ctx.font = `${size.width * 0.8}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
-    this.ctx.fillStyle = color;
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(emoji, size.width/2, size.height/2);
-    
-    this.ctx.restore();
-    
-    this.entries.set(cacheKey, entry);
-    this.needsUpdate = true;
-    console.log(`Added emoji to visual atlas: ${emoji}`);
-    return entry;
-  }
-
-  // Helper methods
-  private canFit(width: number, height: number): boolean {
-    // Check if we can fit in current row
-    if (this.currentX + width <= this.ATLAS_SIZE && this.currentY + height <= this.ATLAS_SIZE) {
-      return true;
-    }
-    
-    // Check if we can fit in next row
-    const nextRowY = this.currentY + this.currentRowHeight + 4; // 4px row spacing
-    return nextRowY + height <= this.ATLAS_SIZE && width <= this.ATLAS_SIZE;
-  }
-
-  private allocateSpace(
-    width: number, 
-    height: number, 
-    originalWidth: number,
-    originalHeight: number,
-    type: 'image' | 'svg'
-  ): VisualAtlasEntry {
-    // Move to next row if needed
-    if (this.currentX + width > this.ATLAS_SIZE) {
+    // Check if we need to move to next row
+    if (this.currentX + totalSize > this.ATLAS_SIZE) {
       this.currentX = 0;
-      this.currentY += this.currentRowHeight + 4; // 4px row spacing for images
+      this.currentY += this.currentRowHeight + padding;
       this.currentRowHeight = 0;
     }
 
+    if (this.currentY + totalSize > this.ATLAS_SIZE) {
+      console.warn('Visual atlas is full!');
+      return null;
+    }
+
+    // Clear the area
+    this.ctx.clearRect(this.currentX, this.currentY, totalSize, totalSize);
+
+    // Draw emoji
+    this.ctx.font = `${size}px system-ui, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    
+    const centerX = this.currentX + totalSize / 2;
+    const centerY = this.currentY + totalSize / 2;
+    
+    this.ctx.fillText(emoji, centerX, centerY);
+
     const entry: VisualAtlasEntry = {
-      texture: this.texture!,
       x: this.currentX,
       y: this.currentY,
-      width,
-      height,
-      originalWidth,
-      originalHeight,
-      type
+      width: totalSize,
+      height: totalSize
     };
 
+    this.entries.set(cacheKey, entry);
+    
     // Update position tracking
-    this.currentX += width + 4; // 4px spacing between images
-    this.currentRowHeight = Math.max(this.currentRowHeight, height);
+    this.currentX += totalSize + padding;
+    this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
+    this.needsUpdate = true;
 
+    console.log(`Added emoji "${emoji}" to atlas at (${entry.x}, ${entry.y})`);
     return entry;
   }
 
-  private loadImage(url: string): HTMLImageElement {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = url;
-      return img;
-  }
-
-  private svgToImage(svgString: string, width: number, height: number): HTMLImageElement {
-
-      // Ensure SVG has proper dimensions
-      let svg = svgString;
-      if (!svg.includes('width=') && !svg.includes('viewBox=')) {
-        svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${svgString}</svg>`;
-      } else if (!svg.startsWith('<svg')) {
-        svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${svgString}</svg>`;
-      }
-      
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      
-      const img = new Image();
-     
-      img.src = url;
-      return img;
-  }
-
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
+  // Simple colored shape rendering (synchronous)
+  addColoredShape(shape: string, color: string, size: number = 64): VisualAtlasEntry | null {
+    const cacheKey = `shape-${shape}-${color}-${size}`;
+    
+    if (this.entries.has(cacheKey)) {
+      return this.entries.get(cacheKey)!;
     }
-    return Math.abs(hash).toString(36);
+
+    const padding = 4;
+    const totalSize = size + padding * 2;
+
+    // Check if we need to move to next row
+    if (this.currentX + totalSize > this.ATLAS_SIZE) {
+      this.currentX = 0;
+      this.currentY += this.currentRowHeight + padding;
+      this.currentRowHeight = 0;
+    }
+
+    if (this.currentY + totalSize > this.ATLAS_SIZE) {
+      console.warn('Visual atlas is full!');
+      return null;
+    }
+
+    // Clear the area
+    this.ctx.clearRect(this.currentX, this.currentY, totalSize, totalSize);
+
+    // Draw simple shapes
+    this.ctx.fillStyle = color;
+    this.ctx.strokeStyle = '#ffffff';
+    this.ctx.lineWidth = 2;
+    
+    const centerX = this.currentX + totalSize / 2;
+    const centerY = this.currentY + totalSize / 2;
+    const radius = (size - padding) / 2;
+
+    this.ctx.beginPath();
+    
+    switch (shape) {
+      case 'circle':
+        this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        break;
+      case 'square':
+        this.ctx.rect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+        break;
+      case 'diamond':
+        this.ctx.moveTo(centerX, centerY - radius);
+        this.ctx.lineTo(centerX + radius, centerY);
+        this.ctx.lineTo(centerX, centerY + radius);
+        this.ctx.lineTo(centerX - radius, centerY);
+        this.ctx.closePath();
+        break;
+      default:
+        // Default to circle
+        this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    }
+    
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    const entry: VisualAtlasEntry = {
+      x: this.currentX,
+      y: this.currentY,
+      width: totalSize,
+      height: totalSize
+    };
+
+    this.entries.set(cacheKey, entry);
+    
+    // Update position tracking
+    this.currentX += totalSize + padding;
+    this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
+    this.needsUpdate = true;
+
+    console.log(`Added ${shape} to atlas at (${entry.x}, ${entry.y})`);
+    return entry;
   }
 
   updateGPUTexture() {
     if (!this.needsUpdate || !this.texture) return;
 
+    // Copy canvas data to GPU texture
     this.device.queue.copyExternalImageToTexture(
       { source: this.canvas },
       { texture: this.texture },
@@ -279,11 +211,8 @@ export class VisualContentAtlas {
   }
 
   getStats() {
-    const entries = Array.from(this.entries.values());
     return {
-      totalEntries: entries.length,
-      imageEntries: entries.filter(e => e.type === 'image').length,
-      svgEntries: entries.filter(e => e.type === 'svg').length,
+      totalEntries: this.entries.size,
       currentX: this.currentX,
       currentY: this.currentY,
       currentRowHeight: this.currentRowHeight,
@@ -296,11 +225,6 @@ export class VisualContentAtlas {
     return this.canvas;
   }
 
-  // Get all entries for debugging
-  getEntries(): Map<string, VisualAtlasEntry> {
-    return new Map(this.entries);
-  }
-
   destroy() {
     if (this.texture) {
       this.texture.destroy();
@@ -309,4 +233,3 @@ export class VisualContentAtlas {
     this.entries.clear();
   }
 }
-

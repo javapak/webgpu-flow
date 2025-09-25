@@ -64,6 +64,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     endDrag,
     setViewport,
     screenToWorld,
+    getRenderer,
     getSpatialDebugInfo,
     initializeRenderer,
     isRendererInitialized,
@@ -87,7 +88,6 @@ useEffect(() => {
 
     const initCanvas = async () => {
       initializationAttempted.current = true;
-      console.log('🚀 DiagramCanvas: Initializing renderer...');
       
       try {
         const success = await initializeRenderer(canvasRef.current!);
@@ -107,9 +107,9 @@ useEffect(() => {
 
   // Update viewport size when canvas size changes
   useEffect(() => {
-    console.log('Canvas size changed:', { width, height });
     setViewport({ width, height });
-  }, [width, height, setViewport]);
+    getRenderer()?.updateDepthTextureOnSizeChange({width, height});
+  }, [width, height, setViewport, getRenderer]);
 
   // Trigger render when viewport changes
   useEffect(() => {
@@ -182,7 +182,6 @@ useEffect(() => {
     e.preventDefault();
     
     const touches = Array.from(e.touches);
-    console.log('🤏 Touch start:', touches.length, 'touches');
 
     if (touches.length === 1) {
       // Single touch

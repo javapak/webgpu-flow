@@ -25,7 +25,7 @@ export default function VisualPropertyEditor() {
     return (
     <>
     {interaction.selectedNodes.length > 0 && (
-        <div>
+        <div style={{margin: 50}}>
             <h3>Visual properties:</h3>
             <ColorInput w={150} fixOnBlur={false} value={hexValue} defaultValue={'#ffffff'}
             onChange={handleChange}/>

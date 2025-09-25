@@ -2,6 +2,8 @@
 import type { DiagramNode, Viewport } from '../types';
 import tgpu from 'typegpu'
 import { LabelRenderer } from './LabelRenderer';
+import { VisualContentRenderer } from './VisualContentRenderer';
+import { Z_LAYERS } from '../utils/DepthConstants';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -35,9 +37,11 @@ export class WebGPURenderer {
   public initialized = false;
   private canvas: HTMLCanvasElement | null = null;
   private labelRenderer: LabelRenderer | null = null;
+  private visualRenderer: VisualContentRenderer | null = null;
+  private depthTexture: GPUTexture | null = null;
 
 
-  async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
+async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {
       // Check WebGPU support
       if (!navigator.gpu) {
@@ -58,6 +62,7 @@ export class WebGPURenderer {
         return false;
       }
 
+
       // Configure canvas context
       const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
       this.context.configure({
@@ -66,20 +71,39 @@ export class WebGPURenderer {
         alphaMode: 'premultiplied',
       });
 
-
-
       await this.setupRenderPipelines();
       this.initialized = true;
       console.log('Fixed WebGPU renderer initialized successfully');
 
-    try {
-      this.labelRenderer = new LabelRenderer(this.device!, this.uniformBuffer!);
-      await this.labelRenderer.initialize();
-      console.log('Label renderer initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize label renderer:', error);
-      // Label rendering is optional, continue without it
-    }
+            
+
+      // Initialize renderers
+      try {
+        this.labelRenderer = new LabelRenderer(this.device!, this.uniformBuffer!);
+        await this.labelRenderer.initialize();
+        console.log('Label renderer initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize label renderer:', error);
+      }
+
+      // ADD VISUAL RENDERER INITIALIZATION
+      try {
+        this.visualRenderer = new VisualContentRenderer(this.device!, this.uniformBuffer!);
+        await this.visualRenderer.initialize();
+        console.log('Visual renderer initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize visual renderer:', error);
+      }
+
+    this.depthTexture = this.device!.createTexture({
+      label: 'i am so deep',
+      size: [this.canvas.width, this.canvas.height],
+      format: 'depth24plus',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    console.log(this.depthTexture)
+
       return true;
 
     } catch (error) {
@@ -113,6 +137,7 @@ export class WebGPURenderer {
       size: 8 * 32, // Up to 8 handles per selected node (8 floats * 4 bytes each)
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+
 
     // Fixed WGSL shader with proper shape handling
     const nodeShaderCode = /* wgsl */`
@@ -159,15 +184,16 @@ export class WebGPURenderer {
         );
 
         let node = nodeData[instanceIndex];
-        let localPos = positions[vertexIndex];
+        var localPos = positions[vertexIndex];
         
         let nodeSize = node.size;
         
+        localPos.y = -localPos.y;
         let worldPos = node.position + localPos * nodeSize * 0.5;
         
         var output: VertexOutput;
         // Apply view-projection matrix
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.NODES}, 1.0);
         output.color = node.color;
         output.uv = uvs[vertexIndex];
         output.isSelected = node.isSelected;
@@ -338,14 +364,12 @@ export class WebGPURenderer {
         let top = uniforms.viewport.y - worldHeight / 2.0;
         let bottom = uniforms.viewport.y + worldHeight / 2.0;
         
-        // Extend bounds slightly to ensure grid covers entire view
         let margin = gridSize * 2.0;
         let gridLeft = floor((left - margin) / gridSize) * gridSize;
         let gridRight = ceil((right + margin) / gridSize) * gridSize;
         let gridTop = floor((top - margin) / gridSize) * gridSize;
         let gridBottom = ceil((bottom + margin) / gridSize) * gridSize;
         
-        // Calculate number of lines
         let numVerticalLines = i32((gridRight - gridLeft) / gridSize) + 1;
         let numHorizontalLines = i32((gridBottom - gridTop) / gridSize) + 1;
         let verticesPerLine = 6; // 2 triangles per line
@@ -384,7 +408,7 @@ export class WebGPURenderer {
         }
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.BACKGROUND}, 1.0);
         
         // Grid color - adaptive opacity based on zoom
         let baseAlpha = 0.25;
@@ -442,7 +466,7 @@ export class WebGPURenderer {
         let worldPos = handle.position + localPos * handle.size * 0.5;
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos, 0.0, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.HANDLES}, 1.0);
         output.color = handle.color;
         output.uv = uvs[vertexIndex];
         
@@ -532,6 +556,7 @@ export class WebGPURenderer {
     });
 
     this.nodeRenderPipeline = this.device.createRenderPipeline({
+      label: 'node-render-pipeline',
       layout: pipelineLayout,
       vertex: {
         module: nodeShaderModule,
@@ -557,9 +582,15 @@ export class WebGPURenderer {
         }]
       },
       primitive: { topology: 'triangle-list' },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less', 
+      }
     });
 
     this.handleRenderPipeline = this.device.createRenderPipeline({
+      label: 'handle-render-pipeline',
       layout: pipelineLayout,
       vertex: {
         module: handleShaderModule,
@@ -585,9 +616,16 @@ export class WebGPURenderer {
         }]
       },
       primitive: { topology: 'triangle-list'},
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less', 
+      }
+
     });
 
     this.gridRenderPipeline = this.device.createRenderPipeline({
+      label: 'grid-render-pipeline',
       layout: gridPipelineLayout,
       vertex: {
         module: gridShaderModule,
@@ -613,7 +651,27 @@ export class WebGPURenderer {
         }]
       },
       primitive: { topology: 'triangle-list' },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less', 
+      }
+
     });
+  }
+
+  updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
+    if (this.device && this.canvas) {
+    this.canvas.width = canvasSize.width;
+    this.canvas.height = canvasSize.height;
+    this.depthTexture?.destroy();
+    this.depthTexture = this.device.createTexture({
+      size: { width: canvasSize.width, height: canvasSize.height },
+      sampleCount: 1,
+      format: 'depth24plus',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    }
   }
 
   render(
@@ -639,10 +697,20 @@ export class WebGPURenderer {
         return;
       }
 
+
       // Update canvas size if needed
       if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
-        this.canvas.width = canvasSize.width;
-        this.canvas.height = canvasSize.height;
+        console.warn("============================CANVAS SIZE UPDATE===============================")
+          this.canvas.width = canvasSize.width;
+          this.canvas.height = canvasSize.height;
+          this.depthTexture?.destroy();
+          this.depthTexture = this.device.createTexture({
+            size: { width: canvasSize.width, height: canvasSize.height },
+            sampleCount: 1,
+            format: 'depth24plus',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+      
       }
 
       // Early exit if no nodes to render
@@ -652,12 +720,20 @@ export class WebGPURenderer {
         const textureView = this.context.getCurrentTexture().createView();
         
         const renderPass = commandEncoder.beginRenderPass({
+          label: "my only render pass for real....",
           colorAttachments: [{
             view: textureView,
             clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1.0 },
             loadOp: 'clear' as const,
             storeOp: 'store' as const,
           }],
+          depthStencilAttachment: {
+            view: this.depthTexture!.createView(),
+            depthClearValue: 1.0, 
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store',
+          }
+
         });
 
         // Still render grid even without nodes
@@ -845,19 +921,42 @@ export class WebGPURenderer {
 
       // Render everything
       const commandEncoder = this.device.createCommandEncoder();
-      const textureView = this.context.getCurrentTexture().createView();
+
+    const textureView = this.context.getCurrentTexture().createView();
+    
       
-      const renderPass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: textureView,
-          clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1.0 },
-          loadOp: 'clear' as const,
-          storeOp: 'store' as const,
-        }],
-      });
+  const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store', 
+      }],
+      depthStencilAttachment: {
+        view: this.depthTexture!.createView(),
+        depthClearValue: 1.0, 
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      }
+    });
 
       // Render grid first (background)
       this.renderGrid(renderPass, viewport, canvasSize);
+
+      if (this.visualRenderer && visibleNodes.some((node) => node.visual?.visualContent )) {
+    try {
+
+      
+      const visualData = this.visualRenderer.prepareVisualData(visibleNodes)
+      if (visualData.length > 0) {
+        this.visualRenderer.render(renderPass, visualData);
+      }
+
+    }
+    catch (e) {
+
+    }
+  }
 
       // Render nodes
       if (nodeData.length > 0) {
@@ -874,8 +973,7 @@ export class WebGPURenderer {
       }
 
       if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
-  try {
-    // FIX: Call prepareLabelData correctly
+    try {
     const labelData = this.labelRenderer.prepareLabelData(visibleNodes, viewport);
     
     if (labelData.length > 0) {
@@ -887,7 +985,11 @@ export class WebGPURenderer {
   } catch (error) {
     console.error('Error rendering labels:', error);
   }
+
 }
+
+      this.renderGrid(renderPass, viewport, canvasSize);
+
 
       renderPass.end();
       this.device.queue.submit([commandEncoder.finish()]);
@@ -964,7 +1066,7 @@ export class WebGPURenderer {
     const bottom = viewport.y + worldHeight / 2;
     const top = viewport.y - worldHeight / 2;
     
-    const orthoMatrix = this.createOrthographicMatrix(left, right, bottom, top, -1, 1);
+    const orthoMatrix = this.createOrthographicMatrix(left, right, bottom, top, -50, 50);
     
     return orthoMatrix;
   }
@@ -991,16 +1093,16 @@ export class WebGPURenderer {
     
     if (cleanHex.length === 8) {
       return {
-        r: parseInt(cleanHex.substr(0, 2), 16) / 255,
-        g: parseInt(cleanHex.substr(2, 2), 16) / 255,
-        b: parseInt(cleanHex.substr(4, 2), 16) / 255,
-        a: parseInt(cleanHex.substr(6, 2), 16) / 255,
+        r: parseInt(cleanHex.substring(0, 2), 16) / 255,
+        g: parseInt(cleanHex.substring(2, 4), 16) / 255,
+        b: parseInt(cleanHex.substring(4, 6), 16) / 255,
+        a: parseInt(cleanHex.substring(6, 8), 16) / 255,
       };
     } else if (cleanHex.length === 6) {
       return {
-        r: parseInt(cleanHex.substr(0, 2), 16) / 255,
-        g: parseInt(cleanHex.substr(2, 2), 16) / 255,
-        b: parseInt(cleanHex.substr(4, 2), 16) / 255,
+        r: parseInt(cleanHex.substring(0, 2), 16) / 255,
+        g: parseInt(cleanHex.substring(2, 4), 16) / 255,
+        b: parseInt(cleanHex.substring(4, 6), 16) / 255,
         a: 1.0,
       };
     } else {
@@ -1023,6 +1125,11 @@ export class WebGPURenderer {
       if (this.labelRenderer) {
         this.labelRenderer.destroy();
         this.labelRenderer = null;
+      }
+
+      if (this.visualRenderer) {
+        this.visualRenderer.destroy();
+        this.visualRenderer = null;
       }
       
       if (this.uniformBuffer) {

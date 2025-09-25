@@ -68,7 +68,6 @@ static getResizeHandle(
   viewport: { x: number; y: number; zoom: number; width: number; height: number }
 ): ResizeHandle {
   if (!node.visual?.selected) {
-    console.log('❌ Node not selected, no handles');
     return 'none';
   }
 
@@ -80,14 +79,7 @@ static getResizeHandle(
   
   // Handle detection threshold in world coordinates (adjusted for zoom)
   const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8 world units
-  
-  console.log('🔍 Shape-aware resize handle check:', {
-    nodeId: node.id,
-    worldPos,
-    shape,
-    handleSize,
-    selected: node.visual?.selected
-  });
+ 
   
   // Get shape-specific handle positions using the same logic as the renderer
   const handlePositions = this.getShapeHandlePositions(nodeX, nodeY, width, height, shape);
@@ -101,13 +93,11 @@ static getResizeHandle(
     
     if (distance <= handleSize) {
       // Determine handle type based on position relative to center
-      const handle = this.determineHandleType(handlePos.x, handlePos.y, nodeX, nodeY, width, height, shape);
-      console.log('✅ Hit handle:', handle, 'at position:', handlePos);
+      const handle = this.determineHandleType(handlePos.x, handlePos.y, nodeX, nodeY);
       return handle;
     }
   }
   
-  console.log('❌ No handle hit');
   return 'none';
 }
 
@@ -212,12 +202,8 @@ private static determineHandleType(
   handleY: number, 
   centerX: number, 
   centerY: number,
-  width: number,
-  height: number,
-  shape: string
 ): ResizeHandle {
   const tolerance = 0.1; // Small tolerance for floating point comparison
-  console.log(width, shape, height);
   // Calculate relative position
   const relX = handleX - centerX;
   const relY = handleY - centerY;

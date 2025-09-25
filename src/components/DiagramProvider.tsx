@@ -57,18 +57,15 @@ type DiagramAction =
 
 
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
-  console.log('Reducer action:', action.type, action);
   
   switch (action.type) {
     case 'ADD_NODE':
-      console.log('Adding node to state:', action.node);
       return {
         ...state,
         nodes: [...state.nodes, action.node],
       };
 
     case 'REMOVE_NODE':
-      console.log('Removing node from state:', action.nodeId);
       return {
         ...state,
         nodes: state.nodes.filter(node => node.id !== action.nodeId),
@@ -81,7 +78,6 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'UPDATE_NODE':
-      console.log('Updating node in state:', action.node);
       return {
         ...state,
         nodes: state.nodes.map(node =>
@@ -122,7 +118,6 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'SELECT_NODE':
-      console.log('Selecting node:', action.node?.id || 'none');
       
       // Update the selected node to have visual.selected = true
       let updatedNodes = state.nodes;
@@ -155,7 +150,6 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'CLEAR_SELECTION':
-      console.log('Clearing selection');
       
       // Clear all visual selection indicators
       const clearedNodes = state.nodes.map(node => ({
@@ -178,24 +172,11 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
     case 'START_DRAG':
       const selectedNode = state.interaction.selectedNodes[0];
       
-      console.log('🚀 Starting drag:', {
-        dragType: action.dragType,
-        resizeHandle: action.resizeHandle,
-        selectedNode: selectedNode?.id,
-        startPos: action.startPos
-      });
-      
-      // For resize operations, capture the original size and position
       let originalSize, originalPosition;
       if (action.dragType === 'resize' && selectedNode) {
         originalSize = selectedNode.data.size ? { ...selectedNode.data.size } : { width: 100, height: 60 };
         originalPosition = selectedNode.data.position ? { ...selectedNode.data.position } : { x: 0, y: 0 };
-        
-        console.log('🚀 Resize drag setup:', {
-          originalSize,
-          originalPosition,
-          resizeHandle: action.resizeHandle
-        });
+
       }
       
       return {
@@ -285,16 +266,6 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         const selectedNode = state.interaction.selectedNodes[0];
         const { resizeHandle, originalSize, originalPosition } = state.interaction.dragState;
         
-        console.log('🔄 Processing resize drag:', {
-          resizeHandle,
-          originalSize,
-          originalPosition,
-          currentPos: action.currentPos,
-          startPos: state.interaction.dragState.startPos,
-          deltaX: action.currentPos.x - (state.interaction.dragState.startPos?.x || 0),
-          deltaY: action.currentPos.y - (state.interaction.dragState.startPos?.y || 0)
-        });
-        
         // Convert screen delta to world delta for resizing
         const worldDeltaX = deltaX / state.viewport.zoom;
         const worldDeltaY = deltaY / state.viewport.zoom;
@@ -302,25 +273,8 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         // Calculate cumulative delta from start position
         const totalDeltaX = (action.currentPos.x - state.interaction.dragState.startPos!.x) / state.viewport.zoom;
         const totalDeltaY = (action.currentPos.y - state.interaction.dragState.startPos!.y) / state.viewport.zoom;
-        
-        console.log('🔄 Resize deltas:', {
-          screenDelta: { x: deltaX, y: deltaY },
-          worldDelta: { x: worldDeltaX, y: worldDeltaY },
-          totalDelta: { x: totalDeltaX, y: totalDeltaY }
-        });
-        
-        // Check if this shape should lock aspect ratio
-        
-        
-        console.log('🔄 Calling calculateResize with:', {
-          handle: resizeHandle,
-          totalDeltaX,
-          totalDeltaY,
-          originalSize,
-          originalPosition,
-          lockAspectRatio: false
-        });
-        
+
+    
         const newDimensions = MouseInteractions.calculateResize(
           resizeHandle,
           totalDeltaX,
@@ -334,9 +288,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           false
           
         );
-        
-        console.log('🔄 New dimensions calculated:', newDimensions);
-        
+                
         const updatedNode = {
           ...selectedNode,
           data: {
@@ -359,8 +311,6 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             }
           }
         };
-
-        console.log('🔄 Updated node:', updatedNode);
 
         return {
           ...state,
@@ -493,13 +443,6 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     };
     
     const visible = spatial.getVisibleNodes(viewportBounds);
-    console.log('getVisibleNodes:', { 
-      viewport: state.viewport,
-      bounds: viewportBounds, 
-      total: state.nodes.length, 
-      visible: visible.length,
-      visibleIds: visible.map(n => n.id)
-    });
     return visible;
   }, [spatial, state.viewport, state.nodes.length]);
 
@@ -527,13 +470,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
         height: canvasRef.current.height,
       };
       
-      console.log('WebGPU Render (Direct):', {
-        totalNodes: currentState.nodes.length,
-        visibleNodes: visibleNodes.length,
-        selectedNodes: currentState.interaction.selectedNodes.length,
-        viewport: currentState.viewport,
-        canvasSize
-      });
+    
       
       try {
         rendererRef.current.render(visibleNodes, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
@@ -541,11 +478,10 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
         console.error('Render error:', error);
       }
     }
-  }, [spatial]); // Only depend on spatial
+  }, [spatial, canvasRef.current?.width, canvasRef.current?.height]); // Only depend on spatial
 
   // Initialize renderer
   const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {
-    console.log('Initializing WebGPU renderer...');
     canvasRef.current = canvas;
     
     if (!rendererRef.current) {
@@ -555,7 +491,6 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     const success = await rendererRef.current.initialize(canvas);
     
     if (success) {
-      console.log('WebGPU renderer initialized successfully');
       scheduleRender();
       return true;
     } else {
@@ -568,13 +503,6 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const hitTestPoint = useCallback((screenPoint: Point) => {
     const worldPoint = screenToWorld(screenPoint);
     const hits = spatial.hitTest(worldPoint);
-    console.log('hitTestPoint:', { 
-      screenPoint, 
-      worldPoint, 
-      viewport: state.viewport,
-      hits: hits.length, 
-      hitIds: hits.map(n => n.id) 
-    });
     return hits;
   }, [spatial, screenToWorld, state.viewport]);
 
@@ -598,50 +526,32 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
         }
       };
       
-      // Debug: Log what we're checking
-      console.log('Checking resize handle for selected node:', {
-        nodeId: selectedNode.id,
-        nodePos: selectedNode.data.position,
-        nodeSize: selectedNode.data.size,
-        worldPoint,
-        viewport: currentState.viewport,
-        hasSelectedFlag: nodeWithSelection.visual?.selected
-      });
-      
       const resizeHandle = MouseInteractions.getResizeHandle(
         worldPoint,
-        nodeWithSelection as any, // Type assertion needed for the interface mismatch
+        nodeWithSelection as any, 
         currentState.viewport
       );
       
       if (resizeHandle !== 'none') {
-        console.log('✅ Hit resize handle:', resizeHandle);
         return { nodes: [selectedNode], resizeHandle };
       }
     }
     
     // Then check for node hits
     const hits = spatial.hitTest(worldPoint);
-    console.log('Regular hit test result:', { 
-      hits: hits.length, 
-      hitIds: hits.map(n => n.id) 
-    });
     return { nodes: hits, resizeHandle: 'none' as ResizeHandle };
   }, [spatial, screenToWorld, stateRef]); // Use stateRef instead of state dependencies
 
   // Node methods
   const addNode = useCallback((node: DiagramNode) => {
-    console.log('DiagramProvider.addNode called:', node);
     dispatch({ type: 'ADD_NODE', node });
   }, []);
 
   const removeNode = useCallback((nodeId: string) => {
-    console.log('DiagramProvider.removeNode called:', nodeId);
     dispatch({ type: 'REMOVE_NODE', nodeId });
   }, []);
 
   const updateNode = useCallback((node: DiagramNode) => {
-    console.log('DiagramProvider.updateNode called:', node);
     dispatch({ type: 'UPDATE_NODE', node });
   }, []);
 
@@ -665,12 +575,10 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
 
   // Selection methods
   const selectNode = useCallback((node: DiagramNode | null) => {
-    console.log('selectNode called:', node?.id || 'null');
     dispatch({ type: 'SELECT_NODE', node });
   }, []);
 
   const clearSelection = useCallback(() => {
-    console.log('clearSelection called');
     dispatch({ type: 'CLEAR_SELECTION' });
   }, []);
 
@@ -703,22 +611,11 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     return spatial.getDebugInfo();
   }, [spatial]);
 
-  // Effects
-  // Log state changes
   useEffect(() => {
-    console.log('State updated:', {
-      nodeCount: state.nodes.length,
-      selectedCount: state.interaction.selectedNodes.length,
-      dragState: state.interaction.dragState,
-      viewport: state.viewport,
-      nodes: state.nodes.map(n => ({ id: n.id, pos: n.data.position })),
-      selected: state.interaction.selectedNodes.map(n => n.id)
-    });
   }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 
   // Rebuild spatial index when nodes change
   useEffect(() => {
-    console.log('Rebuilding spatial index with', state.nodes.length, 'nodes');
     spatial.rebuild(state.nodes);
   }, [state.nodes, spatial]);
 

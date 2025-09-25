@@ -267,8 +267,6 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         const { resizeHandle, originalSize, originalPosition } = state.interaction.dragState;
         
         // Convert screen delta to world delta for resizing
-        const worldDeltaX = deltaX / state.viewport.zoom;
-        const worldDeltaY = deltaY / state.viewport.zoom;
         
         // Calculate cumulative delta from start position
         const totalDeltaX = (action.currentPos.x - state.interaction.dragState.startPos!.x) / state.viewport.zoom;

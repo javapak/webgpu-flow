@@ -219,7 +219,7 @@ export class LabelRenderer {
         if (layoutedGlyphs.length === 0) continue; 
         const nodeSize = Math.max(node.visual?.size?.width || 100, node.visual?.size?.height || 100);
         const referenceSize = 100; 
-        const scale = Math.sqrt(nodeSize / referenceSize) * 1.2; 
+        const scale = Math.sqrt(nodeSize / referenceSize) * 0.75; 
         let baseX = node.data.position.x;
         const baseY = node.data.position.y;
         

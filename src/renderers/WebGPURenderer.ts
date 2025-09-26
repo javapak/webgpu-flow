@@ -79,8 +79,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
       // Initialize renderers
       try {
-        this.labelRenderer = new LabelRenderer(this.device!, this.uniformBuffer!);
-        await this.labelRenderer.initialize();
+        this.labelRenderer = new LabelRenderer(this.device!, canvasFormat);
         console.log('Label renderer initialized successfully');
       } catch (error) {
         console.error('Failed to initialize label renderer:', error);
@@ -974,15 +973,9 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
       if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
     try {
-    const labelData = this.labelRenderer.prepareLabelData(visibleNodes, viewport);
-    
-    if (labelData.length > 0) {
-      console.log('About to render labels:', labelData.length);
-      this.labelRenderer.render(renderPass, labelData);
-    } else {
-      console.log('No label data to render');
+      this.labelRenderer.render(renderPass, viewProjectionMatrix, visibleNodes);
     }
-  } catch (error) {
+    catch (error) {
     console.error('Error rendering labels:', error);
   }
 
@@ -1005,14 +998,6 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     if (this.labelRenderer) {
       this.labelRenderer.clearAtlas();
     }
-  }
-
-  getTextAtlasStats() {
-    return this.labelRenderer?.getAtlasStats() || null;
-  }
-
-  getTextAtlasDebugCanvas(): HTMLCanvasElement | null {
-    return this.labelRenderer?.getDebugCanvas() || null;
   }
 
   // Helper method to render grid with proper vertex calculation

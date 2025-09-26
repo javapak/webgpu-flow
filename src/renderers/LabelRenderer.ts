@@ -1,377 +1,318 @@
-// src/renderers/LabelRenderer.ts
-import { TextureAtlas } from './TextureAtlas';
-import type { DiagramNode, Viewport } from '../types';
+import { SDFTextAtlas } from './SDFTextAtlas';
+import type { DiagramNode } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
 
-export interface LabelInstanceData {
-  // Reordered to match WGSL struct for alignment
-  texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
-  color: [number, number, number, number];     // Text color
-  position: [number, number]; // World position
-  size: [number, number]; // Label size in world units
+export interface SDFLabelInstanceData {
+  position: [number, number];
+  size: [number, number];
+  texCoords: [number, number, number, number];  // u1, v1, u2, v2
+  color: [number, number, number, number];       // r, g, b, a
 }
 
 export class LabelRenderer {
   private device: GPUDevice;
-  private textAtlas: TextureAtlas;
-  private labelRenderPipeline: GPURenderPipeline | null = null;
-  private labelBindGroup: GPUBindGroup | null = null;
-  private labelBuffer: GPUBuffer | null = null;
-  private uniformBuffer: GPUBuffer;
+  private sdfAtlas: SDFTextAtlas;
+  private renderPipeline: GPURenderPipeline | undefined;
+  private uniformBuffer: GPUBuffer | undefined;
+  private instanceBuffer: GPUBuffer | undefined;
+  private bindGroup: GPUBindGroup | undefined;
+  private sampler: GPUSampler | undefined;
   
-  constructor(device: GPUDevice, uniformBuffer: GPUBuffer) {
+  private maxInstances = 1000;
+  
+  constructor(device: GPUDevice, format: GPUTextureFormat = 'bgra8unorm') {
     this.device = device;
-    this.uniformBuffer = uniformBuffer;
-    this.textAtlas = new TextureAtlas(device);
+    this.sdfAtlas = new SDFTextAtlas(device, 80, 3); // 32px base font, 8px buffer
+    
+    this.createBuffers();
+    this.createSampler();
+    this.createPipeline(format);
+    this.createBindGroup();
   }
-
-  async initialize(): Promise<void> {
-    await this.setupLabelRenderPipeline();
-    console.log('LabelRenderer initialized successfully');
-  }
-
-  private async setupLabelRenderPipeline() {
-    // Label buffer for batched label data
-    // Size remains the same: 12 floats * 4 bytes = 48 bytes per label
-    this.labelBuffer = this.device.createBuffer({
-      size: 1000 * 48, 
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  
+  private createBuffers() {
+    // Uniform buffer for view-projection matrix
+    this.uniformBuffer = this.device.createBuffer({
+      size: 64, // 4x4 matrix = 16 floats * 4 bytes
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      label: 'sdf-label-uniforms'
     });
-
-    // Batched label shader with corrected struct alignment
-    const labelShaderCode = /* wgsl */`
-      struct Uniforms {
-        viewProjection: mat4x4<f32>,
-        viewport: vec4<f32>, // x, y, zoom, aspect
-      }
-
-      // Aligned for WebGPU storage buffer rules
-      struct LabelData {
-        // Start with the largest types for better alignment
-        @align(16) texCoords: vec4<f32>, 
-        @align(16) color: vec4<f32>,
-        
-        // Follow with medium types
-        @align(8) position: vec2<f32>,
-        @align(8) size: vec2<f32>,
-      }
-
-      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-      @group(0) @binding(1) var<storage, read> labelData: array<LabelData>;
-      @group(0) @binding(2) var textSampler: sampler;
-      @group(0) @binding(3) var textAtlas: texture_2d<f32>;
-
-      struct VertexOutput {
-        @builtin(position) position: vec4<f32>,
-        @location(0) uv: vec2<f32>,
-        @location(1) color: vec4<f32>,
-      }
-
-      @vertex
-      fn vs_main(
-        @builtin(vertex_index) vertexIndex: u32,
-        @builtin(instance_index) instanceIndex: u32
-      ) -> VertexOutput {
-        let positions = array<vec2<f32>, 6>(
-          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
-          vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
-        );
-        
-      let uvs = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
-      );
-
-        let label = labelData[instanceIndex];
-        let localPos = positions[vertexIndex];
-        let uv = uvs[vertexIndex];
-        
-        // Calculate world position for the label quad
-        let worldPos = label.position + localPos * label.size * 0.5;
-        
-        // Map UV to atlas coordinates
-        let atlasUV = mix(label.texCoords.xy, label.texCoords.zw, uv);
-        
-        var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.LABELS} , 1.0);
-        output.uv = atlasUV;
-        output.color = label.color;
-        
-        return output;
-      }
-
-      @fragment
-      fn fs_main(
-        @location(0) uv: vec2<f32>,
-        @location(1) color: vec4<f32>
-      ) -> @location(0) vec4<f32> {
-        let textSample = textureSample(textAtlas, textSampler, uv);
-        
-        // Use the alpha channel for text rendering
-        // White text on transparent background
-        return vec4<f32>(color.rgb, textSample.a * color.a);
-      }
-    `;
-
-    const labelShaderModule = this.device.createShaderModule({ code: labelShaderCode });
-
-    // Create bind group layout for batched labels
-    const labelBindGroupLayout = this.device.createBindGroupLayout({
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: 'uniform' as const }
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: 'read-only-storage' as const }
-        },
-        {
-          binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: {}
-        },
-        {
-          binding: 3,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: {}
+    
+    // Instance buffer for label data
+    this.instanceBuffer = this.device.createBuffer({
+      size: this.maxInstances * 48, // 12 floats * 4 bytes per instance
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      label: 'sdf-label-instances'
+    });
+  }
+  
+  private createSampler() {
+    this.sampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      mipmapFilter: 'linear',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+    });
+  }
+  
+  private createPipeline(format: GPUTextureFormat) {
+    const shaderModule = this.device.createShaderModule({
+      code: `
+        // [Insert the shader code from the previous artifact here]
+        struct VertexOutput {
+          @builtin(position) position: vec4<f32>,
+          @location(0) uv: vec2<f32>,
+          @location(1) color: vec4<f32>,
         }
-      ]
+        
+        struct Uniforms {
+          viewProjection: mat4x4<f32>,
+        }
+        
+        struct LabelInstance {
+          @location(0) position: vec2<f32>,
+          @location(1) size: vec2<f32>,
+          @location(2) texCoords: vec4<f32>,
+          @location(3) color: vec4<f32>,
+        }
+        
+        @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+        @group(0) @binding(1) var atlasTexture: texture_2d<f32>;
+        @group(0) @binding(2) var atlasSampler: sampler;
+        
+        @vertex
+        fn vs_main(
+          @builtin(vertex_index) vertexIndex: u32,
+          instance: LabelInstance
+        ) -> VertexOutput {
+          let positions = array<vec2<f32>, 6>(
+            vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, -0.5), vec2<f32>(-0.5, 0.5),
+            vec2<f32>(0.5, -0.5), vec2<f32>(0.5, 0.5), vec2<f32>(-0.5, 0.5)
+          );
+          
+          let uvs = array<vec2<f32>, 6>(
+            vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+            vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
+          );
+        
+          let localPos = positions[vertexIndex];
+          let uv = uvs[vertexIndex];
+          
+          let worldPos = instance.position + localPos * instance.size;
+          
+          var output: VertexOutput;
+          output.position = uniforms.viewProjection * vec4<f32>(worldPos, ${Z_LAYERS.LABELS}, 1.0);
+          output.uv = mix(instance.texCoords.xy, instance.texCoords.zw, uv);
+          output.color = instance.color;
+          
+          return output;
+        }
+        
+        @fragment  
+        fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+          // Sample the SDF distance from red channel
+          let sdfSample = textureSample(atlasTexture, atlasSampler, input.uv);
+          let rawDistance = sdfSample.r; // This is 0-1 range from our 0-255 SDF data
+          
+          // Convert back to original SDF range (0-255) and normalize around 128 (edge)
+          let sdfValue = rawDistance * 255.0;
+          let sdf = (sdfValue - 128.0) / 128.0; // Now -1 to ~0.74, with 0 being the edge
+          
+          // Calculate anti-aliasing
+          let smoothing = fwidth(sdf);
+          
+          // Create smooth edge: alpha = 0 when sdf < 0, alpha = 1 when sdf > 0
+          let alpha = smoothstep(-smoothing, smoothing, sdf);
+          
+          // Apply text color with calculated alpha
+          return vec4<f32>(input.color.rgb, input.color.a * alpha);
+        }
+      `,
+      label: 'sdf-label-shader'
     });
-
-    // Create render pipeline for batched labels
-    const labelPipelineLayout = this.device.createPipelineLayout({
-      bindGroupLayouts: [labelBindGroupLayout]
-    });
-
-    this.labelRenderPipeline = this.device.createRenderPipeline({
-      label: 'label-render-pipeline',
-
-      layout: labelPipelineLayout,
+    
+    this.renderPipeline = this.device.createRenderPipeline({
+      layout: 'auto',
       vertex: {
-        module: labelShaderModule,
+        module: shaderModule,
         entryPoint: 'vs_main',
+        buffers: [{
+          arrayStride: 48, 
+          stepMode: 'instance',
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: 'float32x2' },   // position
+            { shaderLocation: 1, offset: 8, format: 'float32x2' },   // size
+            { shaderLocation: 2, offset: 16, format: 'float32x4' },  // texCoords
+            { shaderLocation: 3, offset: 32, format: 'float32x4' },  // color
+          ]
+        }]
       },
       fragment: {
-        module: labelShaderModule,
+        module: shaderModule,
         entryPoint: 'fs_main',
-        targets: [{ 
-          format: navigator.gpu.getPreferredCanvasFormat(),
+        targets: [{
+          format: format,
           blend: {
             color: {
               srcFactor: 'src-alpha',
               dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
             },
             alpha: {
               srcFactor: 'one',
               dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
-            },
-          },
+            }
+          }
         }]
       },
-      primitive: { topology: 'triangle-list' },
+      primitive: {
+        topology: 'triangle-list',
+      },
       depthStencil: {
         format: 'depth24plus',
-        depthWriteEnabled: true,
+        depthWriteEnabled: false, // Labels usually don't write depth
         depthCompare: 'less',
       }
     });
-
-    // Create bind group (will be updated when atlas texture is ready)
-    this.updateBindGroup();
   }
-
-  private updateBindGroup() {
-    if (!this.labelRenderPipeline || !this.textAtlas.getTexture()) return;
-
-    const textSampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge'
-    });
-
-    this.labelBindGroup = this.device.createBindGroup({
-      layout: this.labelRenderPipeline.getBindGroupLayout(0),
+  
+  private createBindGroup() {
+    this.bindGroup = this.device.createBindGroup({
+      layout: this.renderPipeline!.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: { buffer: this.uniformBuffer } },
-        { binding: 1, resource: { buffer: this.labelBuffer! } },
-        { binding: 2, resource: textSampler },
-        { binding: 3, resource: this.textAtlas.getTexture()!.createView() }
-      ]
+        {
+          binding: 0,
+          resource: { buffer: this.uniformBuffer! }
+        },
+        {
+          binding: 1,
+          resource: this.sdfAtlas.getTexture().createView()
+        },
+        {
+          binding: 2,
+          resource: this.sampler!
+        }
+      ],
+      label: 'sdf-label-bind-group'
     });
   }
+  
+   
+  prepareLabelData(visibleNodes: DiagramNode[]): SDFLabelInstanceData[] {
 
-private hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
-    const cleanHex = hex.replace('#', '');
+    const labelDataArray: SDFLabelInstanceData[] = [];
     
-    if (cleanHex.length === 8) {
-      return {
-        r: parseInt(cleanHex.substring(0, 2), 16) / 255,
-        g: parseInt(cleanHex.substring(2, 4), 16) / 255,
-        b: parseInt(cleanHex.substring(4, 6), 16) / 255,
-        a: parseInt(cleanHex.substring(6, 8), 16) / 255,
-      };
-    } else if (cleanHex.length === 6) {
-      return {
-        r: parseInt(cleanHex.substring(0, 2), 16) / 255,
-        g: parseInt(cleanHex.substring(2, 4), 16) / 255,
-        b: parseInt(cleanHex.substring(4, 6), 16) / 255,
-        a: 1.0,
-      };
-    } else {
-      return { r: 0.23, g: 0.51, b: 0.96, a: 1.0 };
-    }
-  }
-
-prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstanceData[] {
-  const nodesWithLabels = visibleNodes.filter(node => 
-    node.data.label && node.data.label.trim().length > 0
-  );
-
-  if (nodesWithLabels.length === 0) {
-    return [];
-  }
-
-  const labelDataArray: LabelInstanceData[] = [];
-
-  for (const node of nodesWithLabels) {
-    const label = node.data.label!.trim();
-    const fontSize = 64;
-    const textColor = '#ffffffff';
-
-    try {
-      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
-      if (!atlasEntry) continue;
-      let textScale = viewport.zoom * 125 * 0.00175;;
-      if  (node.data.size?.width) {
-        textScale = viewport.zoom * node.data.size!.width * 0.00175;
-      }
+    const nodesWithLabels = visibleNodes.filter(node => 
+      node.data.label && node.data.label.trim().length > 0
+    );
+    
+    if (nodesWithLabels.length === 0) return labelDataArray;
+    
+    const atlasSize = this.sdfAtlas.getAtlasSize();
+    
+    for (const node of nodesWithLabels) {
+      const label = node.data.label!.trim();
+     
       
-      const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
-      const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
+      try {
+        const layoutedGlyphs = this.sdfAtlas.layoutText(label);
+        if (layoutedGlyphs.length === 0) continue; 
+        const nodeSize = Math.max(node.visual?.size?.width || 100, node.visual?.size?.height || 100);
+        const referenceSize = 100; 
+        const scale = Math.sqrt(nodeSize / referenceSize) * 1.2; 
+        let baseX = node.data.position.x;
+        const baseY = node.data.position.y;
+        
+        let totalWidth = 0;
+        for (const glyph of layoutedGlyphs) {
+          totalWidth += glyph.atlasEntry.glyphAdvance * scale;
+        }
+        
+        let currentX = baseX - totalWidth / 2; 
+        
+        for (const glyph of layoutedGlyphs) {
+          const atlasEntry = glyph.atlasEntry;
+          
+          const u1 = atlasEntry.x / atlasSize.width;
+          const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize.width;
+          const v2 = atlasEntry.y / atlasSize.height;
+          const v1 = (atlasEntry.y + atlasEntry.height) / atlasSize.height;
+          
+          const glyphAdvance = atlasEntry.glyphAdvance * scale;
+          const glyphWorldWidth = atlasEntry.width * scale;
+          const glyphWorldHeight = atlasEntry.height * scale;
+          
 
-      // Position at node center
-      const labelX = node.data.position.x;
-      const labelY = node.data.position.y;
-
-      // FIX: Ensure UV coordinates are properly normalized
-      const atlasSize = this.textAtlas.getAtlasSize();
-      const u1 = atlasEntry.x / atlasSize;
-      const v1 = atlasEntry.y / atlasSize;
-      const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
-      const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
-
-      const textColorRGBA = this.hexToRgba(textColor);
-
-      console.log('Label entry:', {
-        text: label,
-        position: [labelX, labelY],
-        size: [labelWorldWidth, labelWorldHeight],
-        uv: [u1, v1, u2, v2],
-        atlasEntry: { x: atlasEntry.x, y: atlasEntry.y, w: atlasEntry.width, h: atlasEntry.height }
-      });
-
-      labelDataArray.push({
-        texCoords: [u1, v1, u2, v2],
-        color: [textColorRGBA.r, textColorRGBA.g, textColorRGBA.b, textColorRGBA.a],
-        position: [labelX, labelY],
-        size: [labelWorldWidth, labelWorldHeight]
-      });
-
-    } catch (error) {
-      console.error('Error preparing label:', label, error);
+          const glyphX = currentX + glyphAdvance / 2; 
+          const glyphY = baseY - (atlasEntry.glyphTop * scale) + glyphWorldHeight / 2;
+          
+          labelDataArray.push({
+            position: [glyphX, glyphY],
+            size: [glyphWorldWidth, glyphWorldHeight],
+            texCoords: [u1, v1, u2, v2],
+            color: [1, 1, 1, 1]
+          });
+          
+          currentX += atlasEntry.glyphAdvance * scale;
+        }
+        
+      } catch (error) {
+        console.error('Error preparing SDF label:', label, error);
+      }
     }
+    
+    return labelDataArray;
   }
+  
+  render(renderPass: GPURenderPassEncoder, viewProjectionMatrix: number[] | Float32Array, visibleNodes: DiagramNode[]) {
+    const labelData = this.prepareLabelData(visibleNodes);
+    
+    if (labelData.length === 0) return;
+    
 
-  console.log(`Prepared ${labelDataArray.length} labels for rendering`);
-  return labelDataArray;
-}
-
-
-  render(renderPass: GPURenderPassEncoder, labelData: LabelInstanceData[]): void {
-    if (!this.labelRenderPipeline || !this.labelBuffer || labelData.length === 0) {
-      return;
-    }
-
-    // Update atlas texture on GPU
-    this.textAtlas.updateGPUTexture();
-
-    // Prepare batched label data for GPU
-    const flatLabelData = new Float32Array(labelData.length * 12); // 12 floats per label
-    labelData.forEach((label, i) => {
+    const matrixData = new Float32Array(viewProjectionMatrix);
+    this.device.queue.writeBuffer(this.uniformBuffer!, 0, matrixData);
+    
+    const instanceData = new Float32Array(labelData.length * 12);
+    for (let i = 0; i < labelData.length; i++) {
+      const label = labelData[i];
       const offset = i * 12;
-      // Write data in the corrected order
-      // texCoords: vec4<f32>
-      flatLabelData[offset + 0] = label.texCoords[0];
-      flatLabelData[offset + 1] = label.texCoords[1];
-      flatLabelData[offset + 2] = label.texCoords[2];
-      flatLabelData[offset + 3] = label.texCoords[3];
-      // color: vec4<f32>
-      flatLabelData[offset + 4] = label.color[0];
-      flatLabelData[offset + 5] = label.color[1];
-      flatLabelData[offset + 6] = label.color[2];
-      flatLabelData[offset + 7] = label.color[3];
-      // position: vec2<f32>
-      flatLabelData[offset + 8] = label.position[0];
-      flatLabelData[offset + 9] = label.position[1];
-      // size: vec2<f32>
-      flatLabelData[offset + 10] = label.size[0];
-      flatLabelData[offset + 11] = label.size[1];
-    });
-
-    // Resize label buffer if needed
-    const requiredSize = labelData.length * 48; // 12 floats * 4 bytes = 48 bytes per label
-    if (requiredSize > this.labelBuffer.size) {
-      this.labelBuffer.destroy();
-      this.labelBuffer = this.device.createBuffer({
-        size: requiredSize * 2, // Double for growth
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-
-      // Update bind group with new buffer
-      this.updateBindGroup();
+      
+      instanceData[offset + 0] = label.position[0];
+      instanceData[offset + 1] = label.position[1];
+      instanceData[offset + 2] = label.size[0];
+      instanceData[offset + 3] = label.size[1];
+      instanceData[offset + 4] = label.texCoords[0];
+      instanceData[offset + 5] = label.texCoords[1];
+      instanceData[offset + 6] = label.texCoords[2];
+      instanceData[offset + 7] = label.texCoords[3];
+      instanceData[offset + 8] = label.color[0];
+      instanceData[offset + 9] = label.color[1];
+      instanceData[offset + 10] = label.color[2];
+      instanceData[offset + 11] = label.color[3];
     }
-
-    // Upload label data to GPU
-    this.device.queue.writeBuffer(this.labelBuffer, 0, flatLabelData);
-
-    // Render all labels in one batch
-    renderPass.setPipeline(this.labelRenderPipeline);
-    renderPass.setBindGroup(0, this.labelBindGroup!);
-    renderPass.draw(6, labelData.length); // Render all labels in one draw call
-
-    console.log(`Rendered ${labelData.length} labels in batch`);
+    
+    const buffer = new ArrayBuffer(instanceData.byteLength);
+    new Float32Array(buffer).set(instanceData);
+    this.device.queue.writeBuffer(this.instanceBuffer!, 0, buffer);
+    renderPass.setPipeline(this.renderPipeline!);
+    renderPass.setBindGroup(0, this.bindGroup);
+    renderPass.setVertexBuffer(0, this.instanceBuffer);
+    renderPass.draw(6, labelData.length); 
+  }
+  
+  debugAtlas() {
+    this.sdfAtlas.debugTestAtlas();
+    this.sdfAtlas.debugSaveAtlas();
   }
 
-  // Utility methods
   clearAtlas() {
-    this.textAtlas.clear();
+     this.sdfAtlas.clear();
   }
-
-  getAtlasStats() {
-    return this.textAtlas.getStats();
-  }
-
-  getDebugCanvas(): HTMLCanvasElement {
-    return this.textAtlas.getDebugCanvas();
-  }
-
+  
   destroy() {
-    if (this.textAtlas) {
-      this.textAtlas.destroy();
-    }
-
-    if (this.labelBuffer) {
-      this.labelBuffer.destroy();
-      this.labelBuffer = null;
-    }
-
-    this.labelRenderPipeline = null;
-    this.labelBindGroup = null;
+    this.uniformBuffer?.destroy();
+    this.instanceBuffer?.destroy();
+    this.sdfAtlas.destroy();
   }
 }

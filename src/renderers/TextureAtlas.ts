@@ -1,3 +1,4 @@
+
 export interface TextureAtlasEntry {
   texture: GPUTexture;
   x: number;
@@ -45,6 +46,7 @@ export class TextureAtlas {
   }
 
   addText(text: string, fontSize: number = 14, color: string = '#ffffff'): TextureAtlasEntry | null {
+
     const cacheKey = `${text}-${fontSize}-${color}`;
     
     if (this.entries.has(cacheKey)) {

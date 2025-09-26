@@ -200,10 +200,10 @@ export const DiagramDemo: React.FC = () => {
           id="emoji-test-1" 
           type="test" 
           position={{ x: -200, y: -100 }} 
-          data={{ label: "User" }}
+          data={{ label: "Actor" }}
           visual={{ 
-          color: "#33ff0022", 
-          shape: "circle", 
+          color: "#ffae00ff", 
+          shape: "oval", 
           size: { width: 100, height: 100 },
           visualContent: { 
           type: 'emoji', 
@@ -219,7 +219,7 @@ export const DiagramDemo: React.FC = () => {
         position={{ x: 0, y: -100 }} 
         data={{ label: "Database" }}
         visual={{ 
-          color: "#dd32ff22", 
+          color: "#dd32ffff", 
           shape: "rectangle", 
           size: { width: 120, height: 80 },
           visualContent: { 
@@ -234,14 +234,14 @@ export const DiagramDemo: React.FC = () => {
         id="emoji-test-3" 
         type="test" 
         position={{ x: 200, y: -100 }} 
-        data={{ label: "Cloud" }}
+        data={{ label: "Requirement" }}
         visual={{ 
-          color: "#06b8d472", 
+          color: "#00ddffff", 
           shape: "oval", 
           size: { width: 130, height: 80 },
           visualContent: { 
             type: 'emoji', 
-            content: '☁️', 
+            content: '☑️', 
             size: { width: 64, height: 64 }
           }
         }} 

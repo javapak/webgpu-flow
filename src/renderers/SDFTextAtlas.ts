@@ -42,8 +42,8 @@ export class SDFTextAtlas {
     this.sdf = new TinySDF({
       fontSize,
       buffer: this.buffer,
-      radius: 1,
-      cutoff: 0.15,
+      radius: 0.5,
+      cutoff: 0.1,
       fontFamily: 'system-ui, -apple-system, sans-serif',  
       fontStyle: 'normal',    
       fontWeight: 'medium'

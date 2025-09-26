@@ -53,7 +53,6 @@ export interface DiagramNode {
   visual?: {
     color?: string;
     shape?: string;
-    labelFontSize?: number;
     visualContent?: {type: 'svg' | 'image' | 'emoji', content: string, size: {width: number, height: number}}
     selected?: boolean;
     [key: string]: any;

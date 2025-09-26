@@ -22,7 +22,7 @@ export class LabelRenderer {
   
   constructor(device: GPUDevice, format: GPUTextureFormat = 'bgra8unorm') {
     this.device = device;
-    this.sdfAtlas = new SDFTextAtlas(device, 80, 3); // 32px base font, 8px buffer
+    this.sdfAtlas = new SDFTextAtlas(device, 132, 3); // 32px base font, 8px buffer
     
     this.createBuffers();
     this.createSampler();
@@ -170,7 +170,7 @@ export class LabelRenderer {
       },
       depthStencil: {
         format: 'depth24plus',
-        depthWriteEnabled: false, // Labels usually don't write depth
+        depthWriteEnabled: false, 
         depthCompare: 'less',
       }
     });

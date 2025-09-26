@@ -46,7 +46,7 @@ export class SDFTextAtlas {
       cutoff: 0.1,
       fontFamily: 'system-ui, -apple-system, sans-serif',  
       fontStyle: 'normal',    
-      fontWeight: 'medium'
+      fontWeight: 'bold'
       }   
     );
     

@@ -22,7 +22,7 @@ export class LabelRenderer {
   
   constructor(device: GPUDevice, format: GPUTextureFormat = 'bgra8unorm') {
     this.device = device;
-    this.sdfAtlas = new SDFTextAtlas(device, 132, 3); // 32px base font, 8px buffer
+    this.sdfAtlas = new SDFTextAtlas(device, 24, 3); // 32px base font, 8px buffer
     
     this.createBuffers();
     this.createSampler();
@@ -219,7 +219,7 @@ export class LabelRenderer {
         if (layoutedGlyphs.length === 0) continue; 
         const nodeSize = Math.max(node.visual?.size?.width || 100, node.visual?.size?.height || 100);
         const referenceSize = 100; 
-        const scale = Math.sqrt(nodeSize / referenceSize) * 0.1; 
+        const scale = Math.sqrt(nodeSize / referenceSize); 
         let baseX = node.data.position.x;
         const baseY = node.data.position.y;
         

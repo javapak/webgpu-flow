@@ -196,6 +196,8 @@ export class VisualContentRenderer {
     });
   }
 
+  
+
   prepareVisualData(visibleNodes: DiagramNode[]): VisualInstanceData[] {
     console.log('🎨 prepareVisualData called with', visibleNodes.length, 'nodes');
     
@@ -377,4 +379,91 @@ export class VisualContentRenderer {
     this.visualRenderPipeline = null;
     this.visualBindGroup = null;
   }
+}
+
+// After rendering visual content to atlas, scan for boundaries
+
+function checkIfEdgePixel(
+  imageData: ImageData, 
+  absoluteX: number, 
+  absoluteY: number,
+  alphaThreshold: number = 128
+): boolean {
+  const width = imageData.width;
+  const height = imageData.height;
+  
+  // Bounds check
+  if (absoluteX < 0 || absoluteX >= width || absoluteY < 0 || absoluteY >= height) {
+    return false;
+  }
+  
+  // Get current pixel alpha
+  const centerIdx = (absoluteY * width + absoluteX) * 4;
+  const centerAlpha = imageData.data[centerIdx + 3];
+  
+  // If current pixel is transparent, it's not an edge of content
+  if (centerAlpha <= alphaThreshold) {
+    return false;
+  }
+  
+  // Check 4-connected neighbors (up, right, down, left)
+  const neighbors = [
+    { x: absoluteX, y: absoluteY - 1 }, // up
+    { x: absoluteX + 1, y: absoluteY }, // right  
+    { x: absoluteX, y: absoluteY + 1 }, // down
+    { x: absoluteX - 1, y: absoluteY }  // left
+  ];
+  
+  for (const neighbor of neighbors) {
+    // If neighbor is out of bounds, consider it transparent
+    if (neighbor.x < 0 || neighbor.x >= width || neighbor.y < 0 || neighbor.y >= height) {
+      return true; // Edge pixel (borders empty space)
+    }
+    
+    // Check neighbor's alpha
+    const neighborIdx = (neighbor.y * width + neighbor.x) * 4;
+    const neighborAlpha = imageData.data[neighborIdx + 3];
+    
+    // If any neighbor is transparent, this is an edge pixel
+    if (neighborAlpha <= alphaThreshold) {
+      return true;
+    }
+  }
+  
+  return false; // All neighbors are opaque, not an edge
+}
+export function calculateContentBounds(
+  imageData: ImageData, 
+  contentRect: { x: number, y: number, width: number, height: number }
+): { bounds: DOMRect, edgePoints: Array<{x: number, y: number}> } {
+  
+  let minX = contentRect.width, maxX = 0;
+  let minY = contentRect.height, maxY = 0;
+  const edgePoints: Array<{x: number, y: number}> = [];
+  
+  // Scan alpha channel to find actual content bounds
+  for (let y = 0; y < contentRect.height; y++) {
+    for (let x = 0; x < contentRect.width; x++) {
+      const idx = ((y + contentRect.y) * imageData.width + (x + contentRect.x)) * 4;
+      const alpha = imageData.data[idx + 3];
+      
+      if (alpha > 128) { // Threshold for "solid" content
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        
+        // Check if this is an edge pixel (has transparent neighbors)
+        const isEdge = checkIfEdgePixel(imageData, x + contentRect.x, y + contentRect.y);
+        if (isEdge) {
+          edgePoints.push({ x, y });
+        }
+      }
+    }
+  }
+  
+  return {
+    bounds: new DOMRect(minX, minY, maxX - minX, maxY - minY),
+    edgePoints
+  };
 }

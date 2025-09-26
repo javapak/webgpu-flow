@@ -199,12 +199,12 @@ export const DiagramDemo: React.FC = () => {
           <Node 
           id="emoji-test-1" 
           type="test" 
-          position={{ x: -200, y: -100 }} 
+          position={{ x: 600, y: -100 }} 
           data={{ label: "Actor" }}
           visual={{ 
           color: "#ffae00ff", 
           shape: "oval", 
-          size: { width: 100, height: 100 },
+          size: { width: 300, height: 300 },
           visualContent: { 
           type: 'emoji', 
           content: '👤', 
@@ -216,12 +216,12 @@ export const DiagramDemo: React.FC = () => {
       <Node 
         id="emoji-test-2" 
         type="test" 
-        position={{ x: 0, y: -100 }} 
+        position={{ x:150, y: -100 }} 
         data={{ label: "Database" }}
         visual={{ 
           color: "#dd32ffff", 
           shape: "rectangle", 
-          size: { width: 120, height: 80 },
+          size: { width: 300, height: 300 },
           visualContent: { 
             type: 'emoji', 
             content: '🗄️', 
@@ -233,12 +233,12 @@ export const DiagramDemo: React.FC = () => {
       <Node 
         id="emoji-test-3" 
         type="test" 
-        position={{ x: 200, y: -100 }} 
+        position={{ x: -300, y: -100 }} 
         data={{ label: "Requirement" }}
         visual={{ 
           color: "#00ddffff", 
           shape: "oval", 
-          size: { width: 130, height: 80 },
+          size: { width: 300, height: 300 },
           visualContent: { 
             type: 'emoji', 
             content: '☑️', 
@@ -252,12 +252,12 @@ export const DiagramDemo: React.FC = () => {
       <Node 
         id="svg-test-2" 
         type="test" 
-        position={{ x: 0, y: 100 }} 
+        position={{ x: 150, y: 400 }} 
         data={{ label: "Decision" }}
         visual={{ 
           color: "#ef4444", 
           shape: "diamond", 
-          size: { width: 120, height: 150 },
+          size: { width: 300, height: 300 },
 
         }} 
       />

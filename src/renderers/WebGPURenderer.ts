@@ -303,7 +303,11 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       }
 
         // Anti-aliasing with better smoothing
-        let smoothWidth = 0.00975;
+        var smoothWidth = 0.025;
+        if (uniforms.viewport.z < 0.75) {
+          smoothWidth = 0.05;
+        }
+
         let alpha = 1.0 - smoothstep(-smoothWidth, smoothWidth, distance);
         
         // Discard pixels that are completely transparent
@@ -500,7 +504,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.VERTEX,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' as const }
         },
         {

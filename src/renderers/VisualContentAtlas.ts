@@ -30,6 +30,8 @@ export class VisualContentAtlas {
     this.ctx.textRendering = 'optimizeLegibility';
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = 'high';
+    this.ctx.filter = 'blur(1)'
+
     
     // Clear to transparent
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);

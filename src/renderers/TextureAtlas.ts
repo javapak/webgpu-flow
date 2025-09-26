@@ -14,7 +14,7 @@ export class TextureAtlas {
   private entries: Map<string, TextureAtlasEntry> = new Map();
   
   // Atlas configuration
-  private readonly ATLAS_SIZE = 1024; // 1024x1024 atlas
+  private readonly ATLAS_SIZE = 4096; 
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;
@@ -26,7 +26,10 @@ export class TextureAtlas {
     this.canvas.width = this.ATLAS_SIZE;
     this.canvas.height = this.ATLAS_SIZE;
     this.ctx = this.canvas.getContext('2d')!;
-    
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = 'high';
+    this.ctx.textRendering = 'optimizeLegibility';
+    this.ctx.filter = 'blur(2px)'
     // Clear to transparent
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);
     this.createGPUTexture();

@@ -241,15 +241,15 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
 
   for (const node of nodesWithLabels) {
     const label = node.data.label!.trim();
-    const fontSize = 64;
+    const fontSize = 244;
     const textColor = '#ffffffff';
 
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
       if (!atlasEntry) continue;
-      let textScale = viewport.zoom * 125 * 0.00175;;
+      let textScale = viewport.zoom * 125 * 0.00175;
       if  (node.data.size?.width) {
-        textScale = viewport.zoom * node.data.size!.width * 0.00175;
+        textScale = viewport.zoom * node.data.size!.width * 0.0005;
       }
       
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;

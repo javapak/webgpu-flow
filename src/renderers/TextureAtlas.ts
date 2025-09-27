@@ -29,7 +29,7 @@ export class TextureAtlas {
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = 'high';
     this.ctx.textRendering = 'optimizeLegibility';
-    this.ctx.filter = 'blur(20px)';
+    this.ctx.filter = 'blur(5px)';
 
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);
     this.createGPUTexture();

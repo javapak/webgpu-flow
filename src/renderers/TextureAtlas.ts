@@ -1,4 +1,4 @@
-export interface TextureAtlasEntry {
+ export interface TextureAtlasEntry {
   texture: GPUTexture;
   x: number;
   y: number;
@@ -29,7 +29,7 @@ export class TextureAtlas {
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = 'high';
     this.ctx.textRendering = 'optimizeLegibility';
-    this.ctx.filter = 'blur(4px)'
+    this.ctx.filter = 'blur(8px)'
     // Clear to transparent
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);
     this.createGPUTexture();

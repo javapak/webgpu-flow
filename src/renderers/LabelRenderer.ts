@@ -1,10 +1,8 @@
-// src/renderers/LabelRenderer.ts
 import { TextureAtlas } from './TextureAtlas';
 import type { DiagramNode, Viewport } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
 
 export interface LabelInstanceData {
-  // Reordered to match WGSL struct for alignment
   texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
   color: [number, number, number, number];     // Text color
   position: [number, number]; // World position

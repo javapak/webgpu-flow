@@ -4,7 +4,7 @@ import { NodePalette, type NodeType } from './components/NodePalette';
 import '@mantine/core/styles.css'
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
-import VisualContentNodesTest from './components/VisualContentNodesTest';
+import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 
 // Mobile detection utility
 const isMobileDevice = () => {

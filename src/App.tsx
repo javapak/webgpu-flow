@@ -4,6 +4,7 @@ import { NodePalette, type NodeType } from './components/NodePalette';
 import '@mantine/core/styles.css'
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
+import VisualContentNodesTest from './components/VisualContentsNodesTest';
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -193,75 +194,8 @@ export const DiagramDemo: React.FC = () => {
             height={canvasSize.height}
             onNodeDropped={handleNodeDropped}
           />
-              
 
-
-          <Node 
-          id="emoji-test-1" 
-          type="test" 
-          position={{ x: 600, y: -100 }} 
-          data={{ label: "Actor" }}
-          visual={{ 
-          color: "#ffae00ff", 
-          shape: "oval", 
-          size: { width: 300, height: 300 },
-          visualContent: { 
-          type: 'emoji', 
-          content: '👤', 
-          size: { width: 64, height: 64 }
-          }
-        }} 
-      />
-      
-      <Node 
-        id="emoji-test-2" 
-        type="test" 
-        position={{ x:150, y: -100 }} 
-        data={{ label: "Database" }}
-        visual={{ 
-          color: "#dd32ffff", 
-          shape: "rectangle", 
-          size: { width: 300, height: 300 },
-          visualContent: { 
-            type: 'emoji', 
-            content: '🗄️', 
-            size: { width: 64, height: 64 }
-          }
-        }} 
-      />
-
-      <Node 
-        id="emoji-test-3" 
-        type="test" 
-        position={{ x: -300, y: -100 }} 
-        data={{ label: "Requirement" }}
-        visual={{ 
-          color: "#00ddffff", 
-          shape: "oval", 
-          size: { width: 300, height: 300 },
-          visualContent: { 
-            type: 'emoji', 
-            content: '☑️', 
-            size: { width: 64, height: 64 }
-          }
-        }} 
-      />
-
-     
-
-      <Node 
-        id="svg-test-2" 
-        type="test" 
-        position={{ x: 150, y: 400 }} 
-        data={{ label: "Decision" }}
-        visual={{ 
-          color: "#ef4444", 
-          shape: "diamond", 
-          size: { width: 300, height: 300 },
-
-        }} 
-      />
-
+          <VisualContentNodesTest />
 
               
           {!isMobile && <VisualPropertyEditor/>}

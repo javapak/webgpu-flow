@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DiagramProvider, DiagramCanvas, Node } from './index';
+import { DiagramProvider, DiagramCanvas } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import '@mantine/core/styles.css'
 import './App.css';

@@ -245,7 +245,7 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
       if (!atlasEntry) continue;
-      let textScale = viewport.zoom * node.data.size!.width  * 0.000175;
+      let textScale = viewport.zoom * node.data.size!.width  * 0.00175;
 
       
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;

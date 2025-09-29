@@ -5,12 +5,14 @@ export class ShaderBasedEdgeDetector {
   private uniformBuffer!: GPUBuffer;
   private bindGroupLayout!: GPUBindGroupLayout;
   private sampler!: GPUSampler;
+
   
   constructor(device: GPUDevice) {
     this.device = device;
     this.createBuffers();
     this.createSampler();
     this.createPipeline();
+    console.log(this.device, this.sampler);
   }
   
   getDevice(): GPUDevice {
@@ -32,7 +34,7 @@ export class ShaderBasedEdgeDetector {
   }
   
   private createSampler() {
-    this.sampler = this.device.createSampler({
+     this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
       addressModeU: 'clamp-to-edge',
@@ -44,9 +46,8 @@ export class ShaderBasedEdgeDetector {
     const computeShader = this.device.createShaderModule({
       code: `
         @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-        @group(0) @binding(1) var textureSampler: sampler;
-        @group(0) @binding(2) var<storage, read_write> edgePoints: array<vec2<f32>>;
-        @group(0) @binding(3) var<uniform> params: EdgeDetectionParams;
+        @group(0) @binding(1) var<storage, read_write> edgePoints: array<vec2<f32>>;
+        @group(0) @binding(2) var<uniform> params: EdgeDetectionParams;
         
         struct EdgeDetectionParams {
           nodeCenter: vec2<f32>,
@@ -58,6 +59,7 @@ export class ShaderBasedEdgeDetector {
         @compute @workgroup_size(1)
         fn main() {
           let rayDir = normalize(params.targetDirection);
+          let textureDims = vec2<f32>(textureDimensions(inputTexture));
           
           // Start from edge of node center, not center itself
           var currentDistance = 0.0;
@@ -71,8 +73,6 @@ export class ShaderBasedEdgeDetector {
             let samplePos = params.nodeCenter + rayDir * currentDistance;
             
             // Convert world position to texture UV coordinates
-            // This assumes the texture represents the node's visual content
-            // You may need to adjust this based on your texture coordinate system
             let uv = vec2<f32>(
               (samplePos.x - params.nodeCenter.x) / params.maxDistance + 0.5,
               (samplePos.y - params.nodeCenter.y) / params.maxDistance + 0.5
@@ -84,8 +84,11 @@ export class ShaderBasedEdgeDetector {
               return;
             }
             
-            // Sample the alpha channel to detect transparency (edge of content)
-            let alpha = textureSample(inputTexture, textureSampler, uv).a;
+            // Convert UV to integer texture coordinates for textureLoad
+            let texCoords = vec2<i32>(uv * textureDims);
+            
+            // Use textureLoad instead of textureSample (compute shader requirement)
+            let alpha = textureLoad(inputTexture, texCoords, 0).a;
             
             // If we hit transparent area, we found the edge
             if (alpha < 0.5) {
@@ -111,15 +114,10 @@ export class ShaderBasedEdgeDetector {
         { 
           binding: 1, 
           visibility: GPUShaderStage.COMPUTE, 
-          sampler: {} 
-        },
-        { 
-          binding: 2, 
-          visibility: GPUShaderStage.COMPUTE, 
           buffer: { type: 'storage' } 
         },
         { 
-          binding: 3, 
+          binding: 2, 
           visibility: GPUShaderStage.COMPUTE, 
           buffer: { type: 'uniform' } 
         }
@@ -173,9 +171,8 @@ export class ShaderBasedEdgeDetector {
       layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: nodeTexture.createView() },
-        { binding: 1, resource: this.sampler },
-        { binding: 2, resource: { buffer: this.edgeBuffer } },
-        { binding: 3, resource: { buffer: this.uniformBuffer } }
+        { binding: 1, resource: { buffer: this.edgeBuffer } },
+        { binding: 2, resource: { buffer: this.uniformBuffer } }
       ],
       label: 'edge-detection-bind-group'
     });
@@ -222,6 +219,7 @@ export class ShaderBasedEdgeDetector {
     directions: Array<{x: number, y: number}>,
     maxDistance: number = 100
   ): Promise<Array<{x: number, y: number}>> {
+    // This would require modifying the compute shader to handle multiple rays
     // For now, just call detectEdgePoint multiple times
     const results: Array<{x: number, y: number}> = [];
     

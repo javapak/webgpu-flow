@@ -4,14 +4,18 @@ import { ColorInput } from "@mantine/core";
 import type { DiagramNode } from "../types";
 export default function VisualPropertyEditor() {
     const {interaction, updateNode} = useDiagram();
-    const [hexValue, setHexValue] = useState('');
+    const [nodeHexValue, setNodeHexValue] = useState('');
+    const [textHexValue, setTextHexValue] = useState('');
+
 
     useEffect(() => {
-    if (interaction.selectedNodes.length > 0)
-         setHexValue(interaction.selectedNodes[0].visual!.color as string)
-    }, [interaction.selectedNodes, setHexValue]);
+        if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0].visual)  {
+            setNodeHexValue(interaction.selectedNodes[0].visual!.color as string)
+            setTextHexValue(interaction.selectedNodes[0].visual!.labelColor as string)
+        }
+    }, [interaction.selectedNodes, setNodeHexValue, setTextHexValue]);
 
-    const handleChange = useCallback((hexValue: string) => {
+    const handleNodeColorChange = useCallback((hexValue: string) => {
         if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0]) {
             const updatedNode: DiagramNode = {...interaction.selectedNodes[0]}
             updatedNode.visual!.color = hexValue;
@@ -19,7 +23,18 @@ export default function VisualPropertyEditor() {
         }
 
 
-    }, [hexValue, interaction.selectedNodes, updateNode]);
+    }, [nodeHexValue, interaction.selectedNodes, updateNode]);
+
+
+        const handleTextColorChange = useCallback((hexValue: string) => {
+        if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0]) {
+            const updatedNode: DiagramNode = {...interaction.selectedNodes[0]}
+            updatedNode.visual!.labelColor = hexValue;
+            updateNode(updatedNode);
+        }
+
+
+    }, [nodeHexValue, interaction.selectedNodes, updateNode]);
 
 
     return (
@@ -27,8 +42,13 @@ export default function VisualPropertyEditor() {
     {interaction.selectedNodes.length > 0 && (
         <div style={{margin: 50}}>
             <h3>Visual properties:</h3>
-            <ColorInput w={150} fixOnBlur={false} value={hexValue} defaultValue={'#ffffff'}
-            onChange={handleChange}/>
+            <ColorInput title='Node color' pb={10} label='Node color' w={150} fixOnBlur={false} value={nodeHexValue} defaultValue='#ffffff'
+            onChange={handleNodeColorChange} />
+
+            <ColorInput title='Label text color' label='Text color' w={150} fixOnBlur={false}  value={textHexValue} defaultValue='#ffffff' 
+            onChange={handleTextColorChange} />
+
+
         </div>)}
         
     </>);

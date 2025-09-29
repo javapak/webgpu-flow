@@ -13,6 +13,7 @@ interface DiagramCanvasProps {
   onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
   selectedNodeType?: any; // For mobile tap-to-place
   onPlaceNode?: (nodeType: any, position: {x: number, y: number}) => void;
+  setSupportedSampleCount: React.Dispatch<React.SetStateAction<string[] | undefined>>
 }
 
 // Mobile detection utility
@@ -30,12 +31,14 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   onNodeDropped,
   selectedNodeType,
   onPlaceNode,
+  setSupportedSampleCount
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [currentCursor, setCurrentCursor] = useState<string>('grab');
   const initializationAttempted = useRef(false);
   const isMobile = isMobileDevice();
+
   
   // Mobile touch state - simplified and more stable
   const [touchState, setTouchState] = useState<{
@@ -94,6 +97,7 @@ useEffect(() => {
         
         if (success) {
           console.log('✅ DiagramCanvas: WebGPU initialized');
+          setSupportedSampleCount(getRenderer()?.sampleCountsSupported);
         } else {
           console.warn('⚠️ DiagramCanvas: WebGPU failed');
         }
@@ -103,7 +107,7 @@ useEffect(() => {
     };
 
     initCanvas();
-  }, [initializeRenderer]);
+  }, [initializeRenderer, getRenderer, setSupportedSampleCount]);
 
   // Update viewport size when canvas size changes
   useEffect(() => {

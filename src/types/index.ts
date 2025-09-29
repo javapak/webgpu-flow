@@ -51,6 +51,7 @@ export interface DiagramNode {
     [key: string]: any;
   };
   visual?: {
+    labelColor?: string;
     color?: string;
     shape?: string;
     visualContent?: {type: 'svg' | 'image' | 'emoji', content: string, size: {width: number, height: number}}
@@ -60,17 +61,15 @@ export interface DiagramNode {
 }
 
 export interface DiagramEdge {
-  id: string;
-  source: string;
-  target: string;
-  data?: {
-    label?: string;
-    [key: string]: any;
-  };
-  visual?: {
-    color?: string;
-    style?: 'solid' | 'dashed' | 'dotted';
-    [key: string]: any;
+  id: string,
+  data?: Record<string, any>
+  sourceNodeId: string;
+  targetNodeId: string;
+  userVertices: Array<{x: number, y: number}>; // User-defined intermediate points
+  style: {
+    color: [number, number, number, number];
+    thickness: number;
+    dashPattern?: number[]; // Optional dashing
   };
 }
 
@@ -117,178 +116,6 @@ export {
   WebGPURenderer,
 } from '../renderers/WebGPURenderer';
 
-// Canvas 2D fallback renderer
-export interface Canvas2DRenderer {
-  initialize(canvas: HTMLCanvasElement): Promise<boolean>;
-  render(
-    visibleNodes: DiagramNode[],
-    visibleEdges: DiagramEdge[],
-    viewport: Viewport,
-    canvasSize: { width: number; height: number }
-  ): void;
-  destroy(): void;
-}
-
-export class Canvas2DDiagramRenderer implements Canvas2DRenderer {
-  private context: CanvasRenderingContext2D | null = null;
-
-  async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
-    this.context = canvas.getContext('2d');
-    return this.context !== null;
-  }
-
-  render(
-    visibleNodes: DiagramNode[],
-    visibleEdges: DiagramEdge[],
-    viewport: Viewport,
-    canvasSize: { width: number; height: number }
-  ): void {
-    if (!this.context) return;
-
-    const ctx = this.context;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
-    
-    // Set up viewport transformation
-    ctx.save();
-    ctx.translate(canvasSize.width / 2, canvasSize.height / 2);
-    ctx.scale(viewport.zoom, viewport.zoom);
-    ctx.translate(-viewport.x, -viewport.y);
-
-    // Draw edges first (behind nodes)
-    visibleEdges.forEach(edge => this.drawEdge(ctx, edge, visibleNodes));
-    
-    // Draw nodes
-    visibleNodes.forEach(node => this.drawNode(ctx, node));
-
-    ctx.restore();
-  }
-
-  private drawNode(ctx: CanvasRenderingContext2D, node: DiagramNode): void {
-    const { x, y } = node.data.position;
-    const size = node.data.size || { width: 100, height: 60 };
-    const color = node.visual?.color || '#3b82f6';
-    const isSelected = node.visual?.selected || false;
-    
-    ctx.save();
-    
-    // Draw node body
-    ctx.fillStyle = color;
-    ctx.fillRect(
-      x - size.width / 2,
-      y - size.height / 2,
-      size.width,
-      size.height
-    );
-    
-    // Draw border
-    ctx.strokeStyle = isSelected ? '#ef4444' : '#1f2937';
-    ctx.lineWidth = isSelected ? 3 : 1;
-    ctx.strokeRect(
-      x - size.width / 2,
-      y - size.height / 2,
-      size.width,
-      size.height
-    );
-    
-    // Draw label
-    if (node.data.label) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node.data.label, x, y);
-    }
-    
-    ctx.restore();
-  }
-
-  private drawEdge(ctx: CanvasRenderingContext2D, edge: DiagramEdge, nodes: DiagramNode[]): void {
-    const sourceNode = nodes.find(n => n.id === edge.source);
-    const targetNode = nodes.find(n => n.id === edge.target);
-    
-    if (!sourceNode || !targetNode) return;
-    
-    const color = edge.visual?.color || '#6b7280';
-    const style = edge.visual?.style || 'solid';
-    
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    
-    if (style === 'dashed') {
-      ctx.setLineDash([5, 5]);
-    } else if (style === 'dotted') {
-      ctx.setLineDash([2, 3]);
-    }
-    
-    ctx.beginPath();
-    ctx.moveTo(sourceNode.data.position.x, sourceNode.data.position.y);
-    ctx.lineTo(targetNode.data.position.x, targetNode.data.position.y);
-    ctx.stroke();
-    
-    // Draw arrow head
-    const angle = Math.atan2(
-      targetNode.data.position.y - sourceNode.data.position.y,
-      targetNode.data.position.x - sourceNode.data.position.x
-    );
-    
-    const arrowLength = 10;
-    const arrowAngle = Math.PI / 6;
-    
-    ctx.beginPath();
-    ctx.moveTo(targetNode.data.position.x, targetNode.data.position.y);
-    ctx.lineTo(
-      targetNode.data.position.x - arrowLength * Math.cos(angle - arrowAngle),
-      targetNode.data.position.y - arrowLength * Math.sin(angle - arrowAngle)
-    );
-    ctx.moveTo(targetNode.data.position.x, targetNode.data.position.y);
-    ctx.lineTo(
-      targetNode.data.position.x - arrowLength * Math.cos(angle + arrowAngle),
-      targetNode.data.position.y - arrowLength * Math.sin(angle + arrowAngle)
-    );
-    ctx.stroke();
-    
-    ctx.restore();
-  }
-
-  destroy(): void {
-    this.context = null;
-  }
-}
-
-// Utility functions
-export const createNode = (
-  id: string,
-  type: string,
-  position: Point,
-  data: Partial<DiagramNode['data']> = {},
-  visual: Partial<DiagramNode['visual']> = {}
-): DiagramNode => ({
-  id,
-  type,
-  data: {
-    position,
-    size: { width: 100, height: 60 },
-    ...data,
-  },
-  visual,
-});
-
-export const createEdge = (
-  id: string,
-  source: string,
-  target: string,
-  data: Partial<DiagramEdge['data']> = {},
-  visual: Partial<DiagramEdge['visual']> = {}
-): DiagramEdge => ({
-  id,
-  source,
-  target,
-  data,
-  visual,
-});
 
 // Coordinate transformation utilities
 export const createTransformUtils = (viewport: Viewport, canvasSize: { width: number; height: number }) => ({
@@ -381,8 +208,8 @@ export const layoutAlgorithms = {
       
       // Calculate attractive forces
       edges.forEach(edge => {
-        const sourceNode = updatedNodes.find(n => n.id === edge.source);
-        const targetNode = updatedNodes.find(n => n.id === edge.target);
+        const sourceNode = updatedNodes.find(n => n.id === edge.sourceNodeId);
+        const targetNode = updatedNodes.find(n => n.id === edge.targetNodeId);
         
         if (sourceNode && targetNode) {
           const dx = targetNode.data.position.x - sourceNode.data.position.x;

@@ -303,3 +303,7 @@ body {
   background-color: #f59e0b;
   color: white;
 }
+
+div.SettingsContentContainer > * {
+  padding: 50;
+}

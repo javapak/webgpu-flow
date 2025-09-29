@@ -1,174 +1,17 @@
-import type { DiagramNode, Viewport } from '../types';
+import type { VisualContentNodeManager } from '../compute/VisualContentNode';
+import type { DiagramNode } from '../types';
+import { Z_LAYERS } from '../utils/DepthConstants';
 
 export interface FloatingEdge {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
-  userVertices: Array<{x: number, y: number}>; // User-defined intermediate points
+  userVertices: Array<{x: number, y: number}>;
   style: {
     color: [number, number, number, number];
     thickness: number;
-    dashPattern?: number[]; // Optional dashing
+    dashPattern?: number[];
   };
-}
-
-class ShaderBasedEdgeDetector {
-  private device: GPUDevice;
-  private computePipeline!: GPUComputePipeline;
-  private edgeBuffer!: GPUBuffer;
-  private uniformBuffer!: GPUBuffer;
-  private bindGroupLayout!: GPUBindGroupLayout;
-  private sampler!: GPUSampler;
-  
-  constructor(device: GPUDevice) {
-    this.device = device;
-    this.createBuffers();
-    this.createSampler();
-    this.createPipeline();
-  }
-  
-  private createBuffers() {
-    this.edgeBuffer = this.device.createBuffer({
-      size: 8, // 2 floats (x, y)
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-      label: 'edge-detection-output'
-    });
-    
-    this.uniformBuffer = this.device.createBuffer({
-      size: 32, // 8 floats for parameters
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      label: 'edge-detection-uniforms'
-    });
-  }
-  
-  private createSampler() {
-    this.sampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge'
-    });
-  }
-  
-  private createPipeline() {
-    const computeShader = this.device.createShaderModule({
-      code: `
-        @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-        @group(0) @binding(1) var textureSampler: sampler;
-        @group(0) @binding(2) var<storage, read_write> edgePoints: array<vec2<f32>>;
-        @group(0) @binding(3) var<uniform> params: EdgeDetectionParams;
-        
-        struct EdgeDetectionParams {
-          nodeCenter: vec2<f32>,
-          targetDirection: vec2<f32>,
-          maxDistance: f32,
-          stepSize: f32,
-        }
-        
-        @compute @workgroup_size(1)
-        fn main() {
-          let rayDir = normalize(params.targetDirection);
-          
-          for (var distance = 0.0; distance < params.maxDistance; distance += params.stepSize) {
-            let samplePos = params.nodeCenter + rayDir * distance;
-            let uv = (samplePos + vec2<f32>(0.5)) / vec2<f32>(1.0);
-            
-            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-              edgePoints[0] = samplePos;
-              return;
-            }
-            
-            let alpha = textureSample(inputTexture, textureSampler, uv).a;
-            if (alpha < 0.5) {
-              edgePoints[0] = samplePos;
-              return;
-            }
-          }
-          
-          edgePoints[0] = params.nodeCenter + rayDir * params.maxDistance;
-        }
-      `
-    });
-    
-    this.bindGroupLayout = this.device.createBindGroupLayout({
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, sampler: {} },
-        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
-      ]
-    });
-    
-    this.computePipeline = this.device.createComputePipeline({
-      layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [this.bindGroupLayout]
-      }),
-      compute: {
-        module: computeShader,
-        entryPoint: 'main'
-      }
-    });
-  }
-  
-  async detectEdgePoint(
-    nodeTexture: GPUTexture,
-    nodeCenter: {x: number, y: number},
-    targetDirection: {x: number, y: number},
-    maxDistance: number = 100
-  ): Promise<{x: number, y: number}> {
-    
-    const uniformData = new Float32Array([
-      nodeCenter.x, nodeCenter.y,
-      targetDirection.x, targetDirection.y,
-      maxDistance,
-      1.0 // stepSize
-    ]);
-    
-    this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData);
-    
-    const bindGroup = this.device.createBindGroup({
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: nodeTexture.createView() },
-        { binding: 1, resource: this.sampler },
-        { binding: 2, resource: { buffer: this.edgeBuffer } },
-        { binding: 3, resource: { buffer: this.uniformBuffer } }
-      ]
-    });
-    
-    const commandEncoder = this.device.createCommandEncoder();
-    const computePass = commandEncoder.beginComputePass();
-    
-    computePass.setPipeline(this.computePipeline);
-    computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(1);
-    
-    computePass.end();
-    this.device.queue.submit([commandEncoder.finish()]);
-    
-    // Read back result
-    const readBuffer = this.device.createBuffer({
-      size: 8,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-    });
-    
-    const copyEncoder = this.device.createCommandEncoder();
-    copyEncoder.copyBufferToBuffer(this.edgeBuffer, 0, readBuffer, 0, 8);
-    this.device.queue.submit([copyEncoder.finish()]);
-    
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const resultData = new Float32Array(readBuffer.getMappedRange());
-    const result = { x: resultData[0], y: resultData[1] };
-    readBuffer.unmap();
-    readBuffer.destroy();
-    
-    return result;
-  }
-  
-  destroy() {
-    this.edgeBuffer.destroy();
-    this.uniformBuffer.destroy();
-  }
 }
 
 class EdgeConnectionCalculator {
@@ -258,7 +101,6 @@ class EdgeConnectionCalculator {
     size: {width: number, height: number},
     direction: {x: number, y: number}
   ): {x: number, y: number} {
-    // Simplified hexagon as circle for now
     return this.circleEdgeIntersection(center, size, direction);
   }
   
@@ -270,7 +112,6 @@ class EdgeConnectionCalculator {
     const halfWidth = size.width / 2;
     const halfHeight = size.height / 2;
     
-    // Diamond intersection (45° rotated square)
     const absX = Math.abs(direction.x);
     const absY = Math.abs(direction.y);
     const t = 1 / (absX / halfWidth + absY / halfHeight);
@@ -283,14 +124,13 @@ class EdgeConnectionCalculator {
 }
 
 export class FloatingEdgeRenderer {
-  private device: GPUDevice;
+  private device!: GPUDevice;
   private edgeBuffer!: GPUBuffer;
   private uniformBuffer!: GPUBuffer;
   private renderPipeline!: GPURenderPipeline;
   private bindGroup!: GPUBindGroup;
   private maxVerticesPerEdge: number;
   private maxEdges: number;
-  private edgeDetector: ShaderBasedEdgeDetector;
   private connectionCalculator: EdgeConnectionCalculator;
   
   constructor(
@@ -302,7 +142,6 @@ export class FloatingEdgeRenderer {
     this.device = device;
     this.maxVerticesPerEdge = maxVerticesPerEdge;
     this.maxEdges = maxEdges;
-    this.edgeDetector = new ShaderBasedEdgeDetector(device);
     this.connectionCalculator = new EdgeConnectionCalculator();
     
     this.createBuffers();
@@ -311,8 +150,7 @@ export class FloatingEdgeRenderer {
   }
   
   private createBuffers() {
-    // Vertex format: position(2) + color(4) + uv(2) = 8 floats per vertex
-    const verticesPerSegment = 6; // Two triangles per line segment
+    const verticesPerSegment = 6;
     const bufferSize = this.maxEdges * this.maxVerticesPerEdge * verticesPerSegment * 8 * 4;
     
     this.edgeBuffer = this.device.createBuffer({
@@ -322,7 +160,7 @@ export class FloatingEdgeRenderer {
     });
     
     this.uniformBuffer = this.device.createBuffer({
-      size: 64, // 4x4 matrix
+      size: 64,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       label: 'edge-uniforms'
     });
@@ -352,7 +190,7 @@ export class FloatingEdgeRenderer {
         @vertex
         fn vs_main(input: VertexInput) -> VertexOutput {
           var output: VertexOutput;
-          output.position = uniforms.viewProjection * vec4<f32>(input.position, 10.0, 1.0);
+          output.position = uniforms.viewProjection * vec4<f32>(input.position, ${Z_LAYERS.EDGES}, 1.0);
           output.color = input.color;
           output.uv = input.uv;
           return output;
@@ -372,11 +210,11 @@ export class FloatingEdgeRenderer {
         module: shaderModule,
         entryPoint: 'vs_main',
         buffers: [{
-          arrayStride: 32, // 8 floats * 4 bytes
+          arrayStride: 32,
           attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x2' },  // position
-            { shaderLocation: 1, offset: 8, format: 'float32x4' },  // color
-            { shaderLocation: 2, offset: 24, format: 'float32x2' }, // uv
+            { shaderLocation: 0, offset: 0, format: 'float32x2' },
+            { shaderLocation: 1, offset: 8, format: 'float32x4' },
+            { shaderLocation: 2, offset: 24, format: 'float32x2' },
           ]
         }]
       },
@@ -435,7 +273,6 @@ export class FloatingEdgeRenderer {
       const p1 = vertices[i];
       const p2 = vertices[i + 1];
       
-      // Calculate perpendicular vector for line thickness
       const dx = p2.x - p1.x;
       const dy = p2.y - p1.y;
       const length = Math.sqrt(dx * dx + dy * dy);
@@ -445,17 +282,14 @@ export class FloatingEdgeRenderer {
       const nx = -dy / length * thickness * 0.5;
       const ny = dx / length * thickness * 0.5;
       
-      // Create quad for this line segment (2 triangles = 6 vertices)
       const segmentVerts = [
-        // Triangle 1
-        p1.x + nx, p1.y + ny, ...color, 0, 0, // Top-left
-        p1.x - nx, p1.y - ny, ...color, 0, 1, // Bottom-left  
-        p2.x + nx, p2.y + ny, ...color, 1, 0, // Top-right
+        p1.x + nx, p1.y + ny, ...color, 0, 0,
+        p1.x - nx, p1.y - ny, ...color, 0, 1,
+        p2.x + nx, p2.y + ny, ...color, 1, 0,
         
-        // Triangle 2
-        p1.x - nx, p1.y - ny, ...color, 0, 1, // Bottom-left
-        p2.x - nx, p2.y - ny, ...color, 1, 1, // Bottom-right
-        p2.x + nx, p2.y + ny, ...color, 1, 0, // Top-right
+        p1.x - nx, p1.y - ny, ...color, 0, 1,
+        p2.x - nx, p2.y - ny, ...color, 1, 1,
+        p2.x + nx, p2.y + ny, ...color, 1, 0,
       ];
       
       geometry.push(...segmentVerts);
@@ -466,16 +300,16 @@ export class FloatingEdgeRenderer {
   
   async generateEdgeGeometry(
     edge: FloatingEdge, 
-    nodes: Map<string, DiagramNode>
+    nodes: DiagramNode[],
+    visualContentNodeManager?: VisualContentNodeManager
   ): Promise<Float32Array> {
-    const sourceNode = nodes.get(edge.sourceNodeId);
-    const targetNode = nodes.get(edge.targetNodeId);
+    const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
+    const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
     
     if (!sourceNode || !targetNode) return new Float32Array(0);
     
     const allVertices: Array<{x: number, y: number}> = [];
     
-    // Calculate source connection point
     const firstDirection = edge.userVertices.length > 0 
       ? {
           x: edge.userVertices[0].x - sourceNode.data.position.x,
@@ -488,16 +322,19 @@ export class FloatingEdgeRenderer {
     
     let sourcePoint: {x: number, y: number};
     
-    if (sourceNode.visual?.shape === 'none' && sourceNode.visual.visualContent) {
-      // Use shader-based edge detection for arbitrary shapes
-      // Note: This would require the node's rendered texture
-      // For now, fall back to geometric calculation
-      sourcePoint = this.connectionCalculator.calculateNodeEdgePoint(
-        sourceNode.data.position,
-        sourceNode.visual.size,
-        'circle', // Fallback shape
-        firstDirection
-      );
+    if (visualContentNodeManager) {
+      const sourceVisualNode = visualContentNodeManager.getVisualNode(edge.sourceNodeId);
+      
+      if (sourceVisualNode && sourceNode.visual!.shape === 'none' && sourceNode.visual!.visualContent) {
+        sourcePoint = await sourceVisualNode.getEdgePoint(firstDirection);
+      } else {
+        sourcePoint = this.connectionCalculator.calculateNodeEdgePoint(
+          sourceNode.data.position,
+          sourceNode.visual!.size,
+          sourceNode.visual!.shape as string,
+          firstDirection
+        );
+      }
     } else {
       sourcePoint = this.connectionCalculator.calculateNodeEdgePoint(
         sourceNode.data.position,
@@ -510,7 +347,6 @@ export class FloatingEdgeRenderer {
     allVertices.push(sourcePoint);
     allVertices.push(...edge.userVertices);
     
-    // Calculate target connection point
     const lastDirection = edge.userVertices.length > 0
       ? {
           x: targetNode.data.position.x - edge.userVertices[edge.userVertices.length - 1].x,
@@ -523,14 +359,22 @@ export class FloatingEdgeRenderer {
     
     let targetPoint: {x: number, y: number};
     
-    if (targetNode.visual?.shape === 'none' && targetNode.visual?.visualContent) {
-      // Use shader-based edge detection for arbitrary shapes
-      targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
-        targetNode.data.position,
-        targetNode.visual!.size,
-        'circle', // Fallback shape
-        {x: -lastDirection.x, y: -lastDirection.y}
-      );
+    if (visualContentNodeManager) {
+      const targetVisualNode = visualContentNodeManager.getVisualNode(edge.targetNodeId);
+      
+      if (targetVisualNode && targetNode.visual!.shape === 'none' && targetNode.visual!.visualContent) {
+        targetPoint = await targetVisualNode.getEdgePoint({
+          x: -lastDirection.x, 
+          y: -lastDirection.y
+        });
+      } else {
+        targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
+          targetNode.data.position,
+          targetNode.visual!.size,
+          targetNode.visual!.shape as string,
+          {x: -lastDirection.x, y: -lastDirection.y}
+        );
+      }
     } else {
       targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
         targetNode.data.position,
@@ -548,12 +392,12 @@ export class FloatingEdgeRenderer {
   async render(
     renderPass: GPURenderPassEncoder, 
     edges: FloatingEdge[], 
-    nodes: Map<string, DiagramNode>,
-    viewProjectionMatrix: number[] | Float32Array
+    nodes: DiagramNode[],
+    viewProjectionMatrix: number[] | Float32Array,
+    visualContentNodeManager?: VisualContentNodeManager
   ) {
     if (edges.length === 0) return;
     
-    // Update uniforms
     const matrixData = new Float32Array(viewProjectionMatrix);
     this.device.queue.writeBuffer(this.uniformBuffer, 0, matrixData);
     
@@ -561,10 +405,15 @@ export class FloatingEdgeRenderer {
     let totalVertices = 0;
     
     for (const edge of edges) {
-      const geometry = await this.generateEdgeGeometry(edge, nodes);
+      const geometry = await this.generateEdgeGeometry(edge, nodes, visualContentNodeManager);
+      console.log('i am edging');
       if (geometry.length === 0) continue;
+
+      if (geometry.length > 0) {
+        console.log('geometry big.')
+      }
+
       
-      // Write geometry to buffer at current offset
       this.device.queue.writeBuffer(
         this.edgeBuffer, 
         bufferOffset, 
@@ -573,12 +422,14 @@ export class FloatingEdgeRenderer {
         geometry.byteLength
       );
       
-      const vertexCount = geometry.length / 8; // 8 floats per vertex
+      const vertexCount = geometry.length / 8;
       bufferOffset += geometry.byteLength;
       totalVertices += vertexCount;
     }
+
     
     if (totalVertices > 0) {
+      console.log('hi i am total vertice big...')
       renderPass.setPipeline(this.renderPipeline);
       renderPass.setBindGroup(0, this.bindGroup);
       renderPass.setVertexBuffer(0, this.edgeBuffer);
@@ -586,24 +437,8 @@ export class FloatingEdgeRenderer {
     }
   }
   
-  // Method to use shader-based edge detection for 'none' shape nodes
-  async calculateShaderBasedEdgePoint(
-    nodeTexture: GPUTexture,
-    nodeCenter: {x: number, y: number},
-    targetDirection: {x: number, y: number},
-    maxDistance: number = 100
-  ): Promise<{x: number, y: number}> {
-    return await this.edgeDetector.detectEdgePoint(
-      nodeTexture,
-      nodeCenter,
-      targetDirection,
-      maxDistance
-    );
-  }
-  
   destroy() {
     this.edgeBuffer.destroy();
     this.uniformBuffer.destroy();
-    this.edgeDetector.destroy();
   }
 }

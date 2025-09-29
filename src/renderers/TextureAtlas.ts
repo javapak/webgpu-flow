@@ -48,7 +48,7 @@ export class TextureAtlas {
   }
 
   addText(text: string, fontSize: number = 14, color: string = '#ffffff'): TextureAtlasEntry | null {
-    const cacheKey = `${text}-${fontSize}-${color}`;
+    const cacheKey = `${text}-${fontSize}`;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;

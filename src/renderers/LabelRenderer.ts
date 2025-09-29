@@ -1,5 +1,5 @@
 import { TextureAtlas } from './TextureAtlas';
-import type { DiagramNode, Viewport } from '../types';
+import type { DiagramEdge, DiagramNode, Viewport } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
 
 export interface LabelInstanceData {
@@ -174,7 +174,7 @@ export class LabelRenderer {
       primitive: { topology: 'triangle-list' },
       depthStencil: {
         format: 'depth24plus',
-        depthWriteEnabled: false, 
+        depthWriteEnabled: true, 
         depthCompare: 'less',
       }
     });
@@ -226,12 +226,16 @@ private hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
     }
   }
 
-prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstanceData[] {
+prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewport: Viewport): LabelInstanceData[] {
   const nodesWithLabels = visibleNodes.filter(node => 
     node.data.label && node.data.label.trim().length > 0
   );
 
-  if (nodesWithLabels.length === 0) {
+  const edgesWithLabels = visibleEdges.filter(edge => 
+    edge.data?.label && edge.data?.label.trim().length > 0
+  )
+
+  if (nodesWithLabels.length === 0 && edgesWithLabels.length === 0) {
     return [];
   }
 
@@ -240,7 +244,10 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
   for (const node of nodesWithLabels) {
     const label = node.data.label!.trim();
     const fontSize = 244;
-    const textColor = '#ffffffff';
+    let textColor = '#ffffffff';
+
+    if (node.visual?.labelColor)
+        textColor = node.visual.labelColor;
 
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
@@ -254,6 +261,54 @@ prepareLabelData(visibleNodes: DiagramNode[], viewport: Viewport): LabelInstance
       // Position at node center
       const labelX = node.data.position.x;
       const labelY = node.data.position.y;
+
+      // FIX: Ensure UV coordinates are properly normalized
+      const atlasSize = this.textAtlas.getAtlasSize();
+      const u1 = atlasEntry.x / atlasSize;
+      const v1 = atlasEntry.y / atlasSize;
+      const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
+      const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
+
+      const textColorRGBA = this.hexToRgba(textColor);
+
+      console.log('Label entry:', {
+        text: label,
+        position: [labelX, labelY],
+        size: [labelWorldWidth, labelWorldHeight],
+        uv: [u1, v1, u2, v2],
+        atlasEntry: { x: atlasEntry.x, y: atlasEntry.y, w: atlasEntry.width, h: atlasEntry.height }
+      });
+
+      labelDataArray.push({
+        texCoords: [u1, v1, u2, v2],
+        color: [textColorRGBA.r, textColorRGBA.g, textColorRGBA.b, textColorRGBA.a],
+        position: [labelX, labelY],
+        size: [labelWorldWidth, labelWorldHeight]
+      });
+
+    } catch (error) {
+      console.error('Error preparing label:', label, error);
+    }
+  }
+
+    for (const edge of edgesWithLabels) {
+    console.log('edge label is being noticed OwO');
+    const label = edge.data?.label!.trim();
+    const fontSize = 244;
+    const textColor = '#ffffffff';
+
+    try {
+      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
+      if (!atlasEntry) continue;
+      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.1;
+
+      
+      const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
+      const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
+
+      // Position at node center
+      const labelX = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.x + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.x) / 2;
+      const labelY = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.y + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.y) / 2;
 
       // FIX: Ensure UV coordinates are properly normalized
       const atlasSize = this.textAtlas.getAtlasSize();

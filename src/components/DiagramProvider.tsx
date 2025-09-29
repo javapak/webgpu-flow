@@ -462,7 +462,9 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
       };
       
       const visibleNodes = spatial.getVisibleNodes(viewportBounds);
-      
+      const visibleEdges = state.edges.filter((edge) => 
+      visibleNodes.find((node) => node.id === edge.sourceNodeId || node.id === edge.targetNodeId));
+    
       const canvasSize = {
         width: canvasRef.current.width,
         height: canvasRef.current.height,
@@ -471,12 +473,12 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     
       
       try {
-        rendererRef.current.render(visibleNodes, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
+        rendererRef.current.render(visibleNodes, visibleEdges, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
       } catch (error) {
         console.error('Render error:', error);
       }
     }
-  }, [spatial, canvasRef.current?.width, canvasRef.current?.height]); // Only depend on spatial
+  }, [spatial, spatial.getVisibleNodes, canvasRef.current?.width, canvasRef.current?.height]); // Only depend on spatial
 
   // Initialize renderer
   const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {

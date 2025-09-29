@@ -1,25 +1,30 @@
 import React, { useEffect, useRef } from "react";
 import { useDiagram } from "../components/DiagramProvider";
-import type { EdgeSchema } from "../types";
 
 
 // Edge component
-interface EdgeProps {
+
+export interface EdgeProps{
   id: string;
-  source: string;
-  target: string;
-  sourcePort?: string;
-  targetPort?: string;
-  visual?: EdgeSchema['visual'];
+  sourceNodeId: string;
+  targetNodeId: string;
+  data?: Record<string, unknown>;
+  userVertices: Array<{x: number, y: number}>; // User-defined intermediate points
+  style: {
+    color: [number, number, number, number];
+    thickness: number;
+    dashPattern?: number[]; // Optional dashing
+  };
 }
 
 export const Edge: React.FC<EdgeProps> = ({ 
   id, 
-  source, 
-  target, 
-  sourcePort, 
-  targetPort, 
-  visual = {} 
+  sourceNodeId,
+  targetNodeId,
+  style,
+  userVertices,
+  data
+
 }) => {
   const { addEdge } = useDiagram();
   const hasAddedRef = useRef(false);
@@ -27,20 +32,14 @@ export const Edge: React.FC<EdgeProps> = ({
   useEffect(() => {
     // Only add the edge once
     if (!hasAddedRef.current) {
-      const edge: EdgeSchema = {
+      const edge: EdgeProps = {
         id,
-        source,
-        target,
-        sourcePort,
-        targetPort,
-        type: '',
-        data: {},
-        visual: {
-          color: '#6b7280',
-          width: 2,
-          style: 'solid' as const,
-          ...visual
-        }
+        sourceNodeId,
+        targetNodeId,
+        style,
+        userVertices,
+        data,
+        
       };
 
       addEdge(edge);

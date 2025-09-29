@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback} from 'react';
 import { DiagramProvider, DiagramCanvas } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import '@mantine/core/styles.css'
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
 import { VisualContentNodesTest } from './components/VisualContentNodesTest';
+import { ActionIcon, NativeSelect } from '@mantine/core';
+import {Dismiss16Regular, Settings16Regular, Warning16Filled} from '@fluentui/react-icons';
+
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -30,7 +33,8 @@ export const DiagramDemo: React.FC = () => {
   const [isMobile, setIsMobile] = useState(isMobileDevice());
   const [paletteVisible, setPaletteVisible] = useState(!isMobileDevice());
   const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
-
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>([])
   // Handle window resize for responsive design
   useEffect(() => {
     const handleResize = () => {
@@ -47,6 +51,7 @@ export const DiagramDemo: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
 
   // Mobile viewport setup
   useEffect(() => {
@@ -82,6 +87,10 @@ export const DiagramDemo: React.FC = () => {
     }
   };
 
+  const handleOpenSettingsMenu = useCallback(() => {
+     setSettingsOpen(!settingsOpen);
+  }, [settingsOpen, setSettingsOpen])
+
   const togglePalette = () => {
     setPaletteVisible(!paletteVisible);
   };
@@ -95,7 +104,6 @@ export const DiagramDemo: React.FC = () => {
         flexDirection: isMobile ? 'column' : 'row',
         overflow: 'hidden'
       }}>
-        
         {/* Mobile Header */}
         {isMobile && (
           <div style={{
@@ -119,7 +127,7 @@ export const DiagramDemo: React.FC = () => {
               onClick={togglePalette}
               style={{
                 padding: '8px 16px',
-                backgroundColor: paletteVisible ? '#0066cc' : '#666',
+                backgroundColor: paletteVisible ? '#0066cc' : '#777',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -175,9 +183,24 @@ export const DiagramDemo: React.FC = () => {
             </div>
           )}
 
-          {isMobile && <div style={{position: 'fixed', placeSelf: 'top', zIndex: '100' }}><VisualPropertyEditor/></div>}
+          <div style={{position: 'absolute',  placeSelf: 'top',  top: 150, zIndex: '100' }}><VisualPropertyEditor/></div>
 
-              
+          <div style={{position: 'fixed', paddingTop: 200, paddingRight: 50, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
+
+          {settingsOpen && <div style={{backgroundColor: '#3e3e3eff', position: 'absolute',  width: 250, placeSelf: 'center', top: 250, zIndex: '100'}}>
+          <div className="SettingsContentContainer">
+            <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
+            <h3 style={{justifyContent: 'center'}}>Settings</h3>
+            <strong style={{color: 'yellow', fontSize: 10}}><Warning16Filled/> options not yet functional</strong>
+
+            <div style={{display: 'block'}}>MSAA:
+                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect data={supportedSampleCount}/>}
+            </div>
+          <div style={{display: 'block'}}>
+              Supersampling: 
+              <NativeSelect data={['Disabled', '2x', '4x', '8x']} value='Disabled'/></div>
+          </div>
+          </div>}
           {/* Canvas Container */}
           <div style={{ 
             flex: '1',
@@ -192,14 +215,11 @@ export const DiagramDemo: React.FC = () => {
           <DiagramCanvas 
             width={canvasSize.width}
             height={canvasSize.height}
+            setSupportedSampleCount={setSupportedSampleCount}
             onNodeDropped={handleNodeDropped}
           />
 
           <VisualContentNodesTest />
-
-              
-          {!isMobile && <VisualPropertyEditor/>}
-            
           </div>
 
           {/* Mobile Instructions */}

@@ -15,7 +15,7 @@ export class VisualContentAtlas {
   private entries: Map<string, VisualAtlasEntry> = new Map();
   
   // Atlas configuration
-  private readonly ATLAS_SIZE = 1024; // Keep it simple like TextureAtlas
+  private readonly ATLAS_SIZE = 2048; 
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;

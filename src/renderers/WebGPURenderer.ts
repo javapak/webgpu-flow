@@ -1,9 +1,13 @@
 /// <reference types="@webgpu/types" />
-import type { DiagramNode, Viewport } from '../types';
+import type { DiagramEdge, DiagramNode, Viewport } from '../types';
 import tgpu from 'typegpu'
 import { LabelRenderer } from './LabelRenderer';
 import { VisualContentRenderer } from './VisualContentRenderer';
 import { Z_LAYERS } from '../utils/DepthConstants';
+import { FloatingEdgeRenderer } from './FloatingEdgeRenderer';
+import { VisualContentNodeManager } from '../compute/VisualContentNode';
+import { ShaderBasedEdgeDetector } from '../compute/ShaderBasedEdgeDetector';
+import GPUCapabilities from '../utils/GPUCapabilities';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -39,6 +43,10 @@ export class WebGPURenderer {
   private labelRenderer: LabelRenderer | null = null;
   private visualRenderer: VisualContentRenderer | null = null;
   private depthTexture: GPUTexture | null = null;
+  private edgeRenderer: FloatingEdgeRenderer | null = null;
+  private visualContentNodeManager: VisualContentNodeManager | null = null;
+  private gpuCapibilitiesRef: GPUCapabilities | null = null;
+
 
 
 async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
@@ -54,6 +62,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       // Initialize TypeGPU
       this.root = await tgpu.init();
       this.device = this.root.device;
+      this.gpuCapibilitiesRef = new GPUCapabilities(this.root.device);
+      await this.gpuCapibilitiesRef.checkMSAASupport();
       
       // Get WebGPU context
       this.context = canvas.getContext('webgpu') as GPUCanvasContext;
@@ -80,6 +90,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       // Initialize renderers
       try {
         this.labelRenderer = new LabelRenderer(this.device!, this.uniformBuffer!);
+        this.edgeRenderer = new FloatingEdgeRenderer(this.device!);
         await this.labelRenderer.initialize();
         console.log('Label renderer initialized successfully');
       } catch (error) {
@@ -90,6 +101,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       try {
         this.visualRenderer = new VisualContentRenderer(this.device!, this.uniformBuffer!);
         await this.visualRenderer.initialize();
+        const edgeDetector = new ShaderBasedEdgeDetector(this.device!);
+        this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
         console.log('Visual renderer initialized successfully');
       } catch (error) {
         console.error('Failed to initialize visual renderer:', error);
@@ -112,6 +125,12 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       return false;
     }
   }
+
+  get sampleCountsSupported() {
+    return this.gpuCapibilitiesRef?.sampleCountsSupported;
+  }
+
+
 
   private async setupRenderPipelines() {
     if (!this.device) throw new Error('Device not initialized');
@@ -678,12 +697,13 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     }
   }
 
-  render(
+  async render(
     visibleNodes: DiagramNode[],
+    visibleEdges: DiagramEdge[],
     viewport: Viewport,
     canvasSize: { width: number; height: number },
     selectedNodes: DiagramNode[] = []
-  ): void {
+  ): Promise<void> {
     if (!this.initialized || !this.device || !this.context || !this.nodeRenderPipeline) {
       console.warn('WebGPU renderer not properly initialized');
       return;
@@ -717,6 +737,9 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       
       }
 
+
+      
+
       // Early exit if no nodes to render
       if (visibleNodes.length === 0) {
         // Still clear the canvas and render grid
@@ -739,8 +762,6 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
           }
 
         });
-
-        // Still render grid even without nodes
         this.renderGrid(renderPass, viewport, canvasSize);
         
         renderPass.end();
@@ -748,8 +769,12 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         return;
       }
 
+
       // Create proper view-projection matrix for 2D rendering
       const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
+
+              // Still render grid even without nodes
+      
 
       // Update uniform buffers
       this.device.queue.writeBuffer(
@@ -778,6 +803,11 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         // Validate node structure
         if (!node.data || !node.data.position) {
           console.warn('Invalid node structure:', node);
+          return null;
+        }
+
+        if (node.visual?.shape === 'none'){
+          console.log('skip rendering of none')
           return null;
         }
         
@@ -907,7 +937,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
           });
         }
 
-        const flatHandleData = new Float32Array(handleData.length * 8); // 8 floats per handle
+      const flatHandleData = new Float32Array(handleData.length * 8); // 8 floats per handle
         handleData.forEach((handle, i) => {
           const offset = i * 8;
           flatHandleData[offset] = handle.position[0];
@@ -944,23 +974,9 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       }
     });
 
-      // Render grid first (background)
-      this.renderGrid(renderPass, viewport, canvasSize);
+    this.renderGrid(renderPass, viewport, canvasSize);
 
-      if (this.visualRenderer && visibleNodes.some((node) => node.visual?.visualContent )) {
-    try {
 
-      
-      const visualData = this.visualRenderer.prepareVisualData(visibleNodes)
-      if (visualData.length > 0) {
-        this.visualRenderer.render(renderPass, visualData);
-      }
-
-    }
-    catch (e) {
-
-    }
-  }
 
       // Render nodes
       if (nodeData.length > 0) {
@@ -968,6 +984,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         renderPass.setBindGroup(0, this.nodeBindGroup!);
         renderPass.draw(6, nodeData.length);
       }
+
+  
 
       // Render handles
       if (handleData.length > 0 && this.handleRenderPipeline) {
@@ -978,7 +996,22 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
       if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
     try {
-    const labelData = this.labelRenderer.prepareLabelData(visibleNodes, viewport);
+    const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
+    const visualData = this.visualRenderer?.prepareVisualData(visibleNodes);
+
+
+          await this.edgeRenderer!.render(
+          renderPass,
+          visibleEdges,
+          visibleNodes, // Pass nodes array directly
+          viewProjectionMatrix,
+          this.visualContentNodeManager! // Pass the manager
+      );
+
+    if (visualData?.length) {
+      this.visualRenderer?.render(renderPass, visualData);
+        
+    }
     
     if (labelData.length > 0) {
       console.log('About to render labels:', labelData.length);
@@ -990,9 +1023,12 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     console.error('Error rendering labels:', error);
   }
 
-}
 
-      this.renderGrid(renderPass, viewport, canvasSize);
+      if (visibleEdges) {
+        console.log('visible edge info: ', visibleEdges);
+      }
+
+
 
 
       renderPass.end();
@@ -1000,10 +1036,12 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
       console.log('WebGPU render completed successfully');
 
-    } catch (error) {
-      console.error('WebGPU render error:', error);
-    }
+    } 
+    
+  } catch (e) {
+
   }
+}
 
   clearTextAtlas(): void {
     if (this.labelRenderer) {

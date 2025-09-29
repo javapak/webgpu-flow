@@ -251,10 +251,10 @@ export class VisualContentRenderer {
         }
 
         if (type === 'emoji' || content.length <= 2) {
-          atlasEntry = this.visualAtlas.addEmoji(content, iconSize);
+          atlasEntry = this.visualAtlas.addEmoji(content, iconSize, node);
         } else {
           const color = node.visual?.color || '#3b82f6';
-          atlasEntry = this.visualAtlas.addColoredShape('circle', color, iconSize);
+          atlasEntry = this.visualAtlas.addColoredShape('circle', color, iconSize, node);
         }
         
         if (!atlasEntry) {
@@ -347,6 +347,15 @@ export class VisualContentRenderer {
   clearAtlas(): void {
     this.visualAtlas.clear();
   }
+
+  get atlas(): VisualContentAtlas {
+    return this.atlas;
+  }
+
+  get Device(): GPUDevice {
+    return this.device;
+  }
+  
 
   getAtlasStats() {
     return this.visualAtlas.getStats();

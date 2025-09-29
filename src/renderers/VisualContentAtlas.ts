@@ -1,3 +1,5 @@
+import type { DiagramNode } from "../types";
+
 export interface VisualAtlasEntry {
   x: number;
   y: number;
@@ -50,13 +52,33 @@ export class VisualContentAtlas {
     });
   }
 
+   private hashSvgContent(svgContent: string): string {
+    let hash = 2166136261; // FNV offset basis
+    for (let i = 0; i < svgContent.length; i++) {
+      hash ^= svgContent.charCodeAt(i);
+      hash = (hash * 16777619) >>> 0; // FNV prime, force to 32-bit unsigned
+    }
+    return hash.toString(36); // Base 36 for shorter strings
+  }
+  
+  /* private hashImageUrl(imageUrl: string): string {
+    // djb2 hash
+    let hash = 5381;
+    for (let i = 0; i < imageUrl.length; i++) {
+      hash = ((hash << 5) + hash + imageUrl.charCodeAt(i)) >>> 0;
+    }
+    return hash.toString(36);
+  } */
+
   // Simple emoji/text rendering (synchronous)
-  addEmoji(emoji: string, size: number = 64): VisualAtlasEntry | null {
-    const cacheKey = `emoji-${emoji}-${size}`;
+  addEmoji(emoji: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
+    const cacheKey = `emoji:${node.visual!.visualContent!.content as string}`;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;
     }
+
+    node.visual!.cacheKey = cacheKey;
 
     const padding = 4;
     const totalSize = size + padding * 2;
@@ -104,9 +126,14 @@ export class VisualContentAtlas {
     return entry;
   }
 
+  getEntry(key: string): VisualAtlasEntry | undefined {
+    if (this.entries.has(key)) return this.entries.get(key);
+  }
+
   // Simple colored shape rendering (synchronous)
-  addColoredShape(shape: string, color: string, size: number = 64): VisualAtlasEntry | null {
-    const cacheKey = `shape-${shape}-${color}-${size}`;
+  addColoredShape(shape: string, color: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
+    const cacheKey = `svg:${this.hashSvgContent(node.visual!.visualContent!.content)}`;
+    node.visual!.cacheKey = cacheKey;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;

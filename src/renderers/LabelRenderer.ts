@@ -104,7 +104,9 @@ export class LabelRenderer {
         @location(1) color: vec4<f32>
       ) -> @location(0) vec4<f32> {
         let textSample = textureSample(textAtlas, textSampler, uv);
-        
+          if (textSample.a < 0.01) {
+            discard;
+          }
         // Use the alpha channel for text rendering
         // White text on transparent background
         return vec4<f32>(color.rgb, textSample.a * color.a);
@@ -243,7 +245,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
 
   for (const node of nodesWithLabels) {
     const label = node.data.label!.trim();
-    const fontSize = 244;
+    const fontSize = 100;
     let textColor = '#ffffffff';
 
     if (node.visual?.labelColor)
@@ -252,7 +254,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
       if (!atlasEntry) continue;
-      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.1;
+      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.35;
 
       
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
@@ -294,13 +296,15 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     for (const edge of edgesWithLabels) {
     console.log('edge label is being noticed OwO');
     const label = edge.data?.label!.trim();
-    const fontSize = 244;
-    const textColor = '#ffffffff';
+    const fontSize = 100;
+    let textColor = '#ffffffff';
+    if (edge.style.labelColor)
+      textColor = edge.style.labelColor;
 
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
       if (!atlasEntry) continue;
-      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.1;
+      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.35;
 
       
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;

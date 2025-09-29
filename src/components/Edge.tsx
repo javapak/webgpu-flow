@@ -11,6 +11,7 @@ export interface EdgeProps{
   data?: Record<string, unknown>;
   userVertices: Array<{x: number, y: number}>; // User-defined intermediate points
   style: {
+    labelColor?: string,
     color: [number, number, number, number];
     thickness: number;
     dashPattern?: number[]; // Optional dashing

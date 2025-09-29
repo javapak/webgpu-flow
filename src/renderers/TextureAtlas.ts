@@ -29,7 +29,6 @@ export class TextureAtlas {
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = 'high';
     this.ctx.textRendering = 'optimizeLegibility';
-    this.ctx.filter = 'blur(5px)';
 
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);
     this.createGPUTexture();
@@ -47,7 +46,7 @@ export class TextureAtlas {
     });
   }
 
-  addText(text: string, fontSize: number = 14, color: string = '#ffffff'): TextureAtlasEntry | null {
+  addText(text: string, fontSize: number = 50, color: string = '#ffffff'): TextureAtlasEntry | null {
     const cacheKey = `${text}-${fontSize}`;
     
     if (this.entries.has(cacheKey)) {
@@ -55,7 +54,7 @@ export class TextureAtlas {
     }
 
     // Measure text
-    this.ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+    this.ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
     const metrics = this.ctx.measureText(text);
     const textWidth = Math.ceil(metrics.width + 8); // Add padding
     const textHeight = Math.ceil(fontSize * 1.5); // Add vertical padding
@@ -75,12 +74,13 @@ export class TextureAtlas {
     this.ctx.clearRect(this.currentX, this.currentY, textWidth, textHeight);
 
     // Render text to atlas
-    this.ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+    this.ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
     this.ctx.fillStyle = color;
     this.ctx.textAlign = 'left';
     this.ctx.textBaseline = 'top';
+    this.ctx.shadowColor = color;
+    this.ctx.shadowBlur = 10;
     this.ctx.fillText(text, this.currentX + 4, this.currentY + 4);
-    
     // Reset shadow
     this.ctx.shadowColor = 'transparent';
     this.ctx.shadowBlur = 0;

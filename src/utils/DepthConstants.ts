@@ -3,6 +3,6 @@ export const Z_LAYERS = {
   LABELS: -0.5,    
   VISUALS: -0.7,
   NODES: -0.75,    
-  EDGES: -0.775,      
-  BACKGROUND: -0.85,       
+  EDGES: -0.95,      
+  BACKGROUND: -1,       
 };

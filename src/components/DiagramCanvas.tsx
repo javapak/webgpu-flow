@@ -111,7 +111,7 @@ useEffect(() => {
 
   // Update viewport size when canvas size changes
   useEffect(() => {
-    setViewport({ width, height });
+    setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
     getRenderer()?.updateDepthTextureOnSizeChange({width, height});
   }, [width, height, setViewport, getRenderer]);
 

@@ -612,6 +612,12 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   }, [spatial]);
 
   useEffect(() => {
+    if (state.interaction.selectedNodes.length > 0)
+        
+        (document.getElementById('title-ref') as HTMLTitleElement).textContent = `Selected node: ${state.interaction.selectedNodes[0].id}`;
+    else {
+      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'WebGPU Flow';
+    }
   }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 
   // Rebuild spatial index when nodes change

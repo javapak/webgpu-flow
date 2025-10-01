@@ -570,12 +570,20 @@ export class FloatingEdgeRenderer {
     
     // Render regular edges
     for (const edge of edges) {
-      const geometry = await this.generateEdgeGeometry(
+        let geometry = await this.generateEdgeGeometry(
         edge, 
         nodes, 
         visualContentNodeManager,
         false
       );
+      if (edge.id === selectedEdges?.[0]?.id) {
+        geometry = await this.generateEdgeGeometry(
+        {...edge, style: { ...edge.style, thickness: edge.style.thickness + 2, color: [1.0, 0.5, 0.0, 1.0] }},
+        nodes, 
+        visualContentNodeManager,
+        false);
+      }
+
       
       if (geometry.length === 0) continue;
       

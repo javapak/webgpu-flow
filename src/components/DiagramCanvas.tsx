@@ -232,6 +232,7 @@ useEffect(() => {
       const hitResult = performHitTest(canvasPos);
       if (hitResult.selectedEdge) {
         console.log('Edge selected')
+        clearEdgeSelection();
         clearSelection();
         selectEdge(hitResult.selectedEdge);
 
@@ -491,17 +492,21 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
   if (!drawingState.isDrawing && mode !== 'draw_edge') {
     // First check for resize handles on selected nodes
 
-    if (interaction.selectedEdges.length > 0) {
-      if (hitResult.isEdgeVertex) {
-        // Start dragging edge vertex
-        startDrag('edge-vertex', canvasPos, undefined, hitResult.selectedEdge!.id, hitResult.edgeVertexIndex);
-        return;
-      }
+    if (interaction.selectedEdges.length > 0 && hitResult.isEdgeVertex) {
+      // Start dragging edge vertex
+      startDrag('edge-vertex', canvasPos, undefined, hitResult.selectedEdge!.id, hitResult.edgeVertexIndex);
+      return;
     }
-    else if (hitResult.selectedEdge) {
-      console.log('Edge selected')
-      selectEdge(hitResult.selectedEdge);
+
+    if (hitResult.selectedEdge) {
+      // Select edge, but do not block viewport drag if clicking on empty canvas
       clearSelection();
+      selectEdge(hitResult.selectedEdge);
+      // If not clicking on an edge vertex or handle, allow viewport drag
+      if (!hitResult.isEdgeVertex && hitResult.nodes.length === 0 && hitResult.resizeHandle === 'none') {
+        startDrag('viewport', canvasPos);
+        onCanvasClick?.(hitResult.worldPos);
+      }
     }
     else if (hitResult.resizeHandle !== 'none') {
       startDrag('resize', canvasPos, hitResult.resizeHandle);
@@ -509,15 +514,17 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Then check for node selection
     else if (hitResult.nodes.length > 0) {
       const topNode = hitResult.nodes[0];
+      clearEdgeSelection();
+      clearSelection();
       selectNode(topNode);
       startDrag('node', canvasPos);
       onNodeClick?.(topNode);
     } 
     else {
-
-        clearSelection();
-        startDrag('viewport', canvasPos);
-        onCanvasClick?.(hitResult.worldPos);
+      clearSelection();
+      clearEdgeSelection();
+      startDrag('viewport', canvasPos);
+      onCanvasClick?.(hitResult.worldPos);
     }
   }
 }, [isMobile, getCanvasMousePos, drawingState, startDrawing, addControlPoint, mode, performHitTest, 

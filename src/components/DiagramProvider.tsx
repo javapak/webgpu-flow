@@ -87,6 +87,7 @@ type DiagramAction =
   | { type: 'SELECT_NODE'; node: DiagramNode | null }
   | { type: 'SELECT_EDGE'; edge: DiagramEdge | null }
   | { type: 'CLEAR_SELECTION' }
+  | { type: 'CLEAR_EDGE_SELECTION' }
   | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex'; startPos: Point; resizeHandle?: ResizeHandle; edgeId?: string; vertexIndex?: number }  | { type: 'UPDATE_DRAG'; currentPos: Point }
   | { type: 'END_DRAG' };
 
@@ -210,6 +211,15 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         interaction: {
           ...state.interaction,
           selectedNodes: [],
+        },
+      };
+    
+    case 'CLEAR_EDGE_SELECTION':
+      return {
+        ...state,
+        interaction: {
+          ...state.interaction,
+          selectedEdges: [],
         },
       };
 
@@ -795,7 +805,7 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
 }, []);
 
 const clearEdgeSelection = useCallback(() => {
-  dispatch({ type: 'CLEAR_SELECTION' });
+  dispatch({ type: 'CLEAR_EDGE_SELECTION' });
 }, []);
 
 const updateEdgeVertex = useCallback((edgeId: string, vertexIndex: number, newPosition: {x: number, y: number}) => {
@@ -849,7 +859,7 @@ const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
 // Add hit testing for edges:
 const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean} => {
   const worldPoint = screenToWorld(screenPoint);
-  const threshold = 5 / state.viewport.zoom; // Hit test threshold in world coordinates
+  const threshold = 2 / state.viewport.zoom; // Hit test threshold in world coordinates
   
   // Check vertices first (if any edge is selected)
   if (state.interaction.selectedEdges.length > 0) {

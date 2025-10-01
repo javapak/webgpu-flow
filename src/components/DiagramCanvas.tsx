@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
+import type { DiagramEdge } from '../types';
+import { add } from 'typegpu/std';
 
 interface DiagramCanvasProps {
   width: number;
@@ -59,11 +61,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     viewport,
     interaction,
     addNode,
+    
     hitTestWithHandles,
     selectNode,
     clearSelection,
     startDrag,
     updateDrag,
+    startDrawing,
+    drawingState,
+    exitDrawMode,
+    completeEdge,
+    addControlPoint,
     endDrag,
     setViewport,
     screenToWorld,
@@ -72,6 +80,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     initializeRenderer,
     isRendererInitialized,
     renderFrame,
+    addEdge,
+    mode
   } = useDiagram();
 
 
@@ -120,7 +130,7 @@ useEffect(() => {
     if (isRendererInitialized() && canvasRef.current) {
       renderFrame();
     }
-  }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, renderFrame]);
+  }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, renderFrame]);
 
   // Update debug info periodically
   useEffect(() => {
@@ -384,6 +394,12 @@ useEffect(() => {
 
 
 
+  useEffect(() => {
+    if (mode === 'draw_edge')
+      setCurrentCursor('crosshair');
+    else 
+      setCurrentCursor('grabbing');
+  }, [mode]);
 
   // Mouse event handlers (for desktop)
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -391,6 +407,14 @@ useEffect(() => {
     
     const canvasPos = getCanvasMousePos(e);
     const hitResult = performHitTest(canvasPos);
+    const worldPos = screenToWorld(canvasPos);
+
+    if (mode === 'draw_edge' && drawingState.isDrawing) {
+      // Update last control point to current mouse position
+      console.log('updating last control point to: ', canvasPos);
+      addControlPoint(worldPos, drawingState.userVertices.length > 0 ? true: false);
+      return;
+    }
     
     let newCursor = 'grab';
     
@@ -409,10 +433,10 @@ useEffect(() => {
       }
     }
     
-    if (newCursor !== currentCursor) {
+    if (newCursor !== currentCursor && mode !== 'draw_edge') {
       setCurrentCursor(newCursor);
     }
-  }, [isMobile, getCanvasMousePos, performHitTest, interaction.dragState, updateDrag, currentCursor]);
+  }, [isMobile, drawingState, getCanvasMousePos, performHitTest, interaction.dragState, updateDrag, screenToWorld, mode, currentCursor]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isMobile) return; // Skip on mobile
@@ -420,6 +444,32 @@ useEffect(() => {
     const canvasPos = getCanvasMousePos(e);
     const hitResult = performHitTest(canvasPos);
 
+    if (mode === 'draw_edge') {
+    
+    if (hitResult.nodes.length > 0 && !drawingState.isDrawing) {
+      console.log('drawing started....');
+      startDrawing(hitResult.nodes[0].id);
+      
+   }
+
+    else if (drawingState.isDrawing && hitResult.nodes.length === 0) {
+        console.log('adding control point at: ', canvasPos);
+        addControlPoint(canvasPos);
+    } 
+
+    else if (drawingState.isDrawing && hitResult.nodes.length > 0) {
+      if (hitResult.nodes[0].id !== drawingState.sourceNodeId) {
+
+        addEdge(completeEdge(hitResult.nodes[0].id)!);
+        exitDrawMode();
+    
+      }
+    }
+  }
+
+
+
+if (!drawingState.isDrawing && mode !== 'draw_edge') {
     if (hitResult.resizeHandle !== 'none') {
       startDrag('resize', canvasPos, hitResult.resizeHandle);
     } else if (hitResult.nodes.length > 0) {
@@ -432,10 +482,15 @@ useEffect(() => {
       startDrag('viewport', canvasPos);
       onCanvasClick?.(hitResult.worldPos);
     }
-  }, [isMobile, getCanvasMousePos, performHitTest, startDrag, selectNode, clearSelection, onNodeClick, onCanvasClick]);
+  }
 
-  const handleMouseUp = useCallback(() => {
+  
+  
+  }, [isMobile, getCanvasMousePos, drawingState.isDrawing, startDrawing, addControlPoint, mode, performHitTest, startDrag, selectNode, clearSelection, onNodeClick, onCanvasClick]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (isMobile) return; // Skip on mobile
+
     
     if (interaction.dragState.isDragging) {
       endDrag();
@@ -494,6 +549,10 @@ useEffect(() => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   }, [isMobile]);
+
+  useEffect(() => {
+    console.log('Edge completed');
+  }, [completeEdge]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     if (isMobile) return;

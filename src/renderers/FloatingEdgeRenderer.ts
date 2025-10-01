@@ -1,3 +1,4 @@
+import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { VisualContentNodeManager } from '../compute/VisualContentNode';
 import type { DiagramNode } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
@@ -205,6 +206,7 @@ export class FloatingEdgeRenderer {
     });
     
     this.renderPipeline = this.device.createRenderPipeline({
+      label: 'edge-render-pipeline',
       layout: 'auto',
       vertex: {
         module: shaderModule,
@@ -301,16 +303,26 @@ export class FloatingEdgeRenderer {
   async generateEdgeGeometry(
     edge: FloatingEdge, 
     nodes: DiagramNode[],
-    visualContentNodeManager?: VisualContentNodeManager
+    visualContentNodeManager?: VisualContentNodeManager,
   ): Promise<Float32Array> {
+
     const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
     const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
+    let altPosition = {x: 0, y: 0};
     
-    if (!sourceNode || !targetNode) return new Float32Array(0);
+    if (!sourceNode) return new Float32Array(0);
+
+    if (!targetNode)
+      console.log('================================================================================================================================no target node for edge which means this must be the previewEdge: ', edge);
+      const temp = edge.userVertices.pop();
+      altPosition = temp ? {x: temp.x, y: temp.y} : {x: sourceNode.data.position.x + 100, y: sourceNode.data.position.y + 100};
     
+  
     const allVertices: Array<{x: number, y: number}> = [];
-    
-    const firstDirection = edge.userVertices.length > 0 
+
+    let firstDirection = {x: 0, y: 0};
+    if (targetNode) {
+   firstDirection = edge.userVertices.length > 0 
       ? {
           x: edge.userVertices[0].x - sourceNode.data.position.x,
           y: edge.userVertices[0].y - sourceNode.data.position.y
@@ -319,6 +331,18 @@ export class FloatingEdgeRenderer {
           x: targetNode.data.position.x - sourceNode.data.position.x,
           y: targetNode.data.position.y - sourceNode.data.position.y
         };
+      }
+      else {
+        firstDirection = edge.userVertices.length > 0
+        ? {
+            x: edge.userVertices[0].x - sourceNode.data.position.x,
+            y: edge.userVertices[0].y - sourceNode.data.position.y
+          }
+        : {
+            x: altPosition.x - sourceNode.data.position.x,
+            y: altPosition.y - sourceNode.data.position.y
+          };
+      }
     
     let sourcePoint: {x: number, y: number};
     
@@ -346,8 +370,9 @@ export class FloatingEdgeRenderer {
     
     allVertices.push(sourcePoint);
     allVertices.push(...edge.userVertices);
-    
-    const lastDirection = edge.userVertices.length > 0
+    let lastDirection = {x: 0, y: 0};
+    if (targetNode) {
+    lastDirection = edge.userVertices.length > 0
       ? {
           x: targetNode.data.position.x - edge.userVertices[edge.userVertices.length - 1].x,
           y: targetNode.data.position.y - edge.userVertices[edge.userVertices.length - 1].y
@@ -356,32 +381,48 @@ export class FloatingEdgeRenderer {
           x: targetNode.data.position.x - sourceNode.data.position.x,
           y: targetNode.data.position.y - sourceNode.data.position.y
         };
+      }
+      else {
+        lastDirection = edge.userVertices.length > 0
+        ? {
+            x: altPosition.x - edge.userVertices[edge.userVertices.length - 1].x,
+            y: altPosition.y - edge.userVertices[edge.userVertices.length - 1].y
+          }
+        : {
+            x: altPosition.x - sourceNode.data.position.x,
+            y: altPosition.y - sourceNode.data.position.y
+          };
+      }
     
-    let targetPoint: {x: number, y: number};
+    let targetPoint: {x: number, y: number} = {x: 0, y: 0};
     
     if (visualContentNodeManager) {
       const targetVisualNode = visualContentNodeManager.getVisualNode(edge.targetNodeId);
       
-      if (targetVisualNode && targetNode.visual!.shape === 'none' && targetNode.visual!.visualContent) {
+      if (targetVisualNode && targetNode && targetNode.visual!.shape === 'none' && targetNode.visual!.visualContent) {
         targetPoint = await targetVisualNode.getEdgePoint({
           x: -lastDirection.x, 
           y: -lastDirection.y
         });
       } else {
+        if (targetNode) {
         targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
           targetNode.data.position,
           targetNode.visual!.size,
           targetNode.visual!.shape as string,
           {x: -lastDirection.x, y: -lastDirection.y}
         );
+        }
       }
     } else {
+      if (targetNode) {
       targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
         targetNode.data.position,
         targetNode.visual!.size,
         targetNode.visual!.shape as string,
         {x: -lastDirection.x, y: -lastDirection.y}
       );
+      }
     }
     
     allVertices.push(targetPoint);
@@ -394,9 +435,16 @@ export class FloatingEdgeRenderer {
     edges: FloatingEdge[], 
     nodes: DiagramNode[],
     viewProjectionMatrix: number[] | Float32Array,
-    visualContentNodeManager?: VisualContentNodeManager
+    visualContentNodeManager?: VisualContentNodeManager,
+    previewEdge?: EdgeDrawingState
   ) {
     if (edges.length === 0) return;
+
+    if (previewEdge) {
+      const tempEdge = {...previewEdge, id: 'preview-edge', sourceNodeId: previewEdge.sourceNodeId as string, targetNodeId: '', userVertices: previewEdge.userVertices as Array<{x: number, y: number}>, style: previewEdge.style as { color: [number, number, number, number]; thickness: number; dashPattern?: number[]}  };
+      console.log('rendering with preview edge: ', tempEdge);
+      edges = [...edges, tempEdge];
+    }
     
     const matrixData = new Float32Array(viewProjectionMatrix);
     this.device.queue.writeBuffer(this.uniformBuffer, 0, matrixData);

@@ -8,6 +8,7 @@ import { FloatingEdgeRenderer } from './FloatingEdgeRenderer';
 import { VisualContentNodeManager } from '../compute/VisualContentNode';
 import { ShaderBasedEdgeDetector } from '../compute/ShaderBasedEdgeDetector';
 import GPUCapabilities from '../utils/GPUCapabilities';
+import type { EdgeDrawingState } from '../components/DiagramProvider';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -682,6 +683,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
     });
   }
+  
 
   updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
     if (this.device && this.canvas) {
@@ -702,7 +704,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     visibleEdges: DiagramEdge[],
     viewport: Viewport,
     canvasSize: { width: number; height: number },
-    selectedNodes: DiagramNode[] = []
+    selectedNodes: DiagramNode[] = [],
+    previewEdge?: EdgeDrawingState | null
   ): Promise<void> {
     if (!this.initialized || !this.device || !this.context || !this.nodeRenderPipeline) {
       console.warn('WebGPU renderer not properly initialized');
@@ -1005,13 +1008,16 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
           visibleEdges,
           visibleNodes, // Pass nodes array directly
           viewProjectionMatrix,
-          this.visualContentNodeManager! // Pass the manager
+          this.visualContentNodeManager!, // Pass the manager
+          previewEdge ? previewEdge : undefined
+        
       );
 
     if (visualData?.length) {
       this.visualRenderer?.render(renderPass, visualData);
         
     }
+
     
     if (labelData.length > 0) {
       console.log('About to render labels:', labelData.length);

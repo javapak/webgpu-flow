@@ -1,4 +1,5 @@
 import type { NodeSchema } from "../types";
+import type { DiagramNode } from "./SpatialIndex";
 
 export type ResizeHandle = 'none' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -44,12 +45,12 @@ export class MouseInteractions {
   // Check if a point is inside a node's bounds
   static isPointInNode(
     worldPos: { x: number; y: number },
-    node: NodeSchema
+    node: DiagramNode
   ): boolean {
     const nodeX = node.data.position?.x || 0;
     const nodeY = node.data.position?.y || 0;
-    const width = node.visual.size?.width || 120;
-    const height = node.visual.size?.height || 80;
+    const width = node.visual!.size?.width || 120;
+    const height = node.visual!.size?.height || 80;
     
     const left = nodeX - width / 2;
     const right = nodeX + width / 2;
@@ -250,8 +251,8 @@ private static determineHandleType(
   // Find the topmost node at a given position
   static findNodeAtPosition(
     worldPos: { x: number; y: number },
-    nodes: NodeSchema[]
-  ): NodeSchema | null {
+    nodes: DiagramNode[]
+  ): DiagramNode | null {
     // Iterate in reverse order to check topmost nodes first
     for (let i = nodes.length - 1; i >= 0; i--) {
       if (this.isPointInNode(worldPos, nodes[i])) {

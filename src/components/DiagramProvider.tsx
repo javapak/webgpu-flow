@@ -1,9 +1,23 @@
-import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef } from "react";
+import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef, useState } from "react";
 import { useSpatialIndex, type SpatialDiagramHook } from "../hooks/useSpatialIndex";
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
 import { MouseInteractions, type ResizeHandle } from "../utils/MouseInteractions";
 import type { Viewport, DiagramState, DiagramNode, DiagramEdge } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
+import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
+
+enum InteractionMode {
+  SELECT = 'select',
+  DRAW_EDGE = 'draw_edge'
+}
+
+export interface EdgeDrawingState {
+  isDrawing: boolean;
+  sourceNodeId: string | null;
+  userVertices: Array<{x: number, y: number}>;
+  style?: { color: [number, number, number, number]; thickness: number};
+}
+
 
 export interface DiagramContextValue extends DiagramState {
   // Spatial-aware methods
@@ -14,6 +28,14 @@ export interface DiagramContextValue extends DiagramState {
   getVisibleNodes: () => DiagramNode[];
   hitTestPoint: (screenPoint: Point) => DiagramNode[];
   hitTestWithHandles: (screenPoint: Point) => { nodes: DiagramNode[]; resizeHandle: ResizeHandle };
+  mode: InteractionMode;
+  drawingState: EdgeDrawingState;
+  toggleMode: () => void;
+  exitDrawMode: () => void;
+  startDrawing: (nodeId: string) => void;
+  addControlPoint: (point: {x: number, y: number}, replaceLast?: boolean) => void;
+  completeEdge: (targetNodeId: string) => FloatingEdge | null;
+  cancelDrawing: () => void;
   
   // Viewport methods
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;
@@ -391,6 +413,13 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const rendererRef = useRef<WebGPURenderer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef(state); // Keep current state in ref
+  
+  const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
+  const [drawingState, setDrawingState] = useState<EdgeDrawingState>({
+    isDrawing: false,
+    sourceNodeId: null,
+    userVertices: []
+  });
 
   // Update state ref whenever state changes
   useEffect(() => {
@@ -473,7 +502,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     
       
       try {
-        rendererRef.current.render(visibleNodes, visibleEdges, currentState.viewport, canvasSize, currentState.interaction.selectedNodes);
+        rendererRef.current.render(visibleNodes, visibleEdges, currentState.viewport, canvasSize, currentState.interaction.selectedNodes, drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined);
       } catch (error) {
         console.error('Render error:', error);
       }
@@ -639,9 +668,108 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     };
   }, []);
 
+
+  const toggleMode = useCallback(() => {
+
+    setMode(prev => 
+      prev === InteractionMode.SELECT 
+        ? InteractionMode.DRAW_EDGE 
+        : InteractionMode.SELECT
+    );
+  }, []);
+
+  const exitDrawMode = useCallback(() => {
+    setMode(InteractionMode.SELECT);
+    setDrawingState({
+      isDrawing: false,
+      sourceNodeId: null,
+      userVertices: []
+    });
+    
+  }, []);
+
+  const startDrawing = useCallback((nodeId: string) => {
+    setDrawingState({
+      isDrawing: true,
+      sourceNodeId: nodeId,
+      userVertices: [],
+      style: { color: [0, 0, 1, 0.8],
+        thickness: 2
+      }
+    });
+  }, []);
+
+  const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?: boolean) => {
+    setDrawingState(prev => { if (replaceLast) prev.userVertices.pop();
+      return ({
+      ...prev,
+      userVertices: [...prev.userVertices, point]
+    })
+  });
+    console.log('added edge point at: ', point);
+  }, []);
+
+  const completeEdge = useCallback((targetNodeId: string): FloatingEdge | null => {
+    if (!drawingState.sourceNodeId) return null;
+
+    const newEdge: FloatingEdge = {
+      id: `edge-${Date.now()}`,
+      sourceNodeId: drawingState.sourceNodeId,
+      targetNodeId: targetNodeId,
+      userVertices: [...drawingState.userVertices],
+      style: {
+        color: [1, 1, 1, 1],
+        thickness: 2
+      }
+    };
+
+    console.log('completed edge: ', newEdge);
+
+    // Reset drawing state
+    setDrawingState({
+      isDrawing: false,
+      sourceNodeId: null,
+      userVertices: []
+    });
+    console.log('completed edge: ', newEdge);
+
+    return newEdge;
+  }, [drawingState]);
+
+  const cancelDrawing = useCallback(() => {
+    setDrawingState({
+      isDrawing: false,
+      sourceNodeId: null,
+      userVertices: []
+    });
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'e' || e.key === 'E') {
+        toggleMode();
+      } else if (e.key === 'Escape') {
+        exitDrawMode();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleMode, exitDrawMode]);
+
   // Context value
   const contextValue: DiagramContextValue = useMemo(() => ({
     ...state,
+    mode,
+    drawingState,
+    toggleMode,
+    exitDrawMode,
+    startDrawing,
+    addControlPoint,
+    completeEdge,
+    cancelDrawing,
+
     // Node methods
     addNode,
     removeNode,

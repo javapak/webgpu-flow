@@ -34,8 +34,11 @@ export const DiagramDemo: React.FC = () => {
   const [paletteVisible, setPaletteVisible] = useState(!isMobileDevice());
   const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>([])
+  const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>([]);
+  const [sampleCount, setSampleCount] = useState('1');
+  const [superSamplingValue, setSuperSamplingValue] = useState('Disabled');
   // Handle window resize for responsive design
+
   useEffect(() => {
     const handleResize = () => {
       const mobile = isMobileDevice();
@@ -194,11 +197,11 @@ export const DiagramDemo: React.FC = () => {
             <strong style={{color: 'yellow', fontSize: 10}}><Warning16Filled/> options not yet functional</strong>
 
             <div style={{display: 'block'}}>MSAA:
-                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect data={supportedSampleCount}/>}
+                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {setSampleCount(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
             </div>
           <div style={{display: 'block'}}>
               Supersampling: 
-              <NativeSelect data={['Disabled', '2x', '4x', '8x']} value='Disabled'/></div>
+              <NativeSelect data={['Disabled', '2x', '4x', '8x']} onChange={(e) => {setSuperSamplingValue(e.currentTarget.value)}} value={superSamplingValue}/></div>
           </div>
           </div>}
           {/* Canvas Container */}

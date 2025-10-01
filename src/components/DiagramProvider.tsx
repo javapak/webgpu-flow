@@ -25,6 +25,10 @@ export interface DiagramContextValue extends DiagramState {
   addEdge: (edge: DiagramEdge) => void;
   removeNode: (nodeId: string) => void;
   updateNode: (node: DiagramNode) => void;
+  updateEdge: (edge: DiagramEdge) => void;
+  removeEdge: (edgeId: string) => void;
+  selectEdge: (edge: DiagramEdge | null) => void;
+  clearEdgeSelection: () => void;
   getVisibleNodes: () => DiagramNode[];
   hitTestPoint: (screenPoint: Point) => DiagramNode[];
   hitTestWithHandles: (screenPoint: Point) => { nodes: DiagramNode[]; resizeHandle: ResizeHandle };
@@ -36,6 +40,15 @@ export interface DiagramContextValue extends DiagramState {
   addControlPoint: (point: {x: number, y: number}, replaceLast?: boolean) => void;
   completeEdge: (targetNodeId: string) => FloatingEdge | null;
   cancelDrawing: () => void;
+
+  // Edge vertex manipulation
+  updateEdgeVertex: (edgeId: string, vertexIndex: number, newPosition: {x: number, y: number}) => void;
+  addEdgeVertex: (edgeId: string, position: {x: number, y: number}, insertAtIndex?: number) => void;
+  removeEdgeVertex: (edgeId: string, vertexIndex: number) => void;
+  
+  // Hit testing for edges
+  hitTestEdge: (screenPoint: Point) => {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean};
+  hitTestEdgeVertex: (screenPoint: Point, edge: DiagramEdge) => number; // returns vertex index or -1
   
   // Viewport methods
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;
@@ -47,7 +60,7 @@ export interface DiagramContextValue extends DiagramState {
   clearSelection: () => void;
   
   // Interaction methods
-  startDrag: (type: 'node' | 'viewport' | 'resize', screenPoint: Point, resizeHandle?: ResizeHandle) => void;
+  startDrag: (type: 'node' | 'viewport' | 'resize' | 'edge-vertex', screenPoint: Point, resizeHandle?: ResizeHandle, edgeID?: string, edgeVertexIndex?: number) => void;
   updateDrag: (screenPoint: Point) => void;
   endDrag: () => void;
   
@@ -72,9 +85,9 @@ type DiagramAction =
   | { type: 'UPDATE_EDGE'; edge: DiagramEdge }
   | { type: 'SET_VIEWPORT'; viewport: Partial<Viewport> }
   | { type: 'SELECT_NODE'; node: DiagramNode | null }
+  | { type: 'SELECT_EDGE'; edge: DiagramEdge | null }
   | { type: 'CLEAR_SELECTION' }
-  | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize'; startPos: Point; resizeHandle?: ResizeHandle }
-  | { type: 'UPDATE_DRAG'; currentPos: Point }
+  | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex'; startPos: Point; resizeHandle?: ResizeHandle; edgeId?: string; vertexIndex?: number }  | { type: 'UPDATE_DRAG'; currentPos: Point }
   | { type: 'END_DRAG' };
 
 
@@ -169,8 +182,17 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           ...state.interaction,
           selectedNodes: action.node ? [action.node] : [],
         },
+        
       };
 
+    case 'SELECT_EDGE':
+      return {
+        ...state,
+        interaction: {
+          ...state.interaction,
+          selectedEdges: action.edge ? [action.edge] : [],
+        }
+      }
     case 'CLEAR_SELECTION':
       
       // Clear all visual selection indicators
@@ -502,7 +524,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     
       
       try {
-        rendererRef.current.render(visibleNodes, visibleEdges, currentState.viewport, canvasSize, currentState.interaction.selectedNodes, drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined);
+        rendererRef.current.render(visibleNodes, visibleEdges, currentState.viewport, canvasSize, currentState.interaction.selectedNodes, currentState.interaction.selectedEdges, drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined);
       } catch (error) {
         console.error('Render error:', error);
       }
@@ -612,8 +634,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   }, []);
 
   // Enhanced interaction methods
-  const startDrag = useCallback((type: 'node' | 'viewport' | 'resize', screenPoint: Point, resizeHandle?: ResizeHandle) => {
-    dispatch({ type: 'START_DRAG', dragType: type, startPos: screenPoint, resizeHandle });
+  const startDrag = useCallback((type: 'node' | 'viewport' | 'resize' | 'edge-vertex', screenPoint: Point, resizeHandle?: ResizeHandle, edgeID?: string, edgeVertexIndex?: number) => {
+    dispatch({ type: 'START_DRAG', dragType: type, startPos: screenPoint, resizeHandle, edgeId: edgeID, vertexIndex: edgeVertexIndex});
   }, []);
 
   const updateDrag = useCallback((screenPoint: Point) => {
@@ -768,6 +790,156 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleMode, exitDrawMode]);
 
+  const selectEdge = useCallback((edge: DiagramEdge | null) => {
+  dispatch({ type: 'SELECT_EDGE', edge });
+}, []);
+
+const clearEdgeSelection = useCallback(() => {
+  dispatch({ type: 'CLEAR_SELECTION' });
+}, []);
+
+const updateEdgeVertex = useCallback((edgeId: string, vertexIndex: number, newPosition: {x: number, y: number}) => {
+  const edge = state.edges.find(e => e.id === edgeId);
+  if (!edge) return;
+  
+  const updatedVertices = [...edge.userVertices];
+  updatedVertices[vertexIndex] = newPosition;
+  
+  const updatedEdge = {
+    ...edge,
+    userVertices: updatedVertices,
+  };
+  
+  updateEdge(updatedEdge);
+}, [state.edges, updateEdge]);
+
+const addEdgeVertex = useCallback((edgeId: string, position: {x: number, y: number}, insertAtIndex?: number) => {
+  const edge = state.edges.find(e => e.id === edgeId);
+  if (!edge) return;
+  
+  const updatedVertices = [...edge.userVertices];
+  if (insertAtIndex !== undefined) {
+    updatedVertices.splice(insertAtIndex, 0, position);
+  } else {
+    updatedVertices.push(position);
+  }
+  
+  const updatedEdge = {
+    ...edge,
+    userVertices: updatedVertices,
+  };
+  
+  updateEdge(updatedEdge);
+}, [state.edges, updateEdge]);
+
+const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
+  const edge = state.edges.find(e => e.id === edgeId);
+  if (!edge || edge.userVertices.length <= 0) return; // Keep at least one vertex for valid edge
+  
+  const updatedVertices = edge.userVertices.filter((_, idx) => idx !== vertexIndex);
+  
+  const updatedEdge = {
+    ...edge,
+    userVertices: updatedVertices,
+  };
+  
+  updateEdge(updatedEdge);
+}, [state.edges, updateEdge]);
+
+// Add hit testing for edges:
+const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean} => {
+  const worldPoint = screenToWorld(screenPoint);
+  const threshold = 5 / state.viewport.zoom; // Hit test threshold in world coordinates
+  
+  // Check vertices first (if any edge is selected)
+  if (state.interaction.selectedEdges.length > 0) {
+    const selectedEdge = state.interaction.selectedEdges[0];
+    const vertexIndex = hitTestEdgeVertex(screenPoint, selectedEdge);
+    if (vertexIndex !== -1) {
+      return { edge: selectedEdge, vertexIndex, isVertex: true };
+    }
+  }
+  
+  // Check edge lines
+  for (const edge of state.edges) {
+    const sourceNode = state.nodes.find(n => n.id === edge.sourceNodeId);
+    const targetNode = state.nodes.find(n => n.id === edge.targetNodeId);
+    
+    if (!sourceNode || !targetNode) continue;
+    
+    // Build full path including source, vertices, and target
+    const pathPoints = [
+      sourceNode.data.position,
+      ...edge.userVertices,
+      targetNode.data.position,
+    ];
+    
+    // Check each line segment
+    for (let i = 0; i < pathPoints.length - 1; i++) {
+      const p1 = pathPoints[i];
+      const p2 = pathPoints[i + 1];
+      
+      const distance = pointToLineDistance(worldPoint, p1, p2);
+      if (distance < threshold) {
+        return { edge, vertexIndex: -1, isVertex: false };
+      }
+    }
+  }
+  
+  return { edge: null, vertexIndex: -1, isVertex: false };
+}, [screenToWorld, state.viewport.zoom, state.interaction.selectedEdges, state.edges, state.nodes]);
+
+const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): number => {
+  const worldPoint = screenToWorld(screenPoint);
+  const vertexSize = Math.max(12 / state.viewport.zoom, 8);
+  
+  for (let i = 0; i < edge.userVertices.length; i++) {
+    const vertex = edge.userVertices[i];
+    const distance = Math.sqrt(
+      Math.pow(worldPoint.x - vertex.x, 2) + 
+      Math.pow(worldPoint.y - vertex.y, 2)
+    );
+    
+    if (distance <= vertexSize) {
+      return i;
+    }
+  }
+  
+  return -1;
+}, [screenToWorld, state.viewport.zoom]);
+
+// Helper function for point-to-line distance
+function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): number {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+  const lengthSquared = dx * dx + dy * dy;
+  
+  if (lengthSquared === 0) {
+    // Line segment is actually a point
+    return Math.sqrt(
+      Math.pow(point.x - lineStart.x, 2) + 
+      Math.pow(point.y - lineStart.y, 2)
+    );
+  }
+  
+  // Calculate projection of point onto line
+  let t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lengthSquared;
+  t = Math.max(0, Math.min(1, t));
+  
+  const projectionX = lineStart.x + t * dx;
+  const projectionY = lineStart.y + t * dy;
+  
+  return Math.sqrt(
+    Math.pow(point.x - projectionX, 2) + 
+    Math.pow(point.y - projectionY, 2)
+  );
+
+}
+
+
+
+
+
   // Context value
   const contextValue: DiagramContextValue = useMemo(() => ({
     ...state,
@@ -803,6 +975,13 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
     startDrag,
     updateDrag,
     endDrag,
+    addEdgeVertex,
+    updateEdgeVertex,
+    removeEdgeVertex,
+    hitTestEdge,
+    hitTestEdgeVertex,
+    selectEdge,
+    clearEdgeSelection,
     // Renderer methods
     getRenderer,
     isRendererInitialized,

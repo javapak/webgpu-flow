@@ -87,7 +87,7 @@ export interface InteractionState {
   selectedEdges: DiagramEdge[];
   dragState: {
     isDragging: boolean;
-    dragType: 'node' | 'viewport' | 'resize' | null;
+    dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex' | null;
     startPos: Point | null;
     lastPos: Point | null;
     // Resize-specific properties

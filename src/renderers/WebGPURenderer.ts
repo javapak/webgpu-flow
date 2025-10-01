@@ -705,6 +705,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     viewport: Viewport,
     canvasSize: { width: number; height: number },
     selectedNodes: DiagramNode[] = [],
+    selectedEdges: DiagramEdge[] = [],
     previewEdge?: EdgeDrawingState | null
   ): Promise<void> {
     if (!this.initialized || !this.device || !this.context || !this.nodeRenderPipeline) {
@@ -1009,8 +1010,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
           visibleNodes, // Pass nodes array directly
           viewProjectionMatrix,
           this.visualContentNodeManager!, // Pass the manager
-          previewEdge ? previewEdge : undefined
-        
+          previewEdge ? previewEdge : undefined,
+          selectedEdges
       );
 
     if (visualData?.length) {

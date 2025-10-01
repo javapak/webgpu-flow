@@ -1,6 +1,6 @@
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { VisualContentNodeManager } from '../compute/VisualContentNode';
-import type { DiagramNode } from '../types';
+import type { DiagramEdge, DiagramNode } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
 
 export interface FloatingEdge {
@@ -128,8 +128,11 @@ export class FloatingEdgeRenderer {
   private device!: GPUDevice;
   private edgeBuffer!: GPUBuffer;
   private uniformBuffer!: GPUBuffer;
+  private vertexHandleBuffer!: GPUBuffer;
   private renderPipeline!: GPURenderPipeline;
+  private handleRenderPipeline!: GPURenderPipeline;
   private bindGroup!: GPUBindGroup;
+  private handleBindGroup!: GPUBindGroup;  
   private maxVerticesPerEdge: number;
   private maxEdges: number;
   private connectionCalculator: EdgeConnectionCalculator;
@@ -147,23 +150,170 @@ export class FloatingEdgeRenderer {
     
     this.createBuffers();
     this.createPipeline(format);
+    this.createHandlePipeline(format);
     this.createBindGroup();
   }
   
   private createBuffers() {
-    const verticesPerSegment = 6;
-    const bufferSize = this.maxEdges * this.maxVerticesPerEdge * verticesPerSegment * 8 * 4;
-    
-    this.edgeBuffer = this.device.createBuffer({
-      size: bufferSize,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      label: 'floating-edge-buffer'
+      const verticesPerSegment = 6;
+      const bufferSize = this.maxEdges * this.maxVerticesPerEdge * verticesPerSegment * 8 * 4;
+      
+      this.edgeBuffer = this.device.createBuffer({
+        size: bufferSize,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        label: 'floating-edge-buffer'
+      });
+      
+      // Buffer for vertex handles
+      this.vertexHandleBuffer = this.device.createBuffer({
+        size: this.maxVerticesPerEdge * this.maxEdges * 32, // 8 floats per handle
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        label: 'edge-vertex-handle-buffer'
+      });
+      
+      this.uniformBuffer = this.device.createBuffer({
+        size: 64,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        label: 'edge-uniforms'
+      });
+  }
+
+  private createBindGroup() {
+    this.bindGroup = this.device.createBindGroup({
+      layout: this.renderPipeline.getBindGroupLayout(0),
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: this.uniformBuffer }
+        }
+      ],
+      label: 'edge-bind-group'
     });
     
-    this.uniformBuffer = this.device.createBuffer({
-      size: 64,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      label: 'edge-uniforms'
+    // Create handle bind group
+    this.handleBindGroup = this.device.createBindGroup({
+      layout: this.handleRenderPipeline.getBindGroupLayout(0),
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: this.uniformBuffer }
+        },
+        {
+          binding: 1,
+          resource: { buffer: this.vertexHandleBuffer }
+        }
+      ],
+      label: 'edge-handle-bind-group'
+    });
+  }
+
+   private createHandlePipeline(format: GPUTextureFormat) {
+    const handleShaderCode = `
+      struct Uniforms {
+        viewProjection: mat4x4<f32>,
+      }
+      
+      struct HandleData {
+        position: vec2<f32>,
+        size: vec2<f32>,
+        color: vec4<f32>,
+      }
+      
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var<storage, read> handleData: array<HandleData>;
+      
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) color: vec4<f32>,
+        @location(1) uv: vec2<f32>,
+      }
+      
+      @vertex
+      fn vs_main(
+        @builtin(vertex_index) vertexIndex: u32,
+        @builtin(instance_index) instanceIndex: u32
+      ) -> VertexOutput {
+        let positions = array<vec2<f32>, 6>(
+          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+          vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
+        );
+        
+        let uvs = array<vec2<f32>, 6>(
+          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
+        );
+        
+        let handle = handleData[instanceIndex];
+        let localPos = positions[vertexIndex];
+        let worldPos = handle.position + localPos * handle.size * 0.5;
+        
+        var output: VertexOutput;
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, -0.3, 1.0);
+        output.color = handle.color;
+        output.uv = uvs[vertexIndex];
+        
+        return output;
+      }
+      
+      @fragment
+      fn fs_main(
+        @location(0) color: vec4<f32>,
+        @location(1) uv: vec2<f32>
+      ) -> @location(0) vec4<f32> {
+        // Diamond shape for vertex handles
+        let center = abs(uv - 0.5);
+        let diamond = (center.x + center.y);
+        let alpha = 1.0 - smoothstep(0.4, 0.5, diamond);
+        
+        if (alpha < 0.1) {
+          discard;
+        }
+        
+        // Border effect
+        let borderAlpha = smoothstep(0.35, 0.4, diamond);
+        let finalColor = mix(vec4<f32>(0.1, 0.1, 0.1, 1.0), color, borderAlpha);
+        
+        return vec4<f32>(finalColor.rgb, finalColor.a * alpha);
+      }
+    `;
+    
+    const handleShaderModule = this.device.createShaderModule({
+      code: handleShaderCode,
+      label: 'edge-vertex-handle-shader'
+    });
+    
+    this.handleRenderPipeline = this.device.createRenderPipeline({
+      label: 'edge-vertex-handle-pipeline',
+      layout: 'auto',
+      vertex: {
+        module: handleShaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: handleShaderModule,
+        entryPoint: 'fs_main',
+        targets: [{
+          format: format,
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+            }
+          }
+        }]
+      },
+      primitive: {
+        topology: 'triangle-list',
+      },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      }
     });
   }
   
@@ -248,18 +398,7 @@ export class FloatingEdgeRenderer {
     });
   }
   
-  private createBindGroup() {
-    this.bindGroup = this.device.createBindGroup({
-      layout: this.renderPipeline.getBindGroupLayout(0),
-      entries: [
-        {
-          binding: 0,
-          resource: { buffer: this.uniformBuffer }
-        }
-      ],
-      label: 'edge-bind-group'
-    });
-  }
+
   
   private generateLineStripGeometry(
     vertices: Array<{x: number, y: number}>, 
@@ -299,6 +438,8 @@ export class FloatingEdgeRenderer {
     
     return new Float32Array(geometry);
   }
+
+  
   
   async generateEdgeGeometry(
     edge: FloatingEdge, 
@@ -410,13 +551,15 @@ export class FloatingEdgeRenderer {
     return this.generateLineStripGeometry(allVertices, edge.style);
   }
   
-  async render(
+ async render(
     renderPass: GPURenderPassEncoder, 
     edges: FloatingEdge[], 
     nodes: DiagramNode[],
     viewProjectionMatrix: number[] | Float32Array,
     visualContentNodeManager?: VisualContentNodeManager,
-    previewEdge?: EdgeDrawingState
+    previewEdge?: EdgeDrawingState,
+    selectedEdges?: DiagramEdge[],  
+    viewport?: {zoom: number}        
   ) {
     // Update uniforms
     const matrixData = new Float32Array(viewProjectionMatrix);
@@ -454,10 +597,10 @@ export class FloatingEdgeRenderer {
       const tempEdge: FloatingEdge = {
         id: 'preview-edge',
         sourceNodeId: previewEdge.sourceNodeId as string,
-        targetNodeId: '', // No target for preview
+        targetNodeId: '',
         userVertices: [...previewEdge.userVertices],
         style: previewEdge.style || { 
-          color: [0.5, 0.7, 1.0, 0.8], // Semi-transparent blue
+          color: [0.5, 0.7, 1.0, 0.8],
           thickness: 2 
         }
       };
@@ -466,7 +609,7 @@ export class FloatingEdgeRenderer {
         tempEdge,
         nodes,
         visualContentNodeManager,
-        true // Mark as preview
+        true
       );
       
       if (geometry.length > 0) {
@@ -483,13 +626,58 @@ export class FloatingEdgeRenderer {
       }
     }
     
-    // Draw all edges in one call
+    // Draw all edges
     if (totalVertices > 0) {
       renderPass.setPipeline(this.renderPipeline);
       renderPass.setBindGroup(0, this.bindGroup);
       renderPass.setVertexBuffer(0, this.edgeBuffer);
       renderPass.draw(totalVertices);
     }
+    
+    // Render vertex handles for selected edges
+    if (selectedEdges && selectedEdges.length > 0 && viewport) {
+      const handleData = this.generateVertexHandles(selectedEdges[0], viewport.zoom);
+      
+      if (handleData.length > 0) {
+        const flatHandleData = new Float32Array(handleData.length * 8);
+        handleData.forEach((handle, i) => {
+          const offset = i * 8;
+          flatHandleData[offset + 0] = handle.position[0];
+          flatHandleData[offset + 1] = handle.position[1];
+          flatHandleData[offset + 2] = handle.size[0];
+          flatHandleData[offset + 3] = handle.size[1];
+          flatHandleData[offset + 4] = handle.color[0];
+          flatHandleData[offset + 5] = handle.color[1];
+          flatHandleData[offset + 6] = handle.color[2];
+          flatHandleData[offset + 7] = handle.color[3];
+        });
+        
+        this.device.queue.writeBuffer(this.vertexHandleBuffer, 0, flatHandleData);
+        
+        renderPass.setPipeline(this.handleRenderPipeline);
+        renderPass.setBindGroup(0, this.handleBindGroup);
+        renderPass.draw(6, handleData.length);
+      }
+    }
+  }
+  
+  // NEW: Generate handle data for edge vertices
+  private generateVertexHandles(
+    edge: DiagramEdge, 
+    zoom: number
+  ): Array<{position: [number, number], size: [number, number], color: [number, number, number, number]}> {
+    const handleSize = Math.max(12 / zoom, 8);
+    const handles: Array<{position: [number, number], size: [number, number], color: [number, number, number, number]}> = [];
+    
+    for (const vertex of edge.userVertices) {
+      handles.push({
+        position: [vertex.x, vertex.y],
+        size: [handleSize, handleSize],
+        color: [0.2, 0.7, 1.0, 1.0], // Bright blue for edge vertices
+      });
+    }
+    
+    return handles;
   }
   
   destroy() {

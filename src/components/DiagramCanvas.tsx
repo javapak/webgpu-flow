@@ -63,6 +63,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     
     hitTestWithHandles,
     selectNode,
+    selectEdge,
+    clearEdgeSelection,
     clearSelection,
     startDrag,
     updateDrag,
@@ -70,6 +72,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     drawingState,
     exitDrawMode,
     completeEdge,
+    hitTestEdge,
     addControlPoint,
     endDrag,
     setViewport,
@@ -165,14 +168,18 @@ useEffect(() => {
 
   const performHitTest = useCallback((canvasPos: { x: number; y: number }) => {
     const result = hitTestWithHandles(canvasPos);
+    const edgeResults = hitTestEdge(canvasPos);
     const worldPos = screenToWorld(canvasPos);
     
     return {
       nodes: result.nodes,
+      selectedEdge: edgeResults.edge || null,
+      edgeVertexIndex: edgeResults.vertexIndex,
+      isEdgeVertex: edgeResults.isVertex,
       resizeHandle: result.resizeHandle,
       worldPos
     };
-  }, [hitTestWithHandles, screenToWorld]);
+  }, [hitTestWithHandles, hitTestEdge, screenToWorld]);
 
   const getTouchDistance = (touch1: Touch, touch2: Touch): number => {
     const dx = touch2.clientX - touch1.clientX;
@@ -223,8 +230,14 @@ useEffect(() => {
 
       // Regular node/canvas interaction
       const hitResult = performHitTest(canvasPos);
+      if (hitResult.selectedEdge) {
+        console.log('Edge selected')
+        clearSelection();
+        selectEdge(hitResult.selectedEdge);
+
+      }
       
-      if (hitResult.resizeHandle !== 'none') {
+      else if (hitResult.resizeHandle !== 'none') {
         startDrag('resize', canvasPos, hitResult.resizeHandle);
       } else if (hitResult.nodes.length > 0) {
         const topNode = hitResult.nodes[0];
@@ -233,6 +246,7 @@ useEffect(() => {
         onNodeClick?.(topNode);
       } else {
         clearSelection();
+        clearEdgeSelection();
         startDrag('viewport', canvasPos);
         onCanvasClick?.(hitResult.worldPos);
       }
@@ -442,14 +456,14 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
 }, [isMobile, drawingState.userVertices, drawingState.isDrawing, getCanvasMousePos, performHitTest, interaction.dragState, 
     updateDrag, screenToWorld, mode, currentCursor, addControlPoint]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isMobile) return; // Skip on mobile
-    
-    const canvasPos = getCanvasMousePos(e);
-    const worldPos = screenToWorld(canvasPos);
-    const hitResult = performHitTest(canvasPos);
+const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  if (isMobile) return;
+  
+  const canvasPos = getCanvasMousePos(e);
+  const worldPos = screenToWorld(canvasPos);
+  const hitResult = performHitTest(canvasPos);
 
-    if (mode === 'draw_edge') {
+  if (mode === 'draw_edge') {
     
     if (hitResult.nodes.length > 0 && !drawingState.isDrawing) {
       console.log('drawing started....');
@@ -474,24 +488,41 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
 
 
 
-if (!drawingState.isDrawing && mode !== 'draw_edge') {
-    if (hitResult.resizeHandle !== 'none') {
+  if (!drawingState.isDrawing && mode !== 'draw_edge') {
+    // First check for resize handles on selected nodes
+
+    if (interaction.selectedEdges.length > 0) {
+      if (hitResult.isEdgeVertex) {
+        // Start dragging edge vertex
+        startDrag('edge-vertex', canvasPos, undefined, hitResult.selectedEdge!.id, hitResult.edgeVertexIndex);
+        return;
+      }
+    }
+    else if (hitResult.selectedEdge) {
+      console.log('Edge selected')
+      selectEdge(hitResult.selectedEdge);
+      clearSelection();
+    }
+    else if (hitResult.resizeHandle !== 'none') {
       startDrag('resize', canvasPos, hitResult.resizeHandle);
-    } else if (hitResult.nodes.length > 0) {
+    } 
+    // Then check for node selection
+    else if (hitResult.nodes.length > 0) {
       const topNode = hitResult.nodes[0];
       selectNode(topNode);
       startDrag('node', canvasPos);
       onNodeClick?.(topNode);
-    } else {
-      clearSelection();
-      startDrag('viewport', canvasPos);
-      onCanvasClick?.(hitResult.worldPos);
+    } 
+    else {
+
+        clearSelection();
+        startDrag('viewport', canvasPos);
+        onCanvasClick?.(hitResult.worldPos);
     }
   }
-
-  
-  
-  }, [isMobile, getCanvasMousePos, drawingState, startDrawing, addControlPoint, mode, performHitTest, startDrag, selectNode, clearSelection, screenToWorld, onNodeClick, onCanvasClick]);
+}, [isMobile, getCanvasMousePos, drawingState, startDrawing, addControlPoint, mode, performHitTest, 
+    startDrag, selectNode, clearSelection, screenToWorld, onNodeClick, onCanvasClick, 
+    interaction.selectedEdges, selectEdge]);
 
   const handleMouseUp = useCallback(() => {
     if (isMobile) return; // Skip on mobile

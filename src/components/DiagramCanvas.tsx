@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
+import type { DiagramNode } from '../types';
 
 interface DiagramCanvasProps {
   width: number;
@@ -573,7 +574,7 @@ if (!drawingState.isDrawing && mode !== 'draw_edge') {
       
       const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      const newNode = {
+      const newNode: DiagramNode = {
         id: newNodeId,
         type: nodeType.id,
         data: { 
@@ -584,7 +585,9 @@ if (!drawingState.isDrawing && mode !== 'draw_edge') {
         visual: {
           color: nodeType.color,
           shape: nodeType.shape,
-          selected: false
+          selected: false,
+          size: { width: nodeType.width, height: nodeType.height }
+
         }
       };
       

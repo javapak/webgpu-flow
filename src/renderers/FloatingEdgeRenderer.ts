@@ -304,46 +304,39 @@ export class FloatingEdgeRenderer {
     edge: FloatingEdge, 
     nodes: DiagramNode[],
     visualContentNodeManager?: VisualContentNodeManager,
+    isPreview: boolean = false
   ): Promise<Float32Array> {
-
     const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
-    const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
-    let altPosition = {x: 0, y: 0};
-    
-    if (!sourceNode) return new Float32Array(0);
+    console.log(isPreview ? 'Generating preview edge geometry for edge:' : 'Generating edge geometry for edge:', edge.id);
+    if (!sourceNode) {  
+      console.warn('Source node not found for edge:', edge.id);
+      return new Float32Array(0);
+    }
 
-    if (!targetNode)
-      console.log('================================================================================================================================no target node for edge which means this must be the previewEdge: ', edge);
-      const temp = edge.userVertices.pop();
-      altPosition = temp ? {x: temp.x, y: temp.y} : {x: sourceNode.data.position.x + 100, y: sourceNode.data.position.y + 100};
+    // For preview edges (no target node), use the last user vertex as target
+    const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
     
-  
     const allVertices: Array<{x: number, y: number}> = [];
 
-    let firstDirection = {x: 0, y: 0};
-    if (targetNode) {
-   firstDirection = edge.userVertices.length > 0 
-      ? {
-          x: edge.userVertices[0].x - sourceNode.data.position.x,
-          y: edge.userVertices[0].y - sourceNode.data.position.y
-        }
-      : {
-          x: targetNode.data.position.x - sourceNode.data.position.x,
-          y: targetNode.data.position.y - sourceNode.data.position.y
-        };
-      }
-      else {
-        firstDirection = edge.userVertices.length > 0
-        ? {
-            x: edge.userVertices[0].x - sourceNode.data.position.x,
-            y: edge.userVertices[0].y - sourceNode.data.position.y
-          }
-        : {
-            x: altPosition.x - sourceNode.data.position.x,
-            y: altPosition.y - sourceNode.data.position.y
-          };
-      }
+    // Calculate direction from source to first point
+    let firstDirection: {x: number, y: number};
     
+    if (edge.userVertices.length > 0) {
+      firstDirection = {
+        x: edge.userVertices[0].x - sourceNode.data.position.x,
+        y: edge.userVertices[0].y - sourceNode.data.position.y
+      };
+    } else if (targetNode) {
+      firstDirection = {
+        x: targetNode.data.position.x - sourceNode.data.position.x,
+        y: targetNode.data.position.y - sourceNode.data.position.y
+      };
+    } else {
+      // Preview with no vertices yet - shouldn't happen but handle it
+      return new Float32Array(0);
+    }
+    
+    // Calculate source point on edge of shape
     let sourcePoint: {x: number, y: number};
     
     if (visualContentNodeManager) {
@@ -370,62 +363,49 @@ export class FloatingEdgeRenderer {
     
     allVertices.push(sourcePoint);
     allVertices.push(...edge.userVertices);
-    let lastDirection = {x: 0, y: 0};
+    
+    // If we have a target node, calculate the target point
     if (targetNode) {
-    lastDirection = edge.userVertices.length > 0
-      ? {
-          x: targetNode.data.position.x - edge.userVertices[edge.userVertices.length - 1].x,
-          y: targetNode.data.position.y - edge.userVertices[edge.userVertices.length - 1].y
-        }
-      : {
-          x: targetNode.data.position.x - sourceNode.data.position.x,
-          y: targetNode.data.position.y - sourceNode.data.position.y
-        };
-      }
-      else {
-        lastDirection = edge.userVertices.length > 0
+      const lastDirection = edge.userVertices.length > 0
         ? {
-            x: altPosition.x - edge.userVertices[edge.userVertices.length - 1].x,
-            y: altPosition.y - edge.userVertices[edge.userVertices.length - 1].y
+            x: targetNode.data.position.x - edge.userVertices[edge.userVertices.length - 1].x,
+            y: targetNode.data.position.y - edge.userVertices[edge.userVertices.length - 1].y
           }
         : {
-            x: altPosition.x - sourceNode.data.position.x,
-            y: altPosition.y - sourceNode.data.position.y
+            x: targetNode.data.position.x - sourceNode.data.position.x,
+            y: targetNode.data.position.y - sourceNode.data.position.y
           };
-      }
-    
-    let targetPoint: {x: number, y: number} = {x: 0, y: 0};
-    
-    if (visualContentNodeManager) {
-      const targetVisualNode = visualContentNodeManager.getVisualNode(edge.targetNodeId);
       
-      if (targetVisualNode && targetNode && targetNode.visual!.shape === 'none' && targetNode.visual!.visualContent) {
-        targetPoint = await targetVisualNode.getEdgePoint({
-          x: -lastDirection.x, 
-          y: -lastDirection.y
-        });
+      let targetPoint: {x: number, y: number};
+      
+      if (visualContentNodeManager) {
+        const targetVisualNode = visualContentNodeManager.getVisualNode(edge.targetNodeId);
+        
+        if (targetVisualNode && targetNode.visual!.shape === 'none' && targetNode.visual!.visualContent) {
+          targetPoint = await targetVisualNode.getEdgePoint({
+            x: -lastDirection.x, 
+            y: -lastDirection.y
+          });
+        } else {
+          targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
+            targetNode.data.position,
+            targetNode.visual!.size,
+            targetNode.visual!.shape as string,
+            {x: -lastDirection.x, y: -lastDirection.y}
+          );
+        }
       } else {
-        if (targetNode) {
         targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
           targetNode.data.position,
           targetNode.visual!.size,
           targetNode.visual!.shape as string,
           {x: -lastDirection.x, y: -lastDirection.y}
         );
-        }
       }
-    } else {
-      if (targetNode) {
-      targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
-        targetNode.data.position,
-        targetNode.visual!.size,
-        targetNode.visual!.shape as string,
-        {x: -lastDirection.x, y: -lastDirection.y}
-      );
-      }
+      
+      allVertices.push(targetPoint);
     }
-    
-    allVertices.push(targetPoint);
+    // For preview edges (no target), the last vertex is already the cursor position
     
     return this.generateLineStripGeometry(allVertices, edge.style);
   }
@@ -438,29 +418,23 @@ export class FloatingEdgeRenderer {
     visualContentNodeManager?: VisualContentNodeManager,
     previewEdge?: EdgeDrawingState
   ) {
-    if (edges.length === 0) return;
-
-    if (previewEdge) {
-      const tempEdge = {...previewEdge, id: 'preview-edge', sourceNodeId: previewEdge.sourceNodeId as string, targetNodeId: '', userVertices: previewEdge.userVertices as Array<{x: number, y: number}>, style: previewEdge.style as { color: [number, number, number, number]; thickness: number; dashPattern?: number[]}  };
-      console.log('rendering with preview edge: ', tempEdge);
-      edges = [...edges, tempEdge];
-    }
-    
+    // Update uniforms
     const matrixData = new Float32Array(viewProjectionMatrix);
     this.device.queue.writeBuffer(this.uniformBuffer, 0, matrixData);
     
     let bufferOffset = 0;
     let totalVertices = 0;
     
+    // Render regular edges
     for (const edge of edges) {
-      const geometry = await this.generateEdgeGeometry(edge, nodes, visualContentNodeManager);
-      console.log('i am edging');
+      const geometry = await this.generateEdgeGeometry(
+        edge, 
+        nodes, 
+        visualContentNodeManager,
+        false
+      );
+      
       if (geometry.length === 0) continue;
-
-      if (geometry.length > 0) {
-        console.log('geometry big.')
-      }
-
       
       this.device.queue.writeBuffer(
         this.edgeBuffer, 
@@ -475,9 +449,42 @@ export class FloatingEdgeRenderer {
       totalVertices += vertexCount;
     }
 
+    // Render preview edge if it exists
+    if (previewEdge && previewEdge.isDrawing && previewEdge.userVertices.length > 0) {
+      const tempEdge: FloatingEdge = {
+        id: 'preview-edge',
+        sourceNodeId: previewEdge.sourceNodeId as string,
+        targetNodeId: '', // No target for preview
+        userVertices: [...previewEdge.userVertices],
+        style: previewEdge.style || { 
+          color: [0.5, 0.7, 1.0, 0.8], // Semi-transparent blue
+          thickness: 2 
+        }
+      };
+      
+      const geometry = await this.generateEdgeGeometry(
+        tempEdge,
+        nodes,
+        visualContentNodeManager,
+        true // Mark as preview
+      );
+      
+      if (geometry.length > 0) {
+        this.device.queue.writeBuffer(
+          this.edgeBuffer,
+          bufferOffset,
+          geometry.buffer,
+          0,
+          geometry.byteLength
+        );
+        
+        const vertexCount = geometry.length / 8;
+        totalVertices += vertexCount;
+      }
+    }
     
+    // Draw all edges in one call
     if (totalVertices > 0) {
-      console.log('hi i am total vertice big...')
       renderPass.setPipeline(this.renderPipeline);
       renderPass.setBindGroup(0, this.bindGroup);
       renderPass.setVertexBuffer(0, this.edgeBuffer);

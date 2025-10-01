@@ -699,15 +699,25 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     });
   }, []);
 
-  const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?: boolean) => {
-    setDrawingState(prev => { if (replaceLast) prev.userVertices.pop();
-      return ({
+const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?: boolean) => {
+  setDrawingState(prev => {
+    // Create a new array to avoid mutation
+    const newVertices = [...prev.userVertices];
+    
+    if (replaceLast && newVertices.length > 0) {
+      // Update the last vertex (for mouse move preview)
+      newVertices[newVertices.length - 1] = point;
+    } else {
+      // Add a new vertex (for mouse click)
+      newVertices.push(point);
+    }
+    
+    return {
       ...prev,
-      userVertices: [...prev.userVertices, point]
-    })
+      userVertices: newVertices
+    };
   });
-    console.log('added edge point at: ', point);
-  }, []);
+}, []);
 
   const completeEdge = useCallback((targetNodeId: string): FloatingEdge | null => {
     if (!drawingState.sourceNodeId) return null;

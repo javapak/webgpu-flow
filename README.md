@@ -1,4 +1,4 @@
-#  WebGPU Flow Diagram Editor
+#  WebGPU Flow 
 
 An nteractive flow diagram editor built with **React**, **TypeScript**, and **WebGPU**. Create flow graphs, system diagrams, and visual workflows with hardware-accelerated rendering.
 

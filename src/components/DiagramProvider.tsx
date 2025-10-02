@@ -225,8 +225,15 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
 
     case 'START_DRAG':
       const selectedNode = state.interaction.selectedNodes[0];
-      
-      let originalSize, originalPosition;
+      let originalSize, originalPosition, originalVertexPosition;
+
+      if (action.dragType === 'edge-vertex' && action.edgeId && action.vertexIndex !== undefined) {
+        const edge = state.edges.find(e => e.id === action.edgeId);
+        if (edge && edge.userVertices[action.vertexIndex]) {
+          originalVertexPosition = { ...edge.userVertices[action.vertexIndex] };
+        }
+      }
+
       if (action.dragType === 'resize' && selectedNode) {
         originalSize = selectedNode.data.size ? { ...selectedNode.data.size } : { width: 100, height: 60 };
         originalPosition = selectedNode.data.position ? { ...selectedNode.data.position } : { x: 0, y: 0 };
@@ -242,6 +249,9 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             dragType: action.dragType,
             startPos: action.startPos,
             lastPos: action.startPos,
+            vertexIndex: action.vertexIndex,
+            edgeId: action.edgeId,
+            originalVertexPosition,
             resizeHandle: action.resizeHandle,
             originalSize,
             originalPosition,
@@ -250,6 +260,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'UPDATE_DRAG':
+      console.log('Dispatching UPDATE_DRAG:', 'vert index: ', state.interaction.dragState.vertexIndex, state.interaction.dragState.dragType);
       if (!state.interaction.dragState.isDragging) return state;
       
       const deltaX = action.currentPos.x - (state.interaction.dragState.lastPos?.x || 0);
@@ -380,24 +391,108 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         };
       }
 
+  // Handle edge vertex dragging
+  else if (
+    state.interaction.dragState.dragType === 'edge-vertex' &&
+    state.interaction.dragState.edgeId &&
+    state.interaction.dragState.vertexIndex !== undefined  // This is correct
+  ) {
+    console.log('🟣 Handling edge-vertex drag - ENTERED THIS BRANCH');
+    const edgeId = state.interaction.dragState.edgeId;
+    const vertexIndex = state.interaction.dragState.vertexIndex;
+    const edge = state.edges.find(e => e.id === edgeId);
+    
+    console.log('🔵 UPDATE_DRAG for edge vertex:', {
+      edgeId,
+      vertexIndex,
+      vertexIndexType: typeof vertexIndex,
+      edgeFound: !!edge,
+      currentPos: action.currentPos,
+      lastPos: state.interaction.dragState.lastPos,
+      deltaX,
+      deltaY,
+      zoom: state.viewport.zoom
+    });
+    
+    if (!edge) {
+      console.error('❌ Edge not found:', edgeId);
       return state;
-
-    case 'END_DRAG':
-      return {
-        ...state,
-        interaction: {
-          ...state.interaction,
-          dragState: {
-            isDragging: false,
-            dragType: null,
-            startPos: null,
-            lastPos: null,
-            resizeHandle: undefined,
-            originalSize: undefined,
-            originalPosition: undefined,
-          },
+    }
+    
+    if (vertexIndex >= edge.userVertices.length) {
+      console.error('❌ Vertex index out of bounds:', vertexIndex, 'max:', edge.userVertices.length - 1);
+      return state;
+    }
+    
+    console.log('🔵 Current vertex position:', edge.userVertices[vertexIndex]);
+    
+    // Convert screen delta to world delta
+    const worldDeltaX = deltaX / state.viewport.zoom;
+    const worldDeltaY = deltaY / state.viewport.zoom;
+    
+    console.log('🔵 World delta:', { worldDeltaX, worldDeltaY });
+    
+    // Update the vertex position
+    const updatedVertices = [...edge.userVertices];
+    const newVertexPos = {
+      x: edge.userVertices[vertexIndex].x + worldDeltaX,
+      y: edge.userVertices[vertexIndex].y + worldDeltaY,
+    };
+    
+    console.log('🔵 New vertex position:', newVertexPos);
+    updatedVertices[vertexIndex] = newVertexPos;
+    
+    const updatedEdge = {
+      ...edge,
+      userVertices: updatedVertices,
+    };
+    
+    console.log('🔵 Updated edge:', updatedEdge);
+    console.log('🔵 All vertices after update:', updatedVertices);
+    
+    const newState = {
+      ...state,
+      edges: state.edges.map(e => {
+        const isTarget = e.id === edgeId;
+        console.log(`🔵 Mapping edge ${e.id}, isTarget: ${isTarget}`);
+        return isTarget ? updatedEdge : e;
+      }),
+      interaction: {
+        ...state.interaction,
+        selectedEdges: [updatedEdge],
+        dragState: {
+          ...state.interaction.dragState,
+          lastPos: action.currentPos,
         },
-      };
+      },
+    };
+    
+    console.log('🔵 New state edges:', newState.edges);
+    console.log('🔵 Updated edge in new state:', newState.edges.find(e => e.id === edgeId));
+    
+    return newState;
+  }
+  return state;
+
+  case 'END_DRAG':
+    return {
+      ...state,
+      interaction: {
+        ...state.interaction,
+        dragState: {
+          isDragging: false,
+          dragType: null,
+          startPos: null,
+          lastPos: null,
+          resizeHandle: undefined,
+          originalSize: undefined,
+          originalPosition: undefined,
+          edgeId: undefined,
+          vertexIndex: undefined,
+          originalVertexPosition: undefined,
+        },
+      },
+    };
 
     default:
       return state;
@@ -643,9 +738,21 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     dispatch({ type: 'CLEAR_SELECTION' });
   }, []);
 
-  // Enhanced interaction methods
-  const startDrag = useCallback((type: 'node' | 'viewport' | 'resize' | 'edge-vertex', screenPoint: Point, resizeHandle?: ResizeHandle, edgeID?: string, edgeVertexIndex?: number) => {
-    dispatch({ type: 'START_DRAG', dragType: type, startPos: screenPoint, resizeHandle, edgeId: edgeID, vertexIndex: edgeVertexIndex});
+  const startDrag = useCallback((
+    type: 'node' | 'viewport' | 'resize' | 'edge-vertex', 
+    screenPoint: Point, 
+    resizeHandle?: ResizeHandle, 
+    edgeID?: string, 
+    edgeVertexIndex?: number
+  ) => {
+    dispatch({ 
+      type: 'START_DRAG', 
+      dragType: type, 
+      startPos: screenPoint, 
+      resizeHandle, 
+      edgeId: edgeID, 
+      vertexIndex: edgeVertexIndex
+    });
   }, []);
 
   const updateDrag = useCallback((screenPoint: Point) => {
@@ -857,6 +964,27 @@ const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
 }, [state.edges, updateEdge]);
 
 // Add hit testing for edges:
+
+const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): number => {
+  const worldPoint = screenToWorld(screenPoint);
+  const vertexSize = Math.max(12 / state.viewport.zoom, 8);
+  
+  for (let i = 0; i < edge.userVertices.length; i++) {
+    const vertex = edge.userVertices[i];
+    const distance = Math.sqrt(
+      Math.pow(worldPoint.x - vertex.x, 2) + 
+      Math.pow(worldPoint.y - vertex.y, 2)
+    );
+    
+    if (distance <= vertexSize) {
+      return i;
+    }
+  }
+  
+  return -1;
+}, [screenToWorld, state.viewport.zoom]);
+
+
 const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean} => {
   const worldPoint = screenToWorld(screenPoint);
   const threshold = 5; 
@@ -897,26 +1025,9 @@ const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null,
   }
   
   return { edge: null, vertexIndex: -1, isVertex: false };
-}, [screenToWorld, state.viewport.zoom, state.interaction.selectedEdges, state.edges, state.nodes]);
+}, [screenToWorld, hitTestEdgeVertex, state.viewport.zoom, state.interaction.selectedEdges, state.edges, state.nodes]);
 
-const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): number => {
-  const worldPoint = screenToWorld(screenPoint);
-  const vertexSize = Math.max(12 / state.viewport.zoom, 8);
-  
-  for (let i = 0; i < edge.userVertices.length; i++) {
-    const vertex = edge.userVertices[i];
-    const distance = Math.sqrt(
-      Math.pow(worldPoint.x - vertex.x, 2) + 
-      Math.pow(worldPoint.y - vertex.y, 2)
-    );
-    
-    if (distance <= vertexSize) {
-      return i;
-    }
-  }
-  
-  return -1;
-}, [screenToWorld, state.viewport.zoom]);
+
 
 // Helper function for point-to-line distance
 function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): number {

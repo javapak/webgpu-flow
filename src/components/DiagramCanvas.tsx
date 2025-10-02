@@ -423,9 +423,9 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
   const worldPos = screenToWorld(canvasPos);
 
   if (mode === 'draw_edge' && drawingState.isDrawing) {
-    // Always keep one vertex as the "preview" that follows the cursor
+    // Always keep one vertex as the preview vert that follows the cursor
     if (drawingState.userVertices.length === 0) {
-      // First vertex - add it as preview
+      // First vertex added as preview
       addControlPoint(worldPos, false);
     } else {
       // Update the last vertex to follow cursor
@@ -439,6 +439,8 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
   if (interaction.dragState.isDragging) {
     if (interaction.dragState.dragType === 'resize') {
       newCursor = MouseInteractions.getCursorForHandle(interaction.dragState.resizeHandle || 'none');
+    } else if (interaction.dragState.dragType === 'edge-vertex') {
+      newCursor = 'wait'; 
     } else {
       newCursor = 'grabbing';
     }
@@ -493,9 +495,12 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
   if (!drawingState.isDrawing && mode !== 'draw_edge') {
     // First check for resize handles on selected nodes
 
-    if (interaction.selectedEdges.length > 0 && hitResult.isEdgeVertex) {
+    if (interaction.selectedEdges.length > 0 && hitResult.selectedEdge?.id && hitResult.isEdgeVertex) {
       // Start dragging edge vertex
-      startDrag('edge-vertex', canvasPos, undefined, hitResult.selectedEdge!.id, hitResult.edgeVertexIndex);
+      console.log('======Starting edge vertex drag======');
+      console.log('edge-vertex', canvasPos, hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
+      
+      startDrag('edge-vertex', canvasPos, undefined, hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
       return;
     }
 
@@ -530,7 +535,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
   }
 }, [isMobile, getCanvasMousePos, drawingState, startDrawing, addControlPoint, mode, performHitTest, 
     startDrag, selectNode, clearSelection, screenToWorld, onNodeClick, onCanvasClick, 
-    interaction.selectedEdges, selectEdge]);
+    interaction. selectedEdges, selectEdge]);
 
   const handleMouseUp = useCallback(() => {
     if (isMobile) return; // Skip on mobile

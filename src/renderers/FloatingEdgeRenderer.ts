@@ -238,9 +238,10 @@ export class FloatingEdgeRenderer {
           vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
         );
         
+        // FIXED: Correct UV coordinates that match the position order
         let uvs = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
-          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
+          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+          vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
         );
         
         let handle = handleData[instanceIndex];
@@ -248,7 +249,8 @@ export class FloatingEdgeRenderer {
         let worldPos = handle.position + localPos * handle.size * 0.5;
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, -0.3, 1.0);
+        // FIXED: Use correct Z-layer depth to ensure handles render on top
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.HANDLES}, 1.0);
         output.color = handle.color;
         output.uv = uvs[vertexIndex];
         
@@ -261,19 +263,27 @@ export class FloatingEdgeRenderer {
         @location(1) uv: vec2<f32>
       ) -> @location(0) vec4<f32> {
         // Diamond shape for vertex handles
-        let center = abs(uv - 0.5);
-        let diamond = (center.x + center.y);
-        let alpha = 1.0 - smoothstep(0.4, 0.5, diamond);
+        let center = abs(uv - 0.5) * 2.0; // Scale to [0, 1] range
+        let diamond = center.x + center.y;
         
-        if (alpha < 0.1) {
+        // Create smooth diamond with anti-aliasing
+        let edgeWidth = 0.1;
+        let alpha = 1.0 - smoothstep(1.0 - edgeWidth, 1.0, diamond);
+        
+        if (alpha < 0.01) {
           discard;
         }
         
-        // Border effect
-        let borderAlpha = smoothstep(0.35, 0.4, diamond);
-        let finalColor = mix(vec4<f32>(0.1, 0.1, 0.1, 1.0), color, borderAlpha);
+        // Border effect - create inner diamond for outline
+        let borderWidth = 0.15;
+        let innerDiamond = (center.x + center.y) / (1.0 - borderWidth);
+        let borderAlpha = smoothstep(0.9, 1.0, innerDiamond);
         
-        return vec4<f32>(finalColor.rgb, finalColor.a * alpha);
+        // Mix border color (darker) with fill color
+        let borderColor = vec4<f32>(0.1, 0.1, 0.1, 1.0);
+        let finalColor = mix(color, borderColor, borderAlpha);
+        
+        return vec4<f32>(finalColor.rgb, alpha);
       }
     `;
     
@@ -445,21 +455,18 @@ export class FloatingEdgeRenderer {
     edge: FloatingEdge, 
     nodes: DiagramNode[],
     visualContentNodeManager?: VisualContentNodeManager,
-    isPreview: boolean = false
   ): Promise<Float32Array> {
     const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
-    console.log(isPreview ? 'Generating preview edge geometry for edge:' : 'Generating edge geometry for edge:', edge.id);
+    
     if (!sourceNode) {  
       console.warn('Source node not found for edge:', edge.id);
       return new Float32Array(0);
     }
 
-    // For preview edges (no target node), use the last user vertex as target
     const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
     
     const allVertices: Array<{x: number, y: number}> = [];
 
-    // Calculate direction from source to first point
     let firstDirection: {x: number, y: number};
     
     if (edge.userVertices.length > 0) {
@@ -473,11 +480,9 @@ export class FloatingEdgeRenderer {
         y: targetNode.data.position.y - sourceNode.data.position.y
       };
     } else {
-      // Preview with no vertices yet - shouldn't happen but handle it
       return new Float32Array(0);
     }
     
-    // Calculate source point on edge of shape
     let sourcePoint: {x: number, y: number};
     
     if (visualContentNodeManager) {
@@ -505,7 +510,6 @@ export class FloatingEdgeRenderer {
     allVertices.push(sourcePoint);
     allVertices.push(...edge.userVertices);
     
-    // If we have a target node, calculate the target point
     if (targetNode) {
       const lastDirection = edge.userVertices.length > 0
         ? {
@@ -546,7 +550,6 @@ export class FloatingEdgeRenderer {
       
       allVertices.push(targetPoint);
     }
-    // For preview edges (no target), the last vertex is already the cursor position
     
     return this.generateLineStripGeometry(allVertices, edge.style);
   }
@@ -574,14 +577,13 @@ export class FloatingEdgeRenderer {
         edge, 
         nodes, 
         visualContentNodeManager,
-        false
       );
       if (edge.id === selectedEdges?.[0]?.id) {
         geometry = await this.generateEdgeGeometry(
         {...edge, style: { ...edge.style, thickness: edge.style.thickness + 2, color: [1.0, 0.5, 0.0, 1.0] }},
         nodes, 
         visualContentNodeManager,
-        false);
+        );
       }
 
       
@@ -617,7 +619,6 @@ export class FloatingEdgeRenderer {
         tempEdge,
         nodes,
         visualContentNodeManager,
-        true
       );
       
       if (geometry.length > 0) {
@@ -642,7 +643,7 @@ export class FloatingEdgeRenderer {
       renderPass.draw(totalVertices);
     }
     
-    // Render vertex handles for selected edges
+    // FIXED: Render vertex handles for selected edges with proper viewport parameter
     if (selectedEdges && selectedEdges.length > 0 && viewport) {
       const handleData = this.generateVertexHandles(selectedEdges[0], viewport.zoom);
       
@@ -669,19 +670,18 @@ export class FloatingEdgeRenderer {
     }
   }
   
-  // NEW: Generate handle data for edge vertices
   private generateVertexHandles(
     edge: DiagramEdge, 
     zoom: number
   ): Array<{position: [number, number], size: [number, number], color: [number, number, number, number]}> {
-    const handleSize = Math.max(12 / zoom, 8);
+    const handleSize = Math.max(16 / zoom, 10);
     const handles: Array<{position: [number, number], size: [number, number], color: [number, number, number, number]}> = [];
     
     for (const vertex of edge.userVertices) {
       handles.push({
         position: [vertex.x, vertex.y],
         size: [handleSize, handleSize],
-        color: [0.2, 0.7, 1.0, 1.0], // Bright blue for edge vertices
+        color: [0.3, 0.8, 1.0, 1.0], // Brighter blue for better visibility
       });
     }
     
@@ -691,5 +691,6 @@ export class FloatingEdgeRenderer {
   destroy() {
     this.edgeBuffer.destroy();
     this.uniformBuffer.destroy();
+    this.vertexHandleBuffer.destroy();
   }
 }

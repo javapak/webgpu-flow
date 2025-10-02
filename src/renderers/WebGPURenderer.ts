@@ -1004,14 +1004,15 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     const visualData = this.visualRenderer?.prepareVisualData(visibleNodes);
 
 
-          await this.edgeRenderer!.render(
+      await this.edgeRenderer!.render(
           renderPass,
           visibleEdges,
           visibleNodes, // Pass nodes array directly
           viewProjectionMatrix,
           this.visualContentNodeManager!, // Pass the manager
           previewEdge ? previewEdge : undefined,
-          selectedEdges
+          selectedEdges,
+          viewport
       );
 
     if (visualData?.length) {

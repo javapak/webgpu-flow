@@ -94,6 +94,10 @@ export interface InteractionState {
     resizeHandle?: ResizeHandle;
     originalSize?: { width: number; height: number };
     originalPosition?: { x: number; y: number };
+    // Edge vertex drag properties
+    edgeId?: string;
+    vertexIndex?: number;
+    originalVertexPosition?: { x: number; y: number };
   };
   mode: 'select' | 'pan' | 'connect' | 'edit';
 }

@@ -859,7 +859,7 @@ const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
 // Add hit testing for edges:
 const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean} => {
   const worldPoint = screenToWorld(screenPoint);
-  const threshold = 2 / state.viewport.zoom; // Hit test threshold in world coordinates
+  const threshold = 5; 
   
   // Check vertices first (if any edge is selected)
   if (state.interaction.selectedEdges.length > 0) {

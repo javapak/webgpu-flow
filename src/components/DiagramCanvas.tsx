@@ -446,9 +446,10 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
   } else {
     if (hitResult.resizeHandle !== 'none') {
       newCursor = MouseInteractions.getCursorForHandle(hitResult.resizeHandle);
-    } else if (hitResult.nodes.length > 0) {
-      newCursor = 'grab';
+    } else if (hitResult.nodes.length > 0 || hitResult.selectedEdge) {
+      newCursor = 'pointer';
     }
+
   }
   
   if (newCursor !== currentCursor && mode !== 'draw_edge') {

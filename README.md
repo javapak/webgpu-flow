@@ -6,7 +6,7 @@ An nteractive flow diagram editor built with **React**, **TypeScript**, and **We
 
 ## Features
 
-### High Performance
+### GPU acceleration and performance
 - **WebGPU Rendering**: Hardware-accelerated viewport rendering.
 - **Spatial Indexing**: Quadtree-based spatial partitioning for efficient hit testing and viewport culling
 - **Optimized for Scale**: Handle large diagrams with ease thanks to rendering optimizations

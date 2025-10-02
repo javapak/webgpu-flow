@@ -439,9 +439,10 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
   if (interaction.dragState.isDragging) {
     if (interaction.dragState.dragType === 'resize') {
       newCursor = MouseInteractions.getCursorForHandle(interaction.dragState.resizeHandle || 'none');
-    } else if (interaction.dragState.dragType === 'edge-vertex') {
-      newCursor = 'wait'; 
-    } else {
+    } else if (interaction.dragState.dragType === 'edge-vertex' || interaction.dragState.dragType === 'node') {
+      newCursor = 'move'; 
+    }
+     else {
       newCursor = 'grabbing';
     }
     updateDrag(canvasPos);

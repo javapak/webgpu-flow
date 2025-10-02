@@ -277,7 +277,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **TypeGPU**
 - **Mantine**
-- **Fluent UI Icons
+- **Fluent UI Icons**
 - **Vite**
 
 - **Issues**: [GitHub Issues](https://github.com/javapak/webgpu-flow-editor/issues)

@@ -85,6 +85,7 @@ export interface Viewport {
 export interface InteractionState {
   selectedNodes: DiagramNode[];
   selectedEdges: DiagramEdge[];
+  altKeyPressed: boolean; // True when Alt key is pressed
   dragState: {
     isDragging: boolean;
     dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex' | null;
@@ -107,6 +108,10 @@ export interface DiagramState {
   edges: DiagramEdge[];
   viewport: Viewport;
   interaction: InteractionState;
+  gridSnapping: {
+    enabled: boolean; // True when Alt is NOT pressed
+    gridSize: number;
+  };
 }
 
 // Hook exports

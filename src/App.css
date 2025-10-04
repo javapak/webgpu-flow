@@ -240,12 +240,29 @@ body {
   transform: none;
 }
 
+.is-over-viewport-unselectable > * {
+  -webkit-user-select: none; 
+  -moz-user-select: none;    
+  user-select: none;      
+}  
+
 /* Responsive grid for node palette */
 .node-palette-grid {
   display: grid;
   gap: 8px;
   padding: 8px;
 }
+
+.unselectable-element {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;  
+  -khtml-user-select: none;   
+  -moz-user-select: none;    
+  -ms-user-select: none;     
+  user-select: none;         
+}
+
+
 
 @media screen and (max-width: 480px) {
   .node-palette-grid {

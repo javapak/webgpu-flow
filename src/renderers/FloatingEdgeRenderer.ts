@@ -238,7 +238,6 @@ export class FloatingEdgeRenderer {
           vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
         );
         
-        // FIXED: Correct UV coordinates that match the position order
         let uvs = array<vec2<f32>, 6>(
           vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
           vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
@@ -249,7 +248,6 @@ export class FloatingEdgeRenderer {
         let worldPos = handle.position + localPos * handle.size * 0.5;
         
         var output: VertexOutput;
-        // FIXED: Use correct Z-layer depth to ensure handles render on top
         output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.HANDLES}, 1.0);
         output.color = handle.color;
         output.uv = uvs[vertexIndex];
@@ -266,7 +264,6 @@ export class FloatingEdgeRenderer {
         let center = abs(uv - 0.5) * 2.0; // Scale to [0, 1] range
         let diamond = center.x + center.y;
         
-        // Create smooth diamond with anti-aliasing
         let edgeWidth = 0.1;
         let alpha = 1.0 - smoothstep(1.0 - edgeWidth, 1.0, diamond);
         
@@ -274,7 +271,6 @@ export class FloatingEdgeRenderer {
           discard;
         }
         
-        // Border effect - create inner diamond for outline
         let borderWidth = 0.15;
         let innerDiamond = (center.x + center.y) / (1.0 - borderWidth);
         let borderAlpha = smoothstep(0.9, 1.0, innerDiamond);
@@ -643,7 +639,6 @@ export class FloatingEdgeRenderer {
       renderPass.draw(totalVertices);
     }
     
-    // FIXED: Render vertex handles for selected edges with proper viewport parameter
     if (selectedEdges && selectedEdges.length > 0 && viewport) {
       const handleData = this.generateVertexHandles(selectedEdges[0], viewport.zoom);
       

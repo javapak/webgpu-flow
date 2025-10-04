@@ -446,6 +446,8 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
       newCursor = 'grabbing';
     }
     updateDrag(canvasPos);
+
+
   } else {
     if (hitResult.resizeHandle !== 'none') {
       newCursor = MouseInteractions.getCursorForHandle(hitResult.resizeHandle);
@@ -458,6 +460,7 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
   if (newCursor !== currentCursor && mode !== 'draw_edge') {
     setCurrentCursor(newCursor);
   }
+
 }, [isMobile, drawingState.userVertices, drawingState.isDrawing, getCanvasMousePos, performHitTest, interaction.dragState, 
     updateDrag, screenToWorld, mode, currentCursor, addControlPoint]);
 

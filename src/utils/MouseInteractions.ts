@@ -332,8 +332,8 @@ private static determineHandleType(
           }
           
           // Adjust position for northwest resize
-          newX = currentX - (newWidth - currentWidth) / 2;
-          newY = currentY - (newHeight - currentHeight) / 2;
+          newX = Math.round(currentX - (newWidth - currentWidth) / 2);
+          newY = Math.round(currentY - (newHeight - currentHeight) / 2);
           break;
         }
         case 'ne': {

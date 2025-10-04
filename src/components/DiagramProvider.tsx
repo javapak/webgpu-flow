@@ -5,11 +5,14 @@ import { MouseInteractions, type ResizeHandle } from "../utils/MouseInteractions
 import type { Viewport, DiagramState, DiagramNode, DiagramEdge } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
 import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
+import { GridSnapping } from '../utils/GridSnapping';
 
 enum InteractionMode {
   SELECT = 'select',
   DRAW_EDGE = 'draw_edge'
 }
+
+
 
 export interface EdgeDrawingState {
   isDrawing: boolean;
@@ -54,14 +57,15 @@ export interface DiagramContextValue extends DiagramState {
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;
   screenToWorld: (screenPoint: Point) => Point;
   worldToScreen: (worldPoint: Point) => Point;
-  
+  setAltKey: (pressed: boolean) => void;
+
   // Selection methods
   selectNode: (node: DiagramNode | null) => void;
   clearSelection: () => void;
   
   // Interaction methods
   startDrag: (type: 'node' | 'viewport' | 'resize' | 'edge-vertex', screenPoint: Point, resizeHandle?: ResizeHandle, edgeID?: string, edgeVertexIndex?: number) => void;
-  updateDrag: (screenPoint: Point) => void;
+  updateDrag: (screenPoint: Point, isSnapped?: boolean) => void;
   endDrag: () => void;
   
   // Renderer methods
@@ -87,14 +91,25 @@ type DiagramAction =
   | { type: 'SELECT_NODE'; node: DiagramNode | null }
   | { type: 'SELECT_EDGE'; edge: DiagramEdge | null }
   | { type: 'CLEAR_SELECTION' }
+  | { type: 'SET_ALT_KEY'; pressed: boolean }
   | { type: 'CLEAR_EDGE_SELECTION' }
-  | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex'; startPos: Point; resizeHandle?: ResizeHandle; edgeId?: string; vertexIndex?: number }  | { type: 'UPDATE_DRAG'; currentPos: Point }
+  | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex'; startPos: Point; resizeHandle?: ResizeHandle; edgeId?: string; vertexIndex?: number }  | { type: 'UPDATE_DRAG'; currentPos: Point, isSnapped?: boolean }
   | { type: 'END_DRAG' };
 
 
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
   
   switch (action.type) {
+
+  case 'SET_ALT_KEY':
+  return {
+    ...state,
+    interaction: {
+      ...state.interaction,
+      altKeyPressed: action.pressed
+      
+    },
+  };
     case 'ADD_NODE':
       return {
         ...state,
@@ -286,40 +301,43 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             },
           },
         };
-      } else if (
-        state.interaction.dragState.dragType === 'node' &&
-        state.interaction.selectedNodes.length > 0
-      ) {
-        const selectedNode = state.interaction.selectedNodes[0];
-        // Convert screen delta to world delta for node movement
-        const worldDeltaX = deltaX / state.viewport.zoom;
-        const worldDeltaY = deltaY / state.viewport.zoom;
-        
-        const updatedNode = {
-          ...selectedNode,
-          data: {
-            ...selectedNode.data,
-            position: {
-              x: selectedNode.data.position.x + worldDeltaX,
-              y: selectedNode.data.position.y + worldDeltaY,
-            },
-          },
-        };
+    } else if (
+      state.interaction.dragState.dragType === 'node' &&
+      state.interaction.selectedNodes.length > 0
+    ) {
+      const selectedNode = state.interaction.selectedNodes[0];
+      const totalDeltaX = deltaX / state.viewport.zoom;
+      const totalDeltaY = deltaY / state.viewport.zoom;
 
-        return {
-          ...state,
-          nodes: state.nodes.map(node =>
-            node.id === selectedNode.id ? updatedNode : node
-          ),
-          interaction: {
-            ...state.interaction,
-            selectedNodes: [updatedNode],
-            dragState: {
-              ...state.interaction.dragState,
-              lastPos: action.currentPos,
-            },
+      const newPosition = {
+        x: selectedNode.data.position.x + totalDeltaX,
+        y: selectedNode.data.position.y + totalDeltaY
+      };
+
+
+      
+      const updatedNode = {
+        ...selectedNode,
+        data: {
+          ...selectedNode.data,
+          position: newPosition,
+        },
+      };
+
+      return {
+        ...state,
+        nodes: state.nodes.map(node =>
+          node.id === selectedNode.id ? updatedNode : node
+        ),
+        interaction: {
+          ...state.interaction,
+          selectedNodes: [updatedNode],
+          dragState: {
+            ...state.interaction.dragState,
+            lastPos: action.currentPos,
           },
-        };
+        },
+      };
       } else if (
         state.interaction.dragState.dragType === 'resize' &&
         state.interaction.selectedNodes.length > 0 &&
@@ -331,14 +349,10 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         const selectedNode = state.interaction.selectedNodes[0];
         const { resizeHandle, originalSize, originalPosition } = state.interaction.dragState;
         
-        // Convert screen delta to world delta for resizing
-        
-        // Calculate cumulative delta from start position
         const totalDeltaX = (action.currentPos.x - state.interaction.dragState.startPos!.x) / state.viewport.zoom;
         const totalDeltaY = (action.currentPos.y - state.interaction.dragState.startPos!.y) / state.viewport.zoom;
 
-    
-        const newDimensions = MouseInteractions.calculateResize(
+        let newDimensions = MouseInteractions.calculateResize(
           resizeHandle,
           totalDeltaX,
           totalDeltaY,
@@ -349,9 +363,19 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           40, // minWidth
           30, // minHeight
           false
-          
         );
-                
+
+        // Apply grid snapping if Alt is not pressed
+        const shouldSnap = !state.interaction.altKeyPressed;
+        if (shouldSnap) {
+          newDimensions = GridSnapping.snapResize(
+            newDimensions,
+            state.gridSnapping.gridSize,
+            40,
+            30
+          );
+        }
+        
         const updatedNode = {
           ...selectedNode,
           data: {
@@ -367,7 +391,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           },
           visual: {
             ...selectedNode.visual,
-            selected: true, // Maintain selection
+            selected: true,
             size: {
               width: newDimensions.width,
               height: newDimensions.height,
@@ -475,6 +499,94 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
   return state;
 
   case 'END_DRAG':
+  const shouldSnap = !state.interaction.altKeyPressed;
+  
+  if (shouldSnap && 
+      state.interaction.dragState.dragType === 'node' &&
+      state.interaction.selectedNodes.length > 0) {
+    const selectedNode = state.interaction.selectedNodes[0];
+    const snappedPosition = GridSnapping.snapPointToGrid(
+      selectedNode.data.position,
+      state.gridSnapping.gridSize
+    );
+    
+    const snappedNode = {
+      ...selectedNode,
+      data: {
+        ...selectedNode.data,
+        position: snappedPosition,
+      },
+    };
+    
+    return {
+      ...state,
+      nodes: state.nodes.map(node =>
+        node.id === selectedNode.id ? snappedNode : node
+      ),
+      interaction: {
+        ...state.interaction,
+        selectedNodes: [snappedNode],
+        dragState: {
+          isDragging: false,
+          dragType: null,
+          startPos: null,
+          lastPos: null,
+          resizeHandle: undefined,
+          originalSize: undefined,
+          originalPosition: undefined,
+          edgeId: undefined,
+          vertexIndex: undefined,
+          originalVertexPosition: undefined,
+        },
+      },
+    };
+  }  else if (
+    state.interaction.dragState.dragType === 'edge-vertex' &&
+    state.interaction.dragState.edgeId &&
+    state.interaction.dragState.vertexIndex !== undefined  && shouldSnap // This is correct
+  ) {
+    const edgeId = state.interaction.dragState.edgeId;
+    const vertexIndex = state.interaction.dragState.vertexIndex;
+    const edge = state.edges.find(e => e.id === edgeId);
+    if (!edge) return state;
+    if (vertexIndex >= edge.userVertices.length) return state;
+   
+      const currentVertexPos = edge.userVertices[vertexIndex];
+      const snappedVertexPos = GridSnapping.snapPointToGrid(
+        currentVertexPos,
+        state.gridSnapping.gridSize
+      );
+      const updatedVertices = [...edge.userVertices];
+      updatedVertices[vertexIndex] = snappedVertexPos;
+      const updatedEdge = {
+        ...edge,
+        userVertices: updatedVertices,
+      };
+      return {  
+        ...state,
+        edges: state.edges.map(e =>
+          e.id === edgeId ? updatedEdge : e
+        ),
+        interaction: {
+          ...state.interaction,
+          selectedEdges: [updatedEdge],
+          dragState: {
+            isDragging: false,
+            dragType: null,
+            startPos: null,
+            lastPos: null,
+            resizeHandle: undefined,
+            originalSize: undefined,
+            originalPosition: undefined,
+            edgeId: undefined,
+            vertexIndex: undefined,
+            originalVertexPosition: undefined,
+          },
+        },
+      };
+    }
+     
+  
     return {
       ...state,
       interaction: {
@@ -524,6 +636,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     interaction: {
       selectedNodes: [],
       selectedEdges: [],
+      altKeyPressed: false,
       dragState: {
         isDragging: false,
         dragType: null,
@@ -532,6 +645,10 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
       },
       mode: 'select',
     },
+    gridSnapping: {
+      enabled: true,
+      gridSize: GridSnapping.getDefaultGridSize(),
+    }
   };
 
   // State and refs
@@ -703,6 +820,10 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     dispatch({ type: 'ADD_NODE', node });
   }, []);
 
+  const setAltKey = useCallback((pressed: boolean) => {
+  dispatch({ type: 'SET_ALT_KEY', pressed });
+  }, []);
+
   const removeNode = useCallback((nodeId: string) => {
     dispatch({ type: 'REMOVE_NODE', nodeId });
   }, []);
@@ -755,8 +876,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     });
   }, []);
 
-  const updateDrag = useCallback((screenPoint: Point) => {
-    dispatch({ type: 'UPDATE_DRAG', currentPos: screenPoint });
+  const updateDrag = useCallback((screenPoint: Point, isSnapped?: boolean) => {
+    dispatch({ type: 'UPDATE_DRAG', currentPos: screenPoint, isSnapped});
   }, []);
 
   const endDrag = useCallback(() => {
@@ -806,6 +927,28 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') {
+        setAltKey(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') {
+        setAltKey(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+  
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [setAltKey]);
 
 
   const toggleMode = useCallback(() => {
@@ -1072,7 +1215,7 @@ function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): nu
     addControlPoint,
     completeEdge,
     cancelDrawing,
-
+    setAltKey,
     // Node methods
     addNode,
     removeNode,

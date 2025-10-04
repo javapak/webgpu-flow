@@ -244,20 +244,6 @@ export const DiagramDemo: React.FC = () => {
             </div>
           )}
 
-          {/* Desktop Footer Info */}
-          {!isMobile && (
-            <div style={{
-              marginTop: '16px',
-              display: 'flex',
-              gap: '16px',
-              fontSize: '14px',
-              color: '#cccccc',
-              padding: '0 20px 20px'
-            }}>
-              <div>💡Drag nodes from palette to canvas</div>
-              <div>Click and drag to pan • Scroll to zoom</div>
-            </div>
-          )}
         </div>
       </div>
     </DiagramProvider>

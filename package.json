@@ -15,7 +15,8 @@
     "@mantine/hooks": "^8.3.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "typegpu": "^0.7.1"
+    "typegpu": "^0.7.1",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",

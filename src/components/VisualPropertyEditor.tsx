@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useDiagram } from "./DiagramProvider"
 import { ColorInput } from "@mantine/core";
 import type { DiagramNode } from "../types";
+
 export default function VisualPropertyEditor() {
     const {interaction, updateNode} = useDiagram();
     const [nodeHexValue, setNodeHexValue] = useState('');
@@ -40,7 +41,7 @@ export default function VisualPropertyEditor() {
     return (
     <>
     {interaction.selectedNodes.length > 0 && (
-        <div style={{margin: 50}}>
+        <div style={{margin: 50}} className='is-over-viewport-unselectable'>
             <h3>Visual properties:</h3>
             <ColorInput title='Node color' pb={10} label='Node color' w={150} fixOnBlur={false} value={nodeHexValue} defaultValue='#ffffff'
             onChange={handleNodeColorChange} />

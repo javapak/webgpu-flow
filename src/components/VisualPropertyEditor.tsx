@@ -12,15 +12,26 @@ export default function VisualPropertyEditor() {
     useEffect(() => {
         if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0].visual)  {
             setNodeHexValue(interaction.selectedNodes[0].visual!.color as string)
+
             setTextHexValue(interaction.selectedNodes[0].visual!.labelColor as string)
+            if (interaction.selectedNodes[0].visual?.shape === 'none' && interaction.selectedNodes[0].visual.visualContent?.colorizable) {
+                setNodeHexValue(interaction.selectedNodes[0].visual!.iconColor as string || '#ffffff');
+            }
         }
     }, [interaction.selectedNodes, setNodeHexValue, setTextHexValue]);
 
     const handleNodeColorChange = useCallback((hexValue: string) => {
         if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0]) {
             const updatedNode: DiagramNode = {...interaction.selectedNodes[0]}
+
+            if ((interaction.selectedNodes[0].visual?.shape === 'none' && interaction.selectedNodes[0].visual.visualContent?.colorizable)) {
+                updatedNode.visual!.iconColor = hexValue;
+            }
+            else {
             updatedNode.visual!.color = hexValue;
+            }
             updateNode(updatedNode);
+        
         }
 
 
@@ -43,8 +54,8 @@ export default function VisualPropertyEditor() {
     {interaction.selectedNodes.length > 0 && (
         <div style={{margin: 50}} className='is-over-viewport-unselectable'>
             <h3>Visual properties:</h3>
-            <ColorInput title='Node color' pb={10} label='Node color' w={150} fixOnBlur={false} value={nodeHexValue} defaultValue='#ffffff'
-            onChange={handleNodeColorChange} />
+            {((interaction.selectedNodes[0].visual?.shape === 'none' && interaction.selectedNodes[0].visual.visualContent?.colorizable) || (interaction.selectedNodes[0].visual?.shape !== 'none')) && (<ColorInput title='Node color' pb={10} label='Node color' w={150} fixOnBlur={false} value={nodeHexValue} defaultValue='#ffffff'
+            onChange={handleNodeColorChange} />)}
 
             <ColorInput title='Label text color' label='Text color' w={150} fixOnBlur={false}  value={textHexValue} defaultValue='#ffffff' 
             onChange={handleTextColorChange} />

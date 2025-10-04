@@ -1001,7 +1001,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
     try {
     const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
-    const visualData = this.visualRenderer?.prepareVisualData(visibleNodes);
+    const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
 
 
       await this.edgeRenderer!.render(

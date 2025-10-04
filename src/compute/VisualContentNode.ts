@@ -211,7 +211,7 @@ export class VisualContentNode {
   
   private getNodeAtlasRegion(): {x: number, y: number, width: number, height: number} | undefined {
     // Get the UV coordinates and dimensions for this node's visual content in the atlas
-    return this.visualContentRenderer.atlas.getEntry(this.node.visual!.cacheKey);
+    return this.visualContentRenderer.atlas.getEntry(this.node.visual!.cacheKey!);
   }
   
   private async copyAtlasRegionToTexture(

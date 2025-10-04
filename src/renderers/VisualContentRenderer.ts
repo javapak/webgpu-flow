@@ -29,6 +29,28 @@ export class VisualContentRenderer {
     console.log('🎨 VisualContentRenderer initialized successfully');
   }
 
+    private hexToRgba(hex: string) {
+    const cleanHex = hex.replace('#', '');
+    
+    if (cleanHex.length === 8) {
+      return [
+        parseInt(cleanHex.substring(0, 2), 16) / 255,
+        parseInt(cleanHex.substring(2, 4), 16) / 255,
+        parseInt(cleanHex.substring(4, 6), 16) / 255,
+        parseInt(cleanHex.substring(6, 8), 16) / 255,
+      ];
+    } else if (cleanHex.length === 6) {
+      return [
+        parseInt(cleanHex.substring(0, 2), 16) / 255,
+        parseInt(cleanHex.substring(2, 4), 16) / 255,
+        parseInt(cleanHex.substring(4, 6), 16) / 255,
+        1.0,
+      ];
+  
+    }
+    return [1, 1, 1, 1];
+  }
+
   private async setupVisualRenderPipeline() {
     this.visualBuffer = this.device.createBuffer({
       size: 1000 * 48,
@@ -198,7 +220,7 @@ export class VisualContentRenderer {
 
   
 
-  prepareVisualData(visibleNodes: DiagramNode[]): VisualInstanceData[] {
+  async prepareVisualData(visibleNodes: DiagramNode[]): Promise<VisualInstanceData[]> {
     console.log('🎨 prepareVisualData called with', visibleNodes.length, 'nodes');
     
     const nodesWithVisuals = visibleNodes.filter(node => 
@@ -217,6 +239,7 @@ export class VisualContentRenderer {
 
     const visualDataArray: VisualInstanceData[] = [];
 
+    // Process nodes sequentially to handle async SVG loading
     for (const node of nodesWithVisuals) {
       console.log('🎨 Processing node:', node.id, node);
       try {
@@ -230,7 +253,7 @@ export class VisualContentRenderer {
           content = node.visual.visualContent.content;
           type = node.visual.visualContent.type;
           iconSize = node.visual.visualContent.size?.width || 64;
-          console.log('🎨 Using visualContent:', content, type);
+          console.log('🎨 Using visualContent:', { content: content.substring(0, 50), type });
         } else if (node.visual?.icon) {
           content = node.visual.icon;
           type = 'emoji';
@@ -250,20 +273,32 @@ export class VisualContentRenderer {
           continue;
         }
 
-        if (type === 'emoji' || content.length <= 2) {
+        // Handle different content types
+        if (type === 'svg') {
+          console.log('🎨 Processing SVG content');
+          atlasEntry = await this.visualAtlas.addSVG(content, iconSize, node, node.visual?.visualContent?.colorizable);
+        } else if (type === 'image') {
+          console.log('🎨 Processing image URL');
+          atlasEntry = await this.visualAtlas.addImageURL(content, iconSize, node);
+        } else if (type === 'emoji' || content.length <= 2) {
           atlasEntry = this.visualAtlas.addEmoji(content, iconSize, node);
         } else {
+          // Fallback for unknown types
           const color = node.visual?.color || '#3b82f6';
           atlasEntry = this.visualAtlas.addColoredShape('circle', color, iconSize, node);
         }
         
         if (!atlasEntry) {
-          console.warn('🎨 Failed to add visual content to atlas:', content);
+          console.warn('🎨 Failed to add visual content to atlas:', content.substring(0, 50));
           continue;
         }
+        let tintColor = [1, 1, 1, 1];
+        if (atlasEntry.colorizable && node.visual?.iconColor) {
+          tintColor = this.hexToRgba(node.visual.iconColor);
+        }
 
-        // Make visuals much larger and more visible
-        const visualScale = 0.5; // Fixed large scale
+        // Make visuals appropriately sized
+        const visualScale = 0.5;
         const visualWorldWidth = iconSize * visualScale;
         const visualWorldHeight = iconSize * visualScale;
 
@@ -273,24 +308,23 @@ export class VisualContentRenderer {
         const atlasSize = this.visualAtlas.getAtlasSize();
         const u1 = atlasEntry.x / atlasSize;
         const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
-        const v1 = (atlasEntry.y + atlasEntry.height) / atlasSize;  // Flip V
-        const v2 = atlasEntry.y / atlasSize;                        // Flip V
+        const v1 = (atlasEntry.y + atlasEntry.height) / atlasSize;
+        const v2 = atlasEntry.y / atlasSize;
 
         visualDataArray.push({
           texCoords: [u1, v1, u2, v2],
-          color: [1, 1, 1, 1],
+          color: tintColor as [number, number, number, number],
           position: [visualX, visualY],
           size: [visualWorldWidth, visualWorldHeight]
         });
 
-        console.log(`🎨 Added visual: ${type}:"${content}" at (${visualX}, ${visualY}) size:(${visualWorldWidth}, ${visualWorldHeight}) UV:(${u1}, ${v1}, ${u2}, ${v2})`);
+        console.log(`🎨 Added visual: ${type}:"${content.substring(0, 30)}" at (${visualX}, ${visualY})`);
 
       } catch (error) {
         console.error('🎨 Error preparing visual content:', error);
       }
     }
 
-    console.log(`🎨 Final visual data array:`, visualDataArray);
     console.log(`🎨 Prepared ${visualDataArray.length} visuals for rendering`);
     return visualDataArray;
   }
@@ -365,7 +399,6 @@ export class VisualContentRenderer {
     return this.visualAtlas.getDebugCanvas();
   }
 
-  // DEBUG: Add this method to check the atlas
   debugShowAtlas(): void {
     const canvas = this.visualAtlas.getDebugCanvas();
     const newWindow = window.open('', '_blank');
@@ -441,6 +474,7 @@ function checkIfEdgePixel(
   
   return false; // All neighbors are opaque, not an edge
 }
+
 export function calculateContentBounds(
   imageData: ImageData, 
   contentRect: { x: number, y: number, width: number, height: number }

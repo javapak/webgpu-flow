@@ -5,6 +5,7 @@ export interface VisualAtlasEntry {
   y: number;
   width: number;
   height: number;
+  colorizable: boolean; // Track if this entry supports color tinting
 }
 
 export class VisualContentAtlas {
@@ -13,6 +14,9 @@ export class VisualContentAtlas {
   private texture: GPUTexture | null = null;
   private device: GPUDevice;
   private entries: Map<string, VisualAtlasEntry> = new Map();
+  
+  // Cache for loaded images
+  private imageCache: Map<string, HTMLImageElement> = new Map();
   
   // Atlas configuration
   private readonly ATLAS_SIZE = 2048; 
@@ -26,14 +30,12 @@ export class VisualContentAtlas {
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.ATLAS_SIZE;
     this.canvas.height = this.ATLAS_SIZE;
-    this.ctx = this.canvas.getContext('2d')!;
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
     
     // High quality rendering
     this.ctx.textRendering = 'optimizeLegibility';
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = 'high';
-    this.ctx.filter = 'blur(1)'
-
     
     // Clear to transparent
     this.ctx.clearRect(0, 0, this.ATLAS_SIZE, this.ATLAS_SIZE);
@@ -52,27 +54,107 @@ export class VisualContentAtlas {
     });
   }
 
-   private hashSvgContent(svgContent: string): string {
-    let hash = 2166136261; // FNV offset basis
-    for (let i = 0; i < svgContent.length; i++) {
-      hash ^= svgContent.charCodeAt(i);
-      hash = (hash * 16777619) >>> 0; // FNV prime, force to 32-bit unsigned
-    }
-    return hash.toString(36); // Base 36 for shorter strings
-  }
-  
-  /* private hashImageUrl(imageUrl: string): string {
-    // djb2 hash
+  /**
+   * Hash content WITHOUT color for reusability
+   */
+  private hashContent(content: string, size: number): string {
     let hash = 5381;
-    for (let i = 0; i < imageUrl.length; i++) {
-      hash = ((hash << 5) + hash + imageUrl.charCodeAt(i)) >>> 0;
+    const fullString = `${content}-${size}`;
+    for (let i = 0; i < fullString.length; i++) {
+      hash = ((hash << 5) + hash + fullString.charCodeAt(i)) >>> 0;
     }
     return hash.toString(36);
-  } */
+  }
 
-  // Simple emoji/text rendering (synchronous)
-  addEmoji(emoji: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
-    const cacheKey = `emoji:${node.visual!.visualContent!.content as string}`;
+  /**
+   * Rewrite SVG to use a single replaceable color
+   * Converts fills and strokes to use a template color that can be tinted
+   */
+  private prepareSVGForColorTinting(svgString: string): string {
+    let processedSvg = svgString.trim();
+    
+    // Strategy: Replace all fill and stroke colors with white
+    // Then we'll multiply by the desired color in the shader
+    
+    // Replace fill attributes with white
+    processedSvg = processedSvg.replace(/fill="[^"]*"/g, 'fill="white"');
+    processedSvg = processedSvg.replace(/fill:[^;"]*/g, 'fill:white');
+    processedSvg = processedSvg.replace(/stop-color:[^;"]*/g, 'stop-color:white');
+    processedSvg = processedSvg.replace(/stop-color="[^"]*"/g, 'stop-color="white"');
+    
+    return processedSvg;
+  }
+
+  /**
+   * Convert SVG string to Image for rendering
+   */
+  private async svgToImage(svgString: string, width: number, height: number, colorizable: boolean = false): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      let processedSvg = svgString.trim();
+      
+      // If colorizable, prepare SVG for tinting
+      if (colorizable) {
+        processedSvg = this.prepareSVGForColorTinting(processedSvg);
+      }
+      
+      // Add viewBox if not present
+      if (!processedSvg.includes('viewBox')) {
+        processedSvg = processedSvg.replace(
+          /<svg/,
+          `<svg viewBox="0 0 ${width} ${height}"`
+        );
+      }
+      
+      // Add width and height if not present
+      if (!processedSvg.includes('width=')) {
+        processedSvg = processedSvg.replace(
+          /<svg/,
+          `<svg width="${width}" height="${height}"`
+        );
+      }
+      
+      // Ensure xmlns is present
+      if (!processedSvg.includes('xmlns')) {
+        processedSvg = processedSvg.replace(
+          /<svg/,
+          '<svg xmlns="http://www.w3.org/2000/svg"'
+        );
+      }
+
+      const blob = new Blob([processedSvg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      
+      const img = new Image();
+      img.width = width;
+      img.height = height;
+      
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      
+      img.onerror = (e) => {
+        URL.revokeObjectURL(url);
+        console.error('Failed to load SVG:', e);
+        reject(new Error('Failed to load SVG'));
+      };
+      
+      img.src = url;
+    });
+  }
+
+  /**
+   * Add SVG content to the atlas
+   * @param colorizable - If true, SVG will be prepared for GPU color tinting
+   */
+  async addSVG(
+    svgString: string, 
+    size: number = 64, 
+    node: DiagramNode,
+    colorizable: boolean = false
+  ): Promise<VisualAtlasEntry | null> {
+    // Cache key doesn't include color if colorizable
+    const cacheKey = `svg:${this.hashContent(svgString, size)}${colorizable ? '-colorizable' : ''}`;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;
@@ -83,7 +165,6 @@ export class VisualContentAtlas {
     const padding = 4;
     const totalSize = size + padding * 2;
 
-    // Check if we need to move to next row
     if (this.currentX + totalSize > this.ATLAS_SIZE) {
       this.currentX = 0;
       this.currentY += this.currentRowHeight + padding;
@@ -95,10 +176,69 @@ export class VisualContentAtlas {
       return null;
     }
 
-    // Clear the area
+    try {
+      const img = await this.svgToImage(svgString, size, size, colorizable);
+      
+      this.ctx.clearRect(this.currentX, this.currentY, totalSize, totalSize);
+
+      this.ctx.drawImage(
+        img,
+        this.currentX + padding,
+        this.currentY + padding,
+        size,
+        size
+      );
+
+      const entry: VisualAtlasEntry = {
+        x: this.currentX,
+        y: this.currentY,
+        width: totalSize,
+        height: totalSize,
+        colorizable: colorizable
+      };
+
+      this.entries.set(cacheKey, entry);
+      
+      this.currentX += totalSize + padding;
+      this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
+      this.needsUpdate = true;
+
+      console.log(`Added ${colorizable ? 'colorizable ' : ''}SVG to atlas at (${entry.x}, ${entry.y})`);
+      return entry;
+    } catch (error) {
+      console.error('Failed to add SVG to atlas:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Add emoji to atlas 
+   */
+  addEmoji(emoji: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
+    const cacheKey = `emoji:${emoji}-${size}`;
+    
+    if (this.entries.has(cacheKey)) {
+      return this.entries.get(cacheKey)!;
+    }
+
+    node.visual!.cacheKey = cacheKey;
+
+    const padding = 4;
+    const totalSize = size + padding * 2;
+
+    if (this.currentX + totalSize > this.ATLAS_SIZE) {
+      this.currentX = 0;
+      this.currentY += this.currentRowHeight + padding;
+      this.currentRowHeight = 0;
+    }
+
+    if (this.currentY + totalSize > this.ATLAS_SIZE) {
+      console.warn('Visual atlas is full!');
+      return null;
+    }
+
     this.ctx.clearRect(this.currentX, this.currentY, totalSize, totalSize);
 
-    // Draw emoji
     this.ctx.font = `${size}px system-ui, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
@@ -112,37 +252,34 @@ export class VisualContentAtlas {
       x: this.currentX,
       y: this.currentY,
       width: totalSize,
-      height: totalSize
+      height: totalSize,
+      colorizable: false
     };
 
     this.entries.set(cacheKey, entry);
     
-    // Update position tracking
     this.currentX += totalSize + padding;
     this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
     this.needsUpdate = true;
 
-    console.log(`Added emoji "${emoji}" to atlas at (${entry.x}, ${entry.y})`);
     return entry;
   }
 
-  getEntry(key: string): VisualAtlasEntry | undefined {
-    if (this.entries.has(key)) return this.entries.get(key);
-  }
-
-  // Simple colored shape rendering (synchronous)
-  addColoredShape(shape: string, color: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
-    const cacheKey = `svg:${this.hashSvgContent(node.visual!.visualContent!.content)}`;
-    node.visual!.cacheKey = cacheKey;
+  /**
+   * Add external image URL to atlas
+   */
+  async addImageURL(imageUrl: string, size: number = 64, node: DiagramNode): Promise<VisualAtlasEntry | null> {
+    const cacheKey = `image:${this.hashContent(imageUrl, size)}`;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;
     }
 
+    node.visual!.cacheKey = cacheKey;
+
     const padding = 4;
     const totalSize = size + padding * 2;
 
-    // Check if we need to move to next row
     if (this.currentX + totalSize > this.ATLAS_SIZE) {
       this.currentX = 0;
       this.currentY += this.currentRowHeight + padding;
@@ -154,10 +291,83 @@ export class VisualContentAtlas {
       return null;
     }
 
-    // Clear the area
+    try {
+      let img = this.imageCache.get(imageUrl);
+      
+      if (!img) {
+        img = await this.loadImage(imageUrl);
+        this.imageCache.set(imageUrl, img);
+      }
+
+      this.ctx.clearRect(this.currentX, this.currentY, totalSize, totalSize);
+
+      this.ctx.drawImage(
+        img,
+        this.currentX + padding,
+        this.currentY + padding,
+        size,
+        size
+      );
+
+      const entry: VisualAtlasEntry = {
+        x: this.currentX,
+        y: this.currentY,
+        width: totalSize,
+        height: totalSize,
+        colorizable: false
+      };
+
+      this.entries.set(cacheKey, entry);
+      
+      this.currentX += totalSize + padding;
+      this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
+      this.needsUpdate = true;
+
+      console.log(`Added image to atlas at (${entry.x}, ${entry.y})`);
+      return entry;
+    } catch (error) {
+      console.error('Failed to add image to atlas:', error);
+      return null;
+    }
+  }
+
+  private loadImage(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+      
+      img.src = url;
+    });
+  }
+
+  addColoredShape(shape: string, color: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
+    const cacheKey = `shape:${shape}-${color}-${size}`;
+    
+    if (this.entries.has(cacheKey)) {
+      return this.entries.get(cacheKey)!;
+    }
+
+    node.visual!.cacheKey = cacheKey;
+
+    const padding = 4;
+    const totalSize = size + padding * 2;
+
+    if (this.currentX + totalSize > this.ATLAS_SIZE) {
+      this.currentX = 0;
+      this.currentY += this.currentRowHeight + padding;
+      this.currentRowHeight = 0;
+    }
+
+    if (this.currentY + totalSize > this.ATLAS_SIZE) {
+      console.warn('Visual atlas is full!');
+      return null;
+    }
+
     this.ctx.clearRect(this.currentX, this.currentY, totalSize, totalSize);
 
-    // Draw simple shapes
     this.ctx.fillStyle = color;
     this.ctx.strokeStyle = '#ffffff';
     this.ctx.lineWidth = 2;
@@ -183,7 +393,6 @@ export class VisualContentAtlas {
         this.ctx.closePath();
         break;
       default:
-        // Default to circle
         this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     }
     
@@ -194,24 +403,22 @@ export class VisualContentAtlas {
       x: this.currentX,
       y: this.currentY,
       width: totalSize,
-      height: totalSize
+      height: totalSize,
+      colorizable: false
     };
 
     this.entries.set(cacheKey, entry);
     
-    // Update position tracking
     this.currentX += totalSize + padding;
     this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
     this.needsUpdate = true;
 
-    console.log(`Added ${shape} to atlas at (${entry.x}, ${entry.y})`);
     return entry;
   }
 
   updateGPUTexture() {
     if (!this.needsUpdate || !this.texture) return;
 
-    // Copy canvas data to GPU texture
     this.device.queue.copyExternalImageToTexture(
       { source: this.canvas },
       { texture: this.texture },
@@ -219,7 +426,10 @@ export class VisualContentAtlas {
     );
 
     this.needsUpdate = false;
-    console.log('Updated visual content atlas GPU texture');
+  }
+
+  getEntry(key: string): VisualAtlasEntry | undefined {
+    return this.entries.get(key);
   }
 
   getTexture(): GPUTexture | null {
@@ -232,6 +442,7 @@ export class VisualContentAtlas {
 
   clear() {
     this.entries.clear();
+    this.imageCache.clear();
     this.currentX = 0;
     this.currentY = 0;
     this.currentRowHeight = 0;
@@ -242,6 +453,7 @@ export class VisualContentAtlas {
   getStats() {
     return {
       totalEntries: this.entries.size,
+      cachedImages: this.imageCache.size,
       currentX: this.currentX,
       currentY: this.currentY,
       currentRowHeight: this.currentRowHeight,
@@ -260,5 +472,6 @@ export class VisualContentAtlas {
       this.texture = null;
     }
     this.entries.clear();
+    this.imageCache.clear();
   }
 }

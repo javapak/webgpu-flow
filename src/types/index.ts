@@ -51,11 +51,13 @@ export interface DiagramNode {
     [key: string]: any;
   };
   visual?: {
+    iconColor?: string;
     labelColor?: string;
     color?: string;
     shape?: string;
-    visualContent?: {type: 'svg' | 'image' | 'emoji', content: string, size: {width: number, height: number}}
+    visualContent?: {type: 'svg' | 'image' | 'emoji', content: string, size: {width: number, height: number}, colorizable?: boolean}
     selected?: boolean;
+    cacheKey?: string; // For caching rendered visuals
     [key: string]: any;
   };
 }

@@ -52,7 +52,7 @@ An interactive flow diagram editor built with **React**, **TypeScript**, and **W
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/webgpu-flow-editor.git
+git clone https://github.com/javapak/webgpu-flow.git
 cd webgpu-flow-editor
 
 # Install dependencies

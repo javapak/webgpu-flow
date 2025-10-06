@@ -16,11 +16,13 @@ export class LabelRenderer {
   private labelBindGroup: GPUBindGroup | null = null;
   private labelBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer;
+  private sampleCount: string;
   
-  constructor(device: GPUDevice, uniformBuffer: GPUBuffer) {
+  constructor(device: GPUDevice, uniformBuffer: GPUBuffer, sampleCount = '1') {
     this.device = device;
     this.uniformBuffer = uniformBuffer;
     this.textAtlas = new TextureAtlas(device);
+    this.sampleCount = sampleCount;
   }
 
   async initialize(): Promise<void> {
@@ -178,7 +180,8 @@ export class LabelRenderer {
         format: 'depth24plus',
         depthWriteEnabled: true, 
         depthCompare: 'less',
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount)}
     });
 
     // Create bind group (will be updated when atlas texture is ready)

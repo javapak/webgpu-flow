@@ -16,11 +16,13 @@ export class VisualContentRenderer {
   private visualBindGroup: GPUBindGroup | null = null;
   private visualBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer;
+  private sampleCount: string | null;
   
   constructor(device: GPUDevice, uniformBuffer: GPUBuffer, sampleCount = '1') {
     this.device = device;
     this.uniformBuffer = uniformBuffer;
     this.visualAtlas = new VisualContentAtlas(device, sampleCount);
+    this.sampleCount =  sampleCount;
   }
 
   async initialize(): Promise<void> {
@@ -190,7 +192,8 @@ export class VisualContentRenderer {
         format: 'depth24plus',
         depthWriteEnabled: true,
         depthCompare: 'less', 
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount as string)}
 
     });
 

@@ -45,6 +45,7 @@ export class WebGPURenderer {
   private labelRenderer: LabelRenderer | null = null;
   private visualRenderer: VisualContentRenderer | null = null;
   private depthTexture: GPUTexture | null = null;
+  private multisampledTexture: GPUTexture | null = null;
   private edgeRenderer: FloatingEdgeRenderer | null = null;
   private visualContentNodeManager: VisualContentNodeManager | null = null;
   private gpuCapibilitiesRef: GPUCapabilities | null = null;
@@ -116,7 +117,18 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       size: [this.canvas.width, this.canvas.height],
       format: 'depth24plus',
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: parseInt(this.sampleCount)
     });
+
+    if (parseInt(this.sampleCount) > 1) {
+      this.multisampledTexture = this.device!.createTexture({
+        label: 'initial-multisampled-texture',
+        size: [this.canvas.width, this.canvas.height],
+        format: navigator.gpu.getPreferredCanvasFormat(),
+        sampleCount: parseInt(this.sampleCount),
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+    }
 
     console.log(this.depthTexture)
 
@@ -135,8 +147,51 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
   setSampleCount(count: string) {   
     if (this.gpuCapibilitiesRef && this.gpuCapibilitiesRef.sampleCountsSupported.includes(count)) {
+      console.log(`Changing sample count from ${this.sampleCount} to ${count}`);
       this.sampleCount = count;
-      console.log(`Sample count set to ${count}`);
+      
+      // Destroy and recreate textures with new sample count
+      if (this.canvas && this.device) {
+        // Destroy old textures
+        this.depthTexture?.destroy();
+        this.multisampledTexture?.destroy();
+        
+        const sampleCountNum = parseInt(count);
+        
+        // Create depth texture
+        this.depthTexture = this.device.createTexture({
+          label: 'depth-texture-msaa',
+          size: [this.canvas.width, this.canvas.height],
+          format: 'depth24plus',
+          sampleCount: sampleCountNum,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        
+        // Create multisampled color texture if sample count > 1
+        if (sampleCountNum > 1) {
+          this.multisampledTexture = this.device.createTexture({
+            label: 'multisampled-color-texture',
+            size: [this.canvas.width, this.canvas.height],
+            format: navigator.gpu.getPreferredCanvasFormat(),
+            sampleCount: sampleCountNum,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+        } else {
+          this.multisampledTexture = null;
+        }
+        
+        console.log(`✅ Recreated textures with sample count ${count}`);
+      }
+      
+      // Recreate visual renderer with new sample count
+      if (this.visualRenderer) {
+        console.log('🎨 Recreating visual renderer with new sample count');
+        this.visualRenderer.destroy();
+        this.visualRenderer = new VisualContentRenderer(this.device!, this.uniformBuffer!, count);
+        this.visualRenderer.initialize().then(() => {
+          console.log('Visual renderer recreated');
+        });
+      }
     } else {
       console.warn(`Sample count ${count} not supported. Supported counts: ${this.gpuCapibilitiesRef?.sampleCountsSupported}`);
       this.sampleCount = '1';
@@ -167,6 +222,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       size: 8 * 32, // Up to 8 handles per selected node (8 floats * 4 bytes each)
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+
+    
 
 
     // Fixed WGSL shader with proper shape handling
@@ -624,7 +681,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         format: 'depth24plus',
         depthWriteEnabled: true,
         depthCompare: 'less', 
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount)}
     });
 
     this.handleRenderPipeline = this.device.createRenderPipeline({
@@ -658,7 +716,8 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         format: 'depth24plus',
         depthWriteEnabled: true,
         depthCompare: 'less', 
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount)}
 
     });
 
@@ -693,23 +752,26 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         format: 'depth24plus',
         depthWriteEnabled: true,
         depthCompare: 'less', 
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount)}
 
     });
   }
   
-
   updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
     if (this.device && this.canvas) {
-    this.canvas.width = canvasSize.width;
-    this.canvas.height = canvasSize.height;
-    this.depthTexture?.destroy();
-    this.depthTexture = this.device.createTexture({
-      size: { width: canvasSize.width, height: canvasSize.height },
-      sampleCount: parseInt(this.sampleCount),
-      format: 'depth24plus',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
+      console.log(`🔄 Updating depth texture size to ${canvasSize.width}x${canvasSize.height} with sample count ${this.sampleCount}`);
+      this.canvas.width = canvasSize.width;
+      this.canvas.height = canvasSize.height;
+      this.depthTexture?.destroy();
+      this.depthTexture = this.device.createTexture({
+        label: 'depth-texture-resized',
+        size: { width: canvasSize.width, height: canvasSize.height },
+        sampleCount: parseInt(this.sampleCount),
+        format: 'depth24plus',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      console.log(`Depth texture recreated`);
     }
   }
 
@@ -740,20 +802,37 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       }
 
 
-      // Update canvas size if needed
-      if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
-        console.warn("============================CANVAS SIZE UPDATE===============================")
-          this.canvas.width = canvasSize.width;
-          this.canvas.height = canvasSize.height;
-          this.depthTexture?.destroy();
-          this.depthTexture = this.device.createTexture({
-            size: { width: canvasSize.width, height: canvasSize.height },
-            sampleCount: parseInt(this.sampleCount),
-            format: 'depth24plus',
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-          });
-      
-      }
+  if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
+    console.log("Canvas size changed, updating textures");
+    this.canvas.width = canvasSize.width;
+    this.canvas.height = canvasSize.height;
+    
+    const sampleCountNum = parseInt(this.sampleCount);
+    
+    this.depthTexture?.destroy();
+    this.depthTexture = this.device.createTexture({
+      label: 'depth-texture-render',
+      size: { width: canvasSize.width, height: canvasSize.height },
+      sampleCount: sampleCountNum,
+      format: 'depth24plus',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    
+    this.multisampledTexture?.destroy();
+    if (sampleCountNum > 1) {
+      this.multisampledTexture = this.device.createTexture({
+        label: 'multisampled-render',
+        size: { width: canvasSize.width, height: canvasSize.height },
+        format: navigator.gpu.getPreferredCanvasFormat(),
+        sampleCount: sampleCountNum,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+    } else {
+      this.multisampledTexture = null;
+    }
+    
+    console.log(`Textures updated with sample count ${this.sampleCount}`);
+  }
 
 
       
@@ -762,24 +841,33 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       if (visibleNodes.length === 0) {
         // Still clear the canvas and render grid
         const commandEncoder = this.device.createCommandEncoder();
-        const textureView = this.context.getCurrentTexture().createView();
-        
-        const renderPass = commandEncoder.beginRenderPass({
-          label: "my only render pass for real....",
-          colorAttachments: [{
-            view: textureView,
-            clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1.0 },
-            loadOp: 'clear' as const,
-            storeOp: 'store' as const,
-          }],
-          depthStencilAttachment: {
-            view: this.depthTexture!.createView(),
-            depthClearValue: 1.0, 
-            depthLoadOp: 'clear',
-            depthStoreOp: 'store',
-          }
+        const canvasTexture = this.context.getCurrentTexture();
+        const canvasView = canvasTexture.createView();
+        const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
+  ? {
+      view: this.multisampledTexture.createView(),
+      resolveTarget: canvasView, // Resolve to canvas
+      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+      loadOp: 'clear',
+      storeOp: 'store',
+    }
+  : {
+      view: canvasView,
+      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+      loadOp: 'clear',
+      storeOp: 'store',
+    };
 
-        });
+    const renderPass = commandEncoder.beginRenderPass({
+      label: 'main-render-pass',
+      colorAttachments: [colorAttachment],
+      depthStencilAttachment: {
+        view: this.depthTexture!.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      }
+    });
         this.renderGrid(renderPass, viewport, canvasSize);
         
         renderPass.end();
@@ -971,28 +1059,36 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         this.device.queue.writeBuffer(this.handleBuffer!, 0, flatHandleData);
       }
 
-      // Render everything
-      const commandEncoder = this.device.createCommandEncoder();
+  const commandEncoder = this.device.createCommandEncoder();
+  const canvasTexture = this.context.getCurrentTexture();
+  const canvasView = canvasTexture.createView();
 
-    const textureView = this.context.getCurrentTexture().createView();
-    
-      
-  const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: textureView,
-        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-        loadOp: 'clear',
-        storeOp: 'store', 
-      }],
-      depthStencilAttachment: {
-        view: this.depthTexture!.createView(),
-        depthClearValue: 1.0, 
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-      }
-    });
+  const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
+  ? {
+      view: this.multisampledTexture.createView(),
+      resolveTarget: canvasView, // Resolve to canvas
+      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+      loadOp: 'clear',
+      storeOp: 'store',
+    }
+  : {
+      view: canvasView,
+      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+      loadOp: 'clear',
+      storeOp: 'store',
+    };
 
-    this.renderGrid(renderPass, viewport, canvasSize);
+const renderPass = commandEncoder.beginRenderPass({
+  label: 'main-render-pass',
+  colorAttachments: [colorAttachment],
+  depthStencilAttachment: {
+    view: this.depthTexture!.createView(),
+    depthClearValue: 1.0,
+    depthLoadOp: 'clear',
+    depthStoreOp: 'store',
+  }
+});
+  this.renderGrid(renderPass, viewport, canvasSize);
 
 
 
@@ -1185,6 +1281,16 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         this.handleBuffer.destroy();
         this.handleBuffer = null;
       }
+      
+      if (this.depthTexture) {
+        this.depthTexture.destroy();
+        this.depthTexture = null;
+      }
+      
+      if (this.multisampledTexture) {
+        this.multisampledTexture.destroy();
+        this.multisampledTexture = null;
+      }
 
       if (this.labelRenderer) {
         this.labelRenderer.destroy();
@@ -1218,9 +1324,9 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       this.initialized = false;
       this.canvas = null;
 
-      console.log('Fixed WebGPU renderer destroyed');
+      console.log('WebGPU renderer destroyed');
     } catch (error) {
-      console.error('Error destroying WebGPU renderer:', error);
+      console.error('Error destroying renderer:', error);
     }
   }
 

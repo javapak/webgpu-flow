@@ -6,7 +6,7 @@ import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
 import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 import { ActionIcon, NativeSelect } from '@mantine/core';
-import {Dismiss16Regular, Settings16Regular, Warning16Filled} from '@fluentui/react-icons';
+import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 
 
 // Mobile detection utility
@@ -37,8 +37,9 @@ export const DiagramDemo: React.FC = () => {
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>([]);
   const [sampleCount, setSampleCount] = useState('1');
   const [superSamplingValue, setSuperSamplingValue] = useState('Disabled');
+  const [canvasKey, setCanvasKey] = useState(0); // Force canvas remount on sample count change
+  
   // Handle window resize for responsive design
-
   useEffect(() => {
     const handleResize = () => {
       const mobile = isMobileDevice();
@@ -50,8 +51,6 @@ export const DiagramDemo: React.FC = () => {
         setPaletteVisible(false);
       }
     };
-
-
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -95,6 +94,13 @@ export const DiagramDemo: React.FC = () => {
   const handleOpenSettingsMenu = useCallback(() => {
      setSettingsOpen(!settingsOpen);
   }, [settingsOpen, setSettingsOpen])
+
+  const handleSampleCountChange = useCallback((newSampleCount: string) => {
+    console.log('Changing sample count to:', newSampleCount);
+    setSampleCount(newSampleCount);
+    // Force canvas remount by changing key
+    setCanvasKey(prev => prev + 1);
+  }, []);
 
   const togglePalette = () => {
     setPaletteVisible(!paletteVisible);
@@ -160,10 +166,8 @@ export const DiagramDemo: React.FC = () => {
           }}>
             <NodePalette 
               onNodeDragStart={handleNodeDragStart}
-              isMobile={isMobile} // Pass the mobile flag
+              isMobile={isMobile}
             />
-          
-            
           </div>
         )}
         
@@ -196,16 +200,16 @@ export const DiagramDemo: React.FC = () => {
           <div className="SettingsContentContainer">
             <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
             <h3 style={{justifyContent: 'center'}}>Settings</h3>
-            <strong style={{color: 'yellow', fontSize: 10}}><Warning16Filled/> options not yet functional</strong>
 
             <div style={{display: 'block'}}>MSAA:
-                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {setSampleCount(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
+                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
             </div>
           <div style={{display: 'block'}}>
               Supersampling: 
               <NativeSelect data={['Disabled', '2x', '4x', '8x']} onChange={(e) => {setSuperSamplingValue(e.currentTarget.value)}} value={superSamplingValue}/></div>
           </div>
           </div>}
+          
           {/* Canvas Container */}
           <div style={{ 
             flex: '1',
@@ -218,13 +222,13 @@ export const DiagramDemo: React.FC = () => {
           }}>
 
           <DiagramCanvas 
+            key={canvasKey}
             width={canvasSize.width}
             height={canvasSize.height}
             setSupportedSampleCount={setSupportedSampleCount}
             onNodeDropped={handleNodeDropped}
             onSampleCountChange={setSampleCount}
             sampleCount={sampleCount}
-            
           />
 
           <VisualContentNodesTest />

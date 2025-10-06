@@ -51,6 +51,8 @@ export const DiagramDemo: React.FC = () => {
       }
     };
 
+
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -220,6 +222,9 @@ export const DiagramDemo: React.FC = () => {
             height={canvasSize.height}
             setSupportedSampleCount={setSupportedSampleCount}
             onNodeDropped={handleNodeDropped}
+            onSampleCountChange={setSampleCount}
+            sampleCount={sampleCount}
+            
           />
 
           <VisualContentNodesTest />

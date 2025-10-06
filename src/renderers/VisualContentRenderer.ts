@@ -17,10 +17,10 @@ export class VisualContentRenderer {
   private visualBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer;
   
-  constructor(device: GPUDevice, uniformBuffer: GPUBuffer) {
+  constructor(device: GPUDevice, uniformBuffer: GPUBuffer, sampleCount = '1') {
     this.device = device;
     this.uniformBuffer = uniformBuffer;
-    this.visualAtlas = new VisualContentAtlas(device);
+    this.visualAtlas = new VisualContentAtlas(device, sampleCount);
   }
 
   async initialize(): Promise<void> {

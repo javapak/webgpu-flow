@@ -14,6 +14,7 @@ export class VisualContentAtlas {
   private texture: GPUTexture | null = null;
   private device: GPUDevice;
   private entries: Map<string, VisualAtlasEntry> = new Map();
+  private sampleCount: string;
   
   // Cache for loaded images
   private imageCache: Map<string, HTMLImageElement> = new Map();
@@ -25,7 +26,8 @@ export class VisualContentAtlas {
   private currentRowHeight = 0;
   private needsUpdate = false;
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, sampleCount = '1') {
+    this.sampleCount = sampleCount;
     this.device = device;
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.ATLAS_SIZE;
@@ -51,6 +53,7 @@ export class VisualContentAtlas {
       size: [this.ATLAS_SIZE, this.ATLAS_SIZE],
       format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: parseInt(this.sampleCount)
     });
   }
 

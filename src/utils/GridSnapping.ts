@@ -7,6 +7,8 @@ export interface GridSnappingOptions {
 export class GridSnapping {
   private static DEFAULT_GRID_SIZE = 50;
 
+
+  
   /**
    * Snap a single coordinate value to the nearest grid point
    */

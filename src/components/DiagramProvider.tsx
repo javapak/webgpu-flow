@@ -73,6 +73,7 @@ export interface DiagramContextValue extends DiagramState {
   isRendererInitialized: () => boolean;
   initializeRenderer: (canvas: HTMLCanvasElement) => Promise<boolean>;
   renderFrame: () => void;
+  setSampleCount: (sampleCount: string) => void;
   
   // Debug
   getSpatialDebugInfo: () => any;
@@ -1200,6 +1201,13 @@ function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): nu
 
 }
 
+ const setSampleCount = useCallback((count: string) => {
+    if (rendererRef.current) {
+      rendererRef.current.setSampleCount(count);
+      scheduleRender();
+    }
+  }, [scheduleRender]);
+
 
 
 
@@ -1210,6 +1218,7 @@ function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): nu
     mode,
     drawingState,
     toggleMode,
+    setSampleCount,
     exitDrawMode,
     startDrawing,
     addControlPoint,

@@ -9,6 +9,7 @@ import { VisualContentNodeManager } from '../compute/VisualContentNode';
 import { ShaderBasedEdgeDetector } from '../compute/ShaderBasedEdgeDetector';
 import GPUCapabilities from '../utils/GPUCapabilities';
 import type { EdgeDrawingState } from '../components/DiagramProvider';
+import { GridSnapping } from '../utils/GridSnapping';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -47,6 +48,7 @@ export class WebGPURenderer {
   private edgeRenderer: FloatingEdgeRenderer | null = null;
   private visualContentNodeManager: VisualContentNodeManager | null = null;
   private gpuCapibilitiesRef: GPUCapabilities | null = null;
+  private sampleCount: string = '1';
 
 
 
@@ -100,7 +102,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
 
       // ADD VISUAL RENDERER INITIALIZATION
       try {
-        this.visualRenderer = new VisualContentRenderer(this.device!, this.uniformBuffer!);
+        this.visualRenderer = new VisualContentRenderer(this.device!, this.uniformBuffer!, this.sampleCount);
         await this.visualRenderer.initialize();
         const edgeDetector = new ShaderBasedEdgeDetector(this.device!);
         this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
@@ -131,7 +133,15 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     return this.gpuCapibilitiesRef?.sampleCountsSupported;
   }
 
-
+  setSampleCount(count: string) {   
+    if (this.gpuCapibilitiesRef && this.gpuCapibilitiesRef.sampleCountsSupported.includes(count)) {
+      this.sampleCount = count;
+      console.log(`Sample count set to ${count}`);
+    } else {
+      console.warn(`Sample count ${count} not supported. Supported counts: ${this.gpuCapibilitiesRef?.sampleCountsSupported}`);
+      this.sampleCount = '1';
+    }
+  }
 
   private async setupRenderPipelines() {
     if (!this.device) throw new Error('Device not initialized');
@@ -323,10 +333,14 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       }
 
         // Anti-aliasing with better smoothing
-        var smoothWidth = 0.025;
-        if (uniforms.viewport.z < 0.75) {
-          smoothWidth = 0.05;
+        var smoothWidth = 0.01;
+        if (input.nodeSize.x < 40.0 || input.nodeSize.y < 40.0) {
+          smoothWidth = 0.05; // Wider smoothing for small nodes
         }
+        if (input.nodeSize.x < 20.0 || input.nodeSize.y < 20.0) {
+          smoothWidth = 0.1; // Even wider for very small nodes
+        }
+          
 
         let alpha = 1.0 - smoothstep(-smoothWidth, smoothWidth, distance);
         
@@ -373,7 +387,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
       @vertex
       fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         // Grid configuration
-        let gridSize = 50.0; // Grid spacing in world units
+        let gridSize = ${GridSnapping.getDefaultGridSize()}.0; // Grid spacing in world units
         let lineWidth = max(1.0 / uniforms.viewport.z, 0.5); // Adaptive line width
         
         // Get actual canvas dimensions from uniform
@@ -438,7 +452,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
         let baseAlpha = 0.25;
         let zoomFactor = uniforms.viewport.z;
         let alpha = clamp(baseAlpha * min(zoomFactor * 0.8, 1.2), 0.08, 0.4);
-        output.color = vec4<f32>(0.6, 0.6, 0.6, alpha);
+        output.color = vec4<f32>(0.7, 0.7, 0.7, alpha);
         
         return output;
       }
@@ -692,7 +706,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     this.depthTexture?.destroy();
     this.depthTexture = this.device.createTexture({
       size: { width: canvasSize.width, height: canvasSize.height },
-      sampleCount: 1,
+      sampleCount: parseInt(this.sampleCount),
       format: 'depth24plus',
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
@@ -734,7 +748,7 @@ async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
           this.depthTexture?.destroy();
           this.depthTexture = this.device.createTexture({
             size: { width: canvasSize.width, height: canvasSize.height },
-            sampleCount: 1,
+            sampleCount: parseInt(this.sampleCount),
             format: 'depth24plus',
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
           });

@@ -193,7 +193,7 @@ case 10: { // Custom shape
 ```
 
 
-2. (This feature is in progress and not currently functional)....Utilize visual.visualContent prop: visual.visualContent.content with type 'svg' and where the content prop is an svg string. Set visual.shape to 'none' in order for floating edges to use the correct borders with a compute shader approach.
+2. Utilize visual.visualContent prop: visual.visualContent.content with type 'svg' and where the content prop is an svg string. Set visual.shape to 'none' in order for floating edges to use the correct borders with a compute shader approach. You can also use svg primitives through this method for defining simple shapes.
 ```typescript
 <Node
   id="svg-test-node" 

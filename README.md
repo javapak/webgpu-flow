@@ -238,7 +238,7 @@ case 10: { // Custom shape
 - **Mobile touch handling**: Interaction set is behind pointer/mouse implementation
 
 ## Roadmap
-- [ ] **Full svg content support: Define node shapes with an svg string or reference
+- [x] **Full svg content support: Define node shapes with an svg string or reference
 - [ ] **Edge markers**: Define edge marker by svg/canvas to texture or with primitive shape shaders provided
 - [ ] **Multi-selection**: Select and move multiple nodes
 - [ ] **Undo/Redo**: Full history management

@@ -16,7 +16,7 @@ An interactive flow diagram editor built with **React**, **TypeScript**, and **W
 - **Flexible Styling**: Full color customization, size control, and visual properties
 
 ### Floating Edges + Definable anchor vertices
-- **Floating Edge System**: Smooth bezier curves with user-defined control points
+- **Floating Edge System**: User defined control points with dynamic connector placement based on node positions
 - **Smart Connection Points**: Automatic edge-to-shape intersection calculation
 - **Interactive Editing**: Add, move, and delete edge vertices with visual handles
 - **Edge Labels**: Add descriptive text labels to connections

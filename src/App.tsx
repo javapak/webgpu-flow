@@ -8,8 +8,6 @@ import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 import { ActionIcon, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 
-
-// Mobile detection utility
 const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 };
@@ -37,16 +35,14 @@ export const DiagramDemo: React.FC = () => {
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>([]);
   const [sampleCount, setSampleCount] = useState('1');
   const [superSamplingValue, setSuperSamplingValue] = useState('Disabled');
-  const [canvasKey, setCanvasKey] = useState(0); // Force canvas remount on sample count change
+  const [canvasKey, setCanvasKey] = useState(0);
   
-  // Handle window resize for responsive design
   useEffect(() => {
     const handleResize = () => {
       const mobile = isMobileDevice();
       setIsMobile(mobile);
       setCanvasSize(getOptimalCanvasSize());
       
-      // Auto-hide palette on mobile when resizing
       if (mobile && window.innerWidth < 768) {
         setPaletteVisible(false);
       }
@@ -56,11 +52,8 @@ export const DiagramDemo: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-
-  // Mobile viewport setup
   useEffect(() => {
     if (isMobile) {
-      // Set up mobile viewport
       let viewport = document.querySelector('meta[name="viewport"]');
       if (!viewport) {
         viewport = document.createElement('meta');
@@ -72,7 +65,6 @@ export const DiagramDemo: React.FC = () => {
         'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
       );
 
-      // Prevent default touch behaviors
       document.body.style.overscrollBehavior = 'contain';
       document.body.style.touchAction = 'manipulation';
     }
@@ -85,7 +77,6 @@ export const DiagramDemo: React.FC = () => {
   const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
     console.log(`Dropped ${nodeType.name} at position:`, position);
     
-    // Provide haptic feedback on mobile
     if (isMobile && navigator.vibrate) {
       navigator.vibrate(100);
     }
@@ -95,9 +86,13 @@ export const DiagramDemo: React.FC = () => {
      setSettingsOpen(!settingsOpen);
   }, [settingsOpen, setSettingsOpen])
 
-  const handleSampleCountChange = useCallback((newSampleCount: string) => {
-    console.log('Changing sample count to:', newSampleCount);
+  const handleSampleCountChange = useCallback(async (newSampleCount: string) => {
+    console.log('🎯 Changing sample count to:', newSampleCount);
     setSampleCount(newSampleCount);
+    
+    // Wait a brief moment for state to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     // Force canvas remount by changing key
     setCanvasKey(prev => prev + 1);
   }, []);
@@ -115,7 +110,6 @@ export const DiagramDemo: React.FC = () => {
         flexDirection: isMobile ? 'column' : 'row',
         overflow: 'hidden'
       }}>
-        {/* Mobile Header */}
         {isMobile && (
           <div style={{
             padding: '12px 16px',
@@ -154,7 +148,6 @@ export const DiagramDemo: React.FC = () => {
           </div>
         )}
 
-        {/* Node Palette - Now with mobile support */}
         {paletteVisible && (
           <div style={{ 
             flex: isMobile ? 'none' : '0 0 auto',
@@ -171,7 +164,6 @@ export const DiagramDemo: React.FC = () => {
           </div>
         )}
         
-        {/* Main Canvas Area */}
         <div style={{ 
           flex: '1',
           display: 'flex',
@@ -180,7 +172,6 @@ export const DiagramDemo: React.FC = () => {
           position: 'relative'
         }}>
           
-          {/* Desktop Header */}
           {!isMobile && (
             <div style={{ marginBottom: '16px', padding: '20px 20px 0' }}>
               <h2 style={{ margin: '0 0 8px 0', color: '#ffffffff' }}>
@@ -192,25 +183,59 @@ export const DiagramDemo: React.FC = () => {
             </div>
           )}
 
-          <div style={{position: 'absolute',  placeSelf: 'top',  top: 150, zIndex: '100' }}><VisualPropertyEditor/></div>
-
-          <div style={{position: 'fixed', paddingTop: 200, paddingRight: 50, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
-
-          {settingsOpen && <div style={{backgroundColor: '#3e3e3eff', position: 'absolute',  width: 250, placeSelf: 'center', top: 250, zIndex: '100'}}>
-          <div className="SettingsContentContainer">
-            <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
-            <h3 style={{justifyContent: 'center'}}>Settings</h3>
-
-            <div style={{display: 'block'}}>MSAA:
-                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
-            </div>
-          <div style={{display: 'block'}}>
-              Supersampling: 
-              <NativeSelect data={['Disabled', '2x', '4x', '8x']} onChange={(e) => {setSuperSamplingValue(e.currentTarget.value)}} value={superSamplingValue}/></div>
+          <div style={{position: 'absolute',  placeSelf: 'top',  top: 150, zIndex: '100' }}>
+            <VisualPropertyEditor/>
           </div>
-          </div>}
+
+          <div style={{position: 'fixed', paddingTop: 200, paddingRight: 50, placeSelf: 'end', zIndex: '100' }}>
+            <ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}>
+              <Settings16Regular/>
+            </ActionIcon>
+          </div>
+
+          {settingsOpen && (
+            <div style={{
+              backgroundColor: '#3e3e3eff', 
+              position: 'absolute',  
+              width: 250, 
+              placeSelf: 'center', 
+              top: 250, 
+              zIndex: '100'
+            }}>
+              <div className="SettingsContentContainer">
+                <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}>
+                  <ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}>
+                    <Dismiss16Regular/>
+                  </ActionIcon>
+                </div>
+                <h3 style={{justifyContent: 'center'}}>Settings</h3>
+
+                <div style={{display: 'block'}}>
+                  MSAA:
+                  {supportedSampleCount && supportedSampleCount.length > 0 && (
+                    <NativeSelect 
+                      onChange={(e) => {
+                        handleSampleCountChange(e.currentTarget.value);
+                        console.log('sample count selected', e.currentTarget.value);
+                      }} 
+                      value={sampleCount} 
+                      data={supportedSampleCount}
+                    />
+                  )}
+                </div>
+                
+                <div style={{display: 'block'}}>
+                  Supersampling: 
+                  <NativeSelect 
+                    data={['Disabled', '2x', '4x', '8x']} 
+                    onChange={(e) => {setSuperSamplingValue(e.currentTarget.value)}} 
+                    value={superSamplingValue}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           
-          {/* Canvas Container */}
           <div style={{ 
             flex: '1',
             padding: isMobile ? '8px' : '16px',
@@ -220,21 +245,19 @@ export const DiagramDemo: React.FC = () => {
             justifyContent: 'center',
             alignItems: 'center'
           }}>
+            <DiagramCanvas 
+              key={canvasKey}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              setSupportedSampleCount={setSupportedSampleCount}
+              onNodeDropped={handleNodeDropped}
+              onSampleCountChange={setSampleCount}
+              sampleCount={sampleCount}
+            />
 
-          <DiagramCanvas 
-            key={canvasKey}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            setSupportedSampleCount={setSupportedSampleCount}
-            onNodeDropped={handleNodeDropped}
-            onSampleCountChange={setSampleCount}
-            sampleCount={sampleCount}
-          />
-
-          <VisualContentNodesTest />
+            <VisualContentNodesTest />
           </div>
 
-          {/* Mobile Instructions */}
           {isMobile && (
             <div style={{
               padding: '12px 16px',
@@ -252,10 +275,8 @@ export const DiagramDemo: React.FC = () => {
               </p>
             </div>
           )}
-
         </div>
       </div>
     </DiagramProvider>
-    
   );
 };

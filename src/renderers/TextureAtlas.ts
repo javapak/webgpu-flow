@@ -43,6 +43,7 @@ export class TextureAtlas {
       size: [this.ATLAS_SIZE, this.ATLAS_SIZE],
       format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 1
     });
   }
 

@@ -105,6 +105,18 @@ useEffect(() => {
     setSampleCount(sampleCount);
   }, [sampleCount]);
 
+  useEffect(() => {
+  const updateSampleCount = async () => {
+    if (getRenderer() && sampleCount) {
+      console.log('📊 DiagramCanvas: Updating sample count to', sampleCount);
+      await getRenderer()?.setSampleCount(sampleCount);
+      renderFrame();
+    }
+  };
+  
+  updateSampleCount();
+}, [sampleCount, getRenderer, renderFrame]);
+
   // Initialize renderer once
   useEffect(() => {
     if (!canvasRef.current || initializationAttempted.current) {

@@ -136,17 +136,20 @@ export class FloatingEdgeRenderer {
   private maxVerticesPerEdge: number;
   private maxEdges: number;
   private connectionCalculator: EdgeConnectionCalculator;
+  private sampleCount: string;
   
   constructor(
     device: GPUDevice, 
     format: GPUTextureFormat = 'bgra8unorm',
     maxVerticesPerEdge = 20, 
-    maxEdges = 1000
+    maxEdges = 1000,
+    sampleCount = '1'
   ) {
     this.device = device;
     this.maxVerticesPerEdge = maxVerticesPerEdge;
     this.maxEdges = maxEdges;
     this.connectionCalculator = new EdgeConnectionCalculator();
+    this.sampleCount = sampleCount;
     
     this.createBuffers();
     this.createPipeline(format);
@@ -400,7 +403,8 @@ export class FloatingEdgeRenderer {
         format: 'depth24plus',
         depthWriteEnabled: true,
         depthCompare: 'less',
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount) }
     });
   }
   
@@ -683,9 +687,15 @@ export class FloatingEdgeRenderer {
     return handles;
   }
   
-  destroy() {
+destroy() {
+  if (this.edgeBuffer) {
     this.edgeBuffer.destroy();
+  }
+  if (this.uniformBuffer) {
     this.uniformBuffer.destroy();
+  }
+  if (this.vertexHandleBuffer) {
     this.vertexHandleBuffer.destroy();
   }
+}
 }

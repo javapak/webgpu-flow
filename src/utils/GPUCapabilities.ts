@@ -62,6 +62,8 @@ export default class GPUCapabilities {
           },
         });
         
+        console.log(testPipeline);
+        
         // Also try to create a depth texture with the same sample count
         const depthTexture = this.device.createTexture({
           size: { width: 4, height: 4 },

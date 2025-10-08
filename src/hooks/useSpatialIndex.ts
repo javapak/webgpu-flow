@@ -1,5 +1,6 @@
 import { useRef, useCallback } from 'react';
-import { AABB, DiagramNode, diagramNodeToSpatial, Point, SpatialIndex, SpatialNode } from '../utils/SpatialIndex';
+import type { AABB, DiagramNode,  Point, SpatialNode } from '../utils/SpatialIndex';
+import { SpatialIndex, diagramNodeToSpatial  } from '../utils/SpatialIndex'
 
 export interface SpatialDiagramHook {
   addNode: (node: DiagramNode) => void;

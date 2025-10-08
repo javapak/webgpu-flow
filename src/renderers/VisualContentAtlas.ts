@@ -33,6 +33,7 @@ export class VisualContentAtlas {
     this.canvas.width = this.ATLAS_SIZE;
     this.canvas.height = this.ATLAS_SIZE;
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
+    console.log(this.sampleCount);
     
     // High quality rendering
     this.ctx.textRendering = 'optimizeLegibility';

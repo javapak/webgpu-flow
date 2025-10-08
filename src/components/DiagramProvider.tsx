@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef, useState } from "react";
 import { useSpatialIndex } from "../hooks/useSpatialIndex";
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
-import { MouseInteractions, ResizeHandle } from "../utils/MouseInteractions";
+import { MouseInteractions, type ResizeHandle } from "../utils/MouseInteractions";
 import type { Viewport, DiagramState, DiagramNode, DiagramEdge, SpatialDiagramHook } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
 import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";

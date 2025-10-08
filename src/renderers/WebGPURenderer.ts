@@ -892,12 +892,12 @@ export class WebGPURenderer {
     });
   }
   
-  async updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
+async updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
     if (!this.device || !this.canvas) return;
     
     // Block all operations during reconfiguration or rendering
     if (this._isReconfiguring || this._renderInProgress || this._isResizing) {
-      console.log('Skipping resize...system busy', {
+      console.log('⏭️ Skipping resize...system busy', {
         reconfiguring: this._isReconfiguring,
         rendering: this._renderInProgress,
         resizing: this._isResizing
@@ -912,33 +912,30 @@ export class WebGPURenderer {
     
     console.log(`🔄 Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
     
-    // Set flag IMMEDIATELY
+    // Set flag IMMEDIATELY before any async operations
     this._isResizing = true;
+    this._renderInProgress = true; // Also block rendering
     
     try {
-      // Wait multiple frames to ensure ALL operations stop
-      for (let i = 0; i < 5; i++) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-      }
-      
-      // Double-check we're still clear to resize
-      if (this._isReconfiguring || this._renderInProgress) {
-        console.log('⚠️ Aborting resize - system became busy during wait');
-        return;
-      }
-      
-      // Wait for GPU to be completely idle
+      // Wait for GPU to be completely idle FIRST
       await this.device.queue.onSubmittedWorkDone();
       console.log('✅ GPU queue empty for resize');
       
-      // Additional safety wait
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Wait several frames to ensure no pending operations
+      for (let i = 0; i < 3; i++) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
       
-      // Update canvas size
-      this.canvas.width = canvasSize.width;
-      this.canvas.height = canvasSize.height;
+      // Extra safety delay
+      await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Destroy old textures
+      // Double-check we're still clear to resize
+      if (this._isReconfiguring) {
+        console.log('⚠️ Aborting resize - reconfiguration started during wait');
+        return;
+      }
+      
+      // Destroy old textures BEFORE updating canvas size
       if (this.depthTexture) {
         this.depthTexture.destroy();
         this.depthTexture = null;
@@ -948,9 +945,13 @@ export class WebGPURenderer {
         this.multisampledTexture = null;
       }
       
-      // Wait for GPU to release resources
+      // Wait for GPU to release destroyed resources
       await this.device.queue.onSubmittedWorkDone();
       await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // NOW update canvas size
+      this.canvas.width = canvasSize.width;
+      this.canvas.height = canvasSize.height;
       
       const sampleCountNum = parseInt(this.sampleCount);
       
@@ -973,12 +974,23 @@ export class WebGPURenderer {
         });
       }
       
+      // Final GPU sync before releasing locks
+      await this.device.queue.onSubmittedWorkDone();
+      
       console.log(`✅ Resize complete: ${canvasSize.width}x${canvasSize.height} with ${this.sampleCount}x MSAA`);
     } catch (error) {
       console.error('❌ Error during resize:', error);
       // Try to recover by recreating textures with current canvas size
       try {
         const sampleCountNum = parseInt(this.sampleCount);
+        
+        // Ensure canvas size is valid
+        if (this.canvas.width === 0 || this.canvas.height === 0) {
+          console.log('⚠️ Invalid canvas size during recovery, using safe defaults');
+          this.canvas.width = Math.max(canvasSize.width, 800);
+          this.canvas.height = Math.max(canvasSize.height, 600);
+        }
+        
         this.depthTexture = this.device.createTexture({
           label: 'recovered-depth-texture',
           size: { width: this.canvas.width, height: this.canvas.height },
@@ -986,6 +998,7 @@ export class WebGPURenderer {
           format: 'depth24plus',
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
+        
         if (sampleCountNum > 1) {
           this.multisampledTexture = this.device.createTexture({
             label: 'recovered-multisampled',
@@ -995,12 +1008,30 @@ export class WebGPURenderer {
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
           });
         }
-        console.log('⚕️ Recovered from resize error');
+        
+        await this.device.queue.onSubmittedWorkDone();
+        console.log('Recovered from resize error');
       } catch (recoveryError) {
-        console.error('❌ Recovery failed:', recoveryError);
+        console.error('Recovery failed:', recoveryError);
+        // Last resort: disable MSAA and try again
+        try {
+          this.depthTexture = this.device.createTexture({
+            label: 'emergency-depth-texture',
+            size: { width: Math.max(this.canvas.width, 800), height: Math.max(this.canvas.height, 600) },
+            sampleCount: 1,
+            format: 'depth24plus',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+          this.sampleCount = '1';
+          console.log('Emergency recovery successful');
+        } catch (emergencyError) {
+          console.error('Emergency recovery failed:', emergencyError);
+        }
       }
     } finally {
+      // Always clear flags, even on error
       this._isResizing = false;
+      this._renderInProgress = false;
     }
   }
 
@@ -1052,7 +1083,7 @@ export class WebGPURenderer {
       try {
         canvasTexture = this.context.getCurrentTexture();
       } catch (e) {
-        console.log('⚠️ Canvas texture unavailable');
+        console.log('Canvas texture unavailable');
         return;
       }
 

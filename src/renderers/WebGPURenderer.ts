@@ -44,7 +44,7 @@ export class WebGPURenderer {
   private canvas: HTMLCanvasElement | null = null;
   private labelRenderer: LabelRenderer | null = null;
   private visualRenderer: VisualContentRenderer | null = null;
-  private depthTexture: GPUTexture | null = null;
+  private _depthTexture: GPUTexture | null = null;
   private multisampledTexture: GPUTexture | null = null;
   private edgeRenderer: FloatingEdgeRenderer | null = null;
   private visualContentNodeManager: VisualContentNodeManager | null = null;
@@ -63,6 +63,10 @@ export class WebGPURenderer {
 
   get isResizing() {
     return this._isResizing;
+  }
+
+  get depthTexture() {
+    return this._depthTexture;
   }
 
   get isBusy() {
@@ -170,7 +174,7 @@ export class WebGPURenderer {
         const sampleCountNum = parseInt(this.sampleCount);
         console.log(`📐 Creating initial depth texture with sample count ${this.sampleCount}`);
         
-        this.depthTexture = this.device!.createTexture({
+        this._depthTexture = this.device!.createTexture({
           label: 'initial-depth-texture',
           size: [this.canvas.width, this.canvas.height],
           format: 'depth24plus',
@@ -260,9 +264,9 @@ export class WebGPURenderer {
         console.log('✅ Renderers destroyed');
         
         // Destroy textures
-        if (this.depthTexture) {
-          this.depthTexture.destroy();
-          this.depthTexture = null;
+        if (this._depthTexture) {
+          this._depthTexture.destroy();
+          this._depthTexture = null;
         }
         if (this.multisampledTexture) {
           this.multisampledTexture.destroy();
@@ -277,7 +281,7 @@ export class WebGPURenderer {
         this.sampleCount = count;
         
         // Create new textures
-        this.depthTexture = this.device.createTexture({
+        this._depthTexture = this.device.createTexture({
           label: `depth-texture-msaa-${count}`,
           size: [this.canvas.width, this.canvas.height],
           format: 'depth24plus',
@@ -294,11 +298,11 @@ export class WebGPURenderer {
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
           });
         }
-        console.log('✅ New textures created');
+        console.log('New textures created');
         
         // Recreate pipelines
         await this.setupRenderPipelines();
-        console.log('✅ Pipelines recreated');
+        console.log('Pipelines recreated');
         
         // Recreate renderers
         this.labelRenderer = new LabelRenderer(this.device, this.uniformBuffer!, count);
@@ -915,7 +919,7 @@ export class WebGPURenderer {
       return;
     }
     
-    console.log(`🔄 Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
+    console.log(`Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
     
     // Set ONLY the resize flag - don't block rendering completely
     this._isResizing = true;
@@ -927,9 +931,9 @@ export class WebGPURenderer {
       const sampleCountNum = parseInt(this.sampleCount);
       
       // Destroy old textures
-      if (this.depthTexture) {
-        this.depthTexture.destroy();
-        this.depthTexture = null;
+      if (this._depthTexture) {
+        this._depthTexture.destroy();
+        this._depthTexture = null;
       }
       if (this.multisampledTexture) {
         this.multisampledTexture.destroy();
@@ -941,7 +945,7 @@ export class WebGPURenderer {
       this.canvas.height = canvasSize.height;
       
       // Recreate textures immediately
-      this.depthTexture = this.device.createTexture({
+      this._depthTexture = this.device.createTexture({
         label: `depth-${canvasSize.width}x${canvasSize.height}`,
         size: { width: canvasSize.width, height: canvasSize.height },
         sampleCount: sampleCountNum,
@@ -959,17 +963,17 @@ export class WebGPURenderer {
         });
       }
       
-      console.log(`✅ Resize complete: ${canvasSize.width}x${canvasSize.height}`);
+      console.log(`Resize complete: ${canvasSize.width}x${canvasSize.height}`);
       
     } catch (error) {
-      console.error('❌ Resize error:', error);
+      console.error('Resize error:', error);
       
       // Simple recovery: recreate with sample count 1
       try {
         if (this.canvas.width === 0) this.canvas.width = canvasSize.width || 800;
         if (this.canvas.height === 0) this.canvas.height = canvasSize.height || 600;
         
-        this.depthTexture = this.device.createTexture({
+        this._depthTexture = this.device.createTexture({
           label: 'recovery-depth',
           size: { width: this.canvas.width, height: this.canvas.height },
           sampleCount: 1,
@@ -980,16 +984,16 @@ export class WebGPURenderer {
         this.multisampledTexture = null;
         this.sampleCount = '1';
         
-        console.log('⚕️ Recovered with MSAA disabled');
+        console.log('Recovered with MSAA disabled');
       } catch (recoveryError) {
-        console.error('💀 Recovery failed:', recoveryError);
+        console.error('Recovery failed:', recoveryError);
         this.initialized = false;
       }
     } finally {
       this._isResizing = false;
     }
   }
-  
+
   async render(
     visibleNodes: DiagramNode[],
     visibleEdges: DiagramEdge[],
@@ -1008,7 +1012,7 @@ export class WebGPURenderer {
     return;
   }
 
-  if (!this.depthTexture || !this.uniformBuffer) {
+  if (!this._depthTexture || !this.uniformBuffer) {
     return;
   }
 
@@ -1050,7 +1054,7 @@ export class WebGPURenderer {
         const canvasView = canvasTexture.createView();
         const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
   ? {
-      view: this.multisampledTexture.createView(),
+      view: this.multisampledTexture!.createView(),
       resolveTarget: canvasView, // Resolve to canvas
       clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
       loadOp: 'clear',
@@ -1067,7 +1071,7 @@ export class WebGPURenderer {
       label: 'main-render-pass',
       colorAttachments: [colorAttachment],
       depthStencilAttachment: {
-        view: this.depthTexture!.createView(),
+        view: this._depthTexture!.createView(),
         depthClearValue: 1.0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store',
@@ -1286,7 +1290,7 @@ const renderPass = commandEncoder.beginRenderPass({
   label: 'main-render-pass',
   colorAttachments: [colorAttachment], 
   depthStencilAttachment: {
-    view: this.depthTexture!.createView(),
+    view: this._depthTexture!.createView(),
     depthClearValue: 1.0,
     depthLoadOp: 'clear',
     depthStoreOp: 'store',
@@ -1489,9 +1493,9 @@ const renderPass = commandEncoder.beginRenderPass({
         this.handleBuffer = null;
       }
       
-      if (this.depthTexture) {
-        this.depthTexture.destroy();
-        this.depthTexture = null;
+      if (this._depthTexture) {
+        this._depthTexture.destroy();
+        this._depthTexture = null;
       }
       
       if (this.multisampledTexture) {

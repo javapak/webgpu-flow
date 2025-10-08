@@ -50,10 +50,24 @@ export class WebGPURenderer {
   private visualContentNodeManager: VisualContentNodeManager | null = null;
   private gpuCapibilitiesRef: GPUCapabilities | null = null;
   private sampleCount: string = '1';
+  private _isReconfiguring: boolean = false;
+  private _isResizing: boolean = false;
+  private _renderInProgress: boolean = false;
 
 
 
 // In WebGPURenderer.ts, improve error handling in initialize():
+  get isReconfiguring() {
+    return this._isReconfiguring;
+  }
+
+  get isResizing() {
+    return this._isResizing;
+  }
+
+  get isBusy() {
+    return (this._isResizing || this._isReconfiguring || this._renderInProgress);
+  }
 
   async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {
@@ -131,7 +145,7 @@ export class WebGPURenderer {
 
       // Initialize edge renderer
       try {
-        this.edgeRenderer = new FloatingEdgeRenderer(this.device!, canvasFormat);
+        this.edgeRenderer = new FloatingEdgeRenderer(this.device!, canvasFormat, 20, 1000, this.sampleCount);
         console.log('✅ Edge renderer initialized');
       } catch (error) {
         console.error('❌ Failed to initialize edge renderer:', error);
@@ -194,118 +208,130 @@ export class WebGPURenderer {
   get sampleCountsSupported() {
     return this.gpuCapibilitiesRef?.sampleCountsSupported;
   }
-async setSampleCount(count: string): Promise<void> {   
-  if (!this.gpuCapibilitiesRef?.sampleCountsSupported.includes(count)) {
-    console.warn(`⚠️ Sample count ${count} not supported. Supported: ${this.gpuCapibilitiesRef?.sampleCountsSupported}`);
-    return;
+
+  get currentSampleCount(): string {
+    return this.sampleCount;
   }
-  
-  if (count === this.sampleCount) {
-    console.log('ℹ️ Sample count already set to', count);
-    return;
-  }
-  
-  console.log(`🔧 Changing sample count from ${this.sampleCount} to ${count}`);
-  
-  const oldSampleCount = this.sampleCount;
-  
-  if (!this.canvas || !this.device) {
-    console.error('❌ Canvas or device not initialized');
-    return;
-  }
-  
-  try {
-    // Update sample count FIRST
-    this.sampleCount = count;
-    const sampleCountNum = parseInt(count);
+
+  async setSampleCount(count: string) {
+    if (!this.gpuCapibilitiesRef?.sampleCountsSupported?.includes(count)) {
+      console.warn(`Sample count ${count} not supported`);
+      return;
+    }
+
+    if (this.sampleCount === count) {
+      console.log(`✓ Sample count already ${count}, no changes needed`);
+      return;
+    } 
     
-    // Step 1: Store old resources (don't destroy yet - render might be in progress)
-    const oldDepthTexture = this.depthTexture;
-    const oldMultisampledTexture = this.multisampledTexture;
-    const oldEdgeRenderer = this.edgeRenderer;
-    const oldLabelRenderer = this.labelRenderer;
-    const oldVisualRenderer = this.visualRenderer;
+    console.log(`🔄 Starting sample count change from ${this.sampleCount} to ${count}`);
     
-    console.log('Creating new GPU resources...');
+    // IMMEDIATELY set reconfiguring flag before anything else
+    this._isReconfiguring = true;
     
-    // Step 2: Create new textures BEFORE destroying old ones
-    console.log(`Creating new depth texture with sample count ${count}`);
-    this.depthTexture = this.device.createTexture({
-      label: `depth-texture-msaa-${count}`,
-      size: [this.canvas.width, this.canvas.height],
-      format: 'depth24plus',
-      sampleCount: sampleCountNum,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
+    // Wait a frame to ensure any in-flight renders complete
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await new Promise(resolve => requestAnimationFrame(resolve));
     
-    if (sampleCountNum > 1) {
-      console.log(`Creating new multisampled texture with sample count ${count}`);
-      this.multisampledTexture = this.device.createTexture({
-        label: `multisampled-color-${count}`,
-        size: [this.canvas.width, this.canvas.height],
-        format: navigator.gpu.getPreferredCanvasFormat(),
-        sampleCount: sampleCountNum,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT,
-      });
+    if (this.canvas && this.device) {
+      const sampleCountNum = parseInt(count);
+      
+      try {
+        // Wait for all GPU operations to complete
+        await this.device.queue.onSubmittedWorkDone();
+        console.log('✅ GPU queue empty');
+        
+        // Destroy all renderers first (they may have pending operations)
+        if (this.labelRenderer) {
+          this.labelRenderer.destroy();
+          this.labelRenderer = null;
+        }
+        if (this.visualRenderer) {
+          this.visualRenderer.destroy();
+          this.visualRenderer = null;
+        }
+        if (this.edgeRenderer) {
+          this.edgeRenderer.destroy();
+          this.edgeRenderer = null;
+        }
+        
+        // Wait again after destroying renderers
+        await this.device.queue.onSubmittedWorkDone();
+        console.log('✅ Renderers destroyed');
+        
+        // Destroy textures
+        if (this.depthTexture) {
+          this.depthTexture.destroy();
+          this.depthTexture = null;
+        }
+        if (this.multisampledTexture) {
+          this.multisampledTexture.destroy();
+          this.multisampledTexture = null;
+        }
+        
+        // Wait a bit for GPU to fully release resources
+        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('✅ Textures destroyed');
+        
+        // Update sample count
+        this.sampleCount = count;
+        
+        // Create new textures
+        this.depthTexture = this.device.createTexture({
+          label: `depth-texture-msaa-${count}`,
+          size: [this.canvas.width, this.canvas.height],
+          format: 'depth24plus',
+          sampleCount: sampleCountNum,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        
+        if (sampleCountNum > 1) {
+          this.multisampledTexture = this.device.createTexture({
+            label: `multisampled-color-${count}`,
+            size: [this.canvas.width, this.canvas.height],
+            format: navigator.gpu.getPreferredCanvasFormat(),
+            sampleCount: sampleCountNum,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+        }
+        console.log('✅ New textures created');
+        
+        // Recreate pipelines
+        await this.setupRenderPipelines();
+        console.log('✅ Pipelines recreated');
+        
+        // Recreate renderers
+        this.labelRenderer = new LabelRenderer(this.device, this.uniformBuffer!, count);
+        await this.labelRenderer.initialize();
+        
+        this.visualRenderer = new VisualContentRenderer(this.device, this.uniformBuffer!, count);
+        await this.visualRenderer.initialize();
+        
+        const edgeDetector = new ShaderBasedEdgeDetector(this.device);
+        this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
+        
+        this.edgeRenderer = new FloatingEdgeRenderer(
+          this.device,
+          navigator.gpu.getPreferredCanvasFormat(),
+          20,
+          1000,
+          count
+        );
+        console.log('✅ Renderers recreated');
+        
+        console.log(`✅ Sample count change complete: ${count}x MSAA`);
+      } catch (error) {
+        console.error('❌ Error during sample count change:', error);
+      } finally {
+        // Always clear the reconfiguring flag
+        this._isReconfiguring = false;
+        this._renderInProgress = false;
+      }
     } else {
-      this.multisampledTexture = null;
-    }
-    
-    // Step 3: Recreate render pipelines
-    console.log('Recreating render pipelines...');
-    await this.setupRenderPipelines();
-    
-    // Step 4: Recreate edge renderer FIRST (before destroying old one)
-    console.log('Creating new edge renderer...');
-    this.edgeRenderer = new FloatingEdgeRenderer(
-      this.device, 
-      navigator.gpu.getPreferredCanvasFormat(),
-      20,
-      1000,
-      this.sampleCount
-    );
-    
-    // Step 5: Recreate label renderer
-    console.log('Creating new label renderer...');
-    this.labelRenderer = new LabelRenderer(this.device, this.uniformBuffer!, count);
-    await this.labelRenderer.initialize();
-    
-    // Step 6: Recreate visual renderer
-    console.log('Creating new visual renderer...');
-    this.visualRenderer = new VisualContentRenderer(this.device, this.uniformBuffer!, count);
-    await this.visualRenderer.initialize();
-    
-    // Recreate visual content node manager
-    const edgeDetector = new ShaderBasedEdgeDetector(this.device);
-    this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
-    
-    // Step 7: Wait a frame to ensure no renders are in progress
-    await new Promise(resolve => setTimeout(resolve, 16)); // ~1 frame at 60fps
-    
-    // Step 8: NOW destroy old resources
-    console.log('🗑️ Cleaning up old resources...');
-    oldDepthTexture?.destroy();
-    oldMultisampledTexture?.destroy();
-    oldEdgeRenderer?.destroy();
-    oldLabelRenderer?.destroy();
-    oldVisualRenderer?.destroy();
-    
-    console.log(`Successfully changed sample count to ${count}`);
-    
-  } catch (error) {
-    console.error('Error changing sample count:', error);
-    
-    // Rollback
-    this.sampleCount = oldSampleCount;
-    
-    // Try to restore working state
-    try {
-      await this.setupRenderPipelines();
-    } catch (restoreError) {
-      console.error('❌ Failed to restore previous state:', restoreError);
+      this._isReconfiguring = false;
     }
   }
-}
+
   private async setupRenderPipelines() {
     if (!this.device) throw new Error('Device not initialized');
 
@@ -866,22 +892,85 @@ async setSampleCount(count: string): Promise<void> {
     });
   }
   
-  updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
-    if (this.device && this.canvas) {
-      console.log(`🔄 Updating depth texture size to ${canvasSize.width}x${canvasSize.height} with sample count ${this.sampleCount}`);
+  async updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
+    if (!this.device || !this.canvas) return;
+    
+    if (this._isReconfiguring) {
+      console.log('⏸Skipping resize - reconfiguration in progress');
+      return;
+    }
+    
+    // CRITICAL: Don't resize during render
+    if (this._renderInProgress) {
+      console.log('Skipping resize - render in progress');
+      return;
+    }
+    
+    // Check if size actually changed
+    if (this.canvas.width === canvasSize.width && this.canvas.height === canvasSize.height) {
+      return;
+    }
+    
+    console.log(`Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
+    
+    this._isResizing = true;
+    
+    try {
+      // Wait multiple frames to ensure renders stop
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      
+      // Wait for GPU
+      await this.device.queue.onSubmittedWorkDone();
+      console.log('✅ GPU queue empty for resize');
+      
+      // Update canvas size
       this.canvas.width = canvasSize.width;
       this.canvas.height = canvasSize.height;
-      this.depthTexture?.destroy();
+      
+      // Destroy old textures
+      if (this.depthTexture) {
+        this.depthTexture.destroy();
+        this.depthTexture = null;
+      }
+      if (this.multisampledTexture) {
+        this.multisampledTexture.destroy();
+        this.multisampledTexture = null;
+      }
+      
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const sampleCountNum = parseInt(this.sampleCount);
+      
+      // Recreate textures with new size
       this.depthTexture = this.device.createTexture({
-        label: 'depth-texture-resized',
+        label: `depth-texture-${canvasSize.width}x${canvasSize.height}`,
         size: { width: canvasSize.width, height: canvasSize.height },
-        sampleCount: parseInt(this.sampleCount),
+        sampleCount: sampleCountNum,
         format: 'depth24plus',
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
       });
-      console.log(`Depth texture recreated`);
+      
+      if (sampleCountNum > 1) {
+        this.multisampledTexture = this.device.createTexture({
+          label: `multisampled-${canvasSize.width}x${canvasSize.height}`,
+          size: { width: canvasSize.width, height: canvasSize.height },
+          format: navigator.gpu.getPreferredCanvasFormat(),
+          sampleCount: sampleCountNum,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+      }
+      
+      console.log(`Resize complete: ${canvasSize.width}x${canvasSize.height}`);
+    } catch (error) {
+      console.error('❌ Error during resize:', error);
+    } finally {
+      this._isResizing = false;
     }
   }
+
 
   async render(
     visibleNodes: DiagramNode[],
@@ -897,6 +986,16 @@ async setSampleCount(count: string): Promise<void> {
       return;
     }
 
+  if (this.isBusy) {
+    return;
+  }
+
+  if (!this.depthTexture || !this.uniformBuffer) {
+    return;
+  }
+
+   this._renderInProgress = true;
+
     try {
       // Validate input data
       if (!Array.isArray(visibleNodes)) {
@@ -909,47 +1008,27 @@ async setSampleCount(count: string): Promise<void> {
         return;
       }
 
+      if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
+        console.log("Canvas size changed, will update on next frame");
+        requestAnimationFrame(() => {
+          this.updateDepthTextureOnSizeChange(canvasSize);
+        });
+        return;
+      }
 
-  if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
-    console.log("Canvas size changed, updating textures");
-    this.canvas.width = canvasSize.width;
-    this.canvas.height = canvasSize.height;
-    
-    const sampleCountNum = parseInt(this.sampleCount);
-    
-    this.depthTexture?.destroy();
-    this.depthTexture = this.device.createTexture({
-      label: 'depth-texture-render',
-      size: { width: canvasSize.width, height: canvasSize.height },
-      sampleCount: sampleCountNum,
-      format: 'depth24plus',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-    
-    this.multisampledTexture?.destroy();
-    if (sampleCountNum > 1) {
-      this.multisampledTexture = this.device.createTexture({
-        label: 'multisampled-render',
-        size: { width: canvasSize.width, height: canvasSize.height },
-        format: navigator.gpu.getPreferredCanvasFormat(),
-        sampleCount: sampleCountNum,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-    } else {
-      this.multisampledTexture = null;
-    }
-    
-    console.log(`Textures updated with sample count ${this.sampleCount}`);
-  }
+      let canvasTexture: GPUTexture;
+      try {
+        canvasTexture = this.context.getCurrentTexture();
+      } catch (e) {
+        console.log('⚠️ Canvas texture unavailable');
+        return;
+      }
 
-
-      
 
       // Early exit if no nodes to render
       if (visibleNodes.length === 0) {
         // Still clear the canvas and render grid
         const commandEncoder = this.device.createCommandEncoder();
-        const canvasTexture = this.context.getCurrentTexture();
         const canvasView = canvasTexture.createView();
         const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
   ? {
@@ -1168,7 +1247,6 @@ async setSampleCount(count: string): Promise<void> {
       }
 
   const commandEncoder = this.device.createCommandEncoder();
-  const canvasTexture = this.context.getCurrentTexture();
   const canvasView = canvasTexture.createView();
 
   const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
@@ -1188,13 +1266,14 @@ async setSampleCount(count: string): Promise<void> {
 
 const renderPass = commandEncoder.beginRenderPass({
   label: 'main-render-pass',
-  colorAttachments: [colorAttachment],
+  colorAttachments: [colorAttachment], 
   depthStencilAttachment: {
     view: this.depthTexture!.createView(),
     depthClearValue: 1.0,
     depthLoadOp: 'clear',
     depthStoreOp: 'store',
   }
+
 });
   this.renderGrid(renderPass, viewport, canvasSize);
 
@@ -1218,7 +1297,8 @@ const renderPass = commandEncoder.beginRenderPass({
 
       if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
     try {
-    const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
+    const labelData = this.labelRenderer.prepareLabelData(
+      visibleNodes, visibleEdges, viewport);
     const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
 
 
@@ -1261,6 +1341,7 @@ const renderPass = commandEncoder.beginRenderPass({
       this.device.queue.submit([commandEncoder.finish()]);
 
       console.log('WebGPU render completed successfully');
+      this._renderInProgress = false;
 
     } 
     

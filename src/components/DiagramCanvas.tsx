@@ -102,8 +102,9 @@ useEffect(() => {
 
 
   useEffect(() => {
-    setSampleCount(sampleCount);
-  }, [sampleCount]);
+    if (getRenderer()?.currentSampleCount !== sampleCount)
+        setSampleCount(sampleCount);
+  }, [sampleCount, setSampleCount, getRenderer]);
 
   useEffect(() => {
   const updateSampleCount = async () => {
@@ -145,16 +146,19 @@ useEffect(() => {
 
   // Update viewport size when canvas size changes
   useEffect(() => {
-    setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
-    getRenderer()?.updateDepthTextureOnSizeChange({width, height});
+      const updateOnSizeChange = async () => {
+      setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
+      await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
+      }
+      updateOnSizeChange();
   }, [width, height, setViewport, getRenderer]);
 
   // Trigger render when viewport changes
   useEffect(() => {
-    if (isRendererInitialized() && canvasRef.current) {
+    if (isRendererInitialized() && !getRenderer()?.isReconfiguring && canvasRef.current) {
       renderFrame();
     }
-  }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, renderFrame]);
+  }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, getRenderer, renderFrame]);
 
   // Update debug info periodically
   useEffect(() => {

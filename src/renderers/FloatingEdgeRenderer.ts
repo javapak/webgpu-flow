@@ -322,7 +322,8 @@ export class FloatingEdgeRenderer {
         format: 'depth24plus',
         depthWriteEnabled: true,
         depthCompare: 'less',
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount)}
     });
   }
   
@@ -405,6 +406,7 @@ export class FloatingEdgeRenderer {
         depthCompare: 'less',
       },
       multisample: {count: parseInt(this.sampleCount) }
+
     });
   }
   

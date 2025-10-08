@@ -1,4 +1,5 @@
- export interface TextureAtlasEntry {
+
+export interface TextureAtlasEntry {
   texture: GPUTexture;
   x: number;
   y: number;

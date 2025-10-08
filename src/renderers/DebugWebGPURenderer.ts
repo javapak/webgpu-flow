@@ -1,4 +1,3 @@
-// renderers/DebugWebGPURenderer.ts
 import tgpu from 'typegpu';
 import type { DiagramNode, Viewport } from '../types';
 

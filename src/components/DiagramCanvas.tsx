@@ -118,7 +118,6 @@ useEffect(() => {
   updateSampleCount()
 }, [sampleCount, getRenderer, renderFrame]);
 
-  // Initialize renderer once
   useEffect(() => {
     if (!canvasRef.current || initializationAttempted.current) {
       return;
@@ -131,33 +130,56 @@ useEffect(() => {
         const success = await initializeRenderer(canvasRef.current!);
         
         if (success) {
-          console.log('✅ DiagramCanvas: WebGPU initialized');
+          console.log('DiagramCanvas: WebGPU initialized');
           setSupportedSampleCount(getRenderer()?.sampleCountsSupported);
         } else {
-          console.warn('⚠️ DiagramCanvas: WebGPU failed');
+          console.warn('DiagramCanvas: WebGPU failed');
         }
       } catch (error) {
-        console.error('❌ DiagramCanvas: Init error:', error);
+        console.error('DiagramCanvas: Init error:', error);
       }
     };
 
     initCanvas();
   }, [initializeRenderer, getRenderer, setSupportedSampleCount]);
 
-  useEffect(() => {
-      const updateOnSizeChange = async () => {
-      setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
-      await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
-      // Effect will handle render
-      }
-      updateOnSizeChange();
-  }, [width, height, setViewport, getRenderer]);
-  
-  useEffect(() => {
-    if (isRendererInitialized() && !getRenderer()?.isReconfiguring && canvasRef.current) {
-      requestAnimationFrame(() => renderFrame());
+useEffect(() => {
+  const updateOnSizeChange = async () => {
+    // Check if renderer is busy before attempting resize
+    if (!getRenderer() || getRenderer()?.isBusy) {
+      console.log('Skipping size change, renderer busy');
+      return;
     }
-  }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, getRenderer, renderFrame]);
+    
+    // Update viewport state
+    setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
+    
+    // Schedule depth texture recreation for next frame
+    // This ensures current GPU operations complete first
+    requestAnimationFrame(async () => {
+      if (getRenderer() && !getRenderer()?.isBusy) {
+        await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
+      }
+    });
+  };
+  
+  updateOnSizeChange();
+}, [width, height, setViewport, getRenderer]);
+
+// In the render effect:
+useEffect(() => {
+  // Only render if initialized and not busy with resize/reconfiguration
+  if (isRendererInitialized() && !getRenderer()?.isBusy && canvasRef.current) {
+    requestAnimationFrame(() => {
+      // Double-check busy state before rendering
+      if (!getRenderer()?.isBusy) {
+        renderFrame();
+      }
+    });
+  }
+}, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, 
+    viewport.zoom, viewport.width, viewport.height, isRendererInitialized, 
+    getRenderer, renderFrame]);
 
   // Update debug info periodically
   useEffect(() => {

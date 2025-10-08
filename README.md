@@ -16,7 +16,7 @@ An interactive flow diagram editor built with **React**, **TypeScript**, and **W
 - **Flexible Styling**: Full color customization, size control, and visual properties
 
 ### Floating Edges + Definable anchor vertices
-- **Floating Edge System**: Smooth bezier curves with user-defined control points
+- **Floating Edge System**: User defined control points with dynamic connector placement based on node positions
 - **Smart Connection Points**: Automatic edge-to-shape intersection calculation
 - **Interactive Editing**: Add, move, and delete edge vertices with visual handles
 - **Edge Labels**: Add descriptive text labels to connections
@@ -52,8 +52,8 @@ An interactive flow diagram editor built with **React**, **TypeScript**, and **W
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/webgpu-flow-editor.git
-cd webgpu-flow-editor
+git clone https://github.com/javapak/webgpu-flow.git
+cd webgpu-flow
 
 # Install dependencies
 npm install
@@ -104,7 +104,7 @@ function App() {
 }
 ```
 
-## 🎮 Controls
+## Controls
 
 ### Desktop
 - **Left Click**: Select node/edge
@@ -193,7 +193,7 @@ case 10: { // Custom shape
 ```
 
 
-2. (This feature is in progress and not currently functional)....Utilize visual.visualContent prop: visual.visualContent.content with type 'svg' and where the content prop is an svg string. Set visual.shape to 'none' in order for floating edges to use the correct borders with a compute shader approach.
+2. Utilize visual.visualContent prop: visual.visualContent.content with type 'svg' and where the content prop is an svg string. Set visual.shape to 'none' in order for floating edges to use the correct borders with a compute shader approach. You can also use svg primitives through this method for defining simple shapes.
 ```typescript
 <Node
   id="svg-test-node" 
@@ -238,7 +238,7 @@ case 10: { // Custom shape
 - **Mobile touch handling**: Interaction set is behind pointer/mouse implementation
 
 ## Roadmap
-- [ ] **Full svg content support: Define node shapes with an svg string or reference
+- [x] **Full svg content support**: Define node shapes with an svg string or reference
 - [ ] **Edge markers**: Define edge marker by svg/canvas to texture or with primitive shape shaders provided
 - [ ] **Multi-selection**: Select and move multiple nodes
 - [ ] **Undo/Redo**: Full history management

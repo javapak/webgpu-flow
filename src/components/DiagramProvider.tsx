@@ -719,40 +719,51 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   }, [spatial, state.viewport, state.nodes.length]);
 
   // Simplified render scheduling
-  const scheduleRender = useCallback(() => {
+ const scheduleRender = useCallback(() => {
     if (rendererRef.current?.initialized && canvasRef.current) {
-      // Get fresh state values directly
-      const currentState = stateRef.current;
+      // Use requestAnimationFrame to ensure we render with the LATEST state
+      requestAnimationFrame(() => {
+        if (!rendererRef.current?.initialized || !canvasRef.current) return;
+        
+        // Get fresh state values directly from ref
+        const currentState = stateRef.current;
+        
+        // Calculate visible nodes with fresh state
+        const halfWidth = currentState.viewport.width / (2 * currentState.viewport.zoom);
+        const halfHeight = currentState.viewport.height / (2 * currentState.viewport.zoom);
+        
+        const viewportBounds: AABB = {
+          minX: currentState.viewport.x - halfWidth,
+          minY: currentState.viewport.y - halfHeight,
+          maxX: currentState.viewport.x + halfWidth,
+          maxY: currentState.viewport.y + halfHeight,
+        };
+        
+        const visibleNodes = spatial.getVisibleNodes(viewportBounds);
+        const visibleEdges = currentState.edges.filter((edge) => 
+          visibleNodes.find((node) => node.id === edge.sourceNodeId || node.id === edge.targetNodeId));
       
-      // Calculate visible nodes with fresh state
-      const halfWidth = currentState.viewport.width / (2 * currentState.viewport.zoom);
-      const halfHeight = currentState.viewport.height / (2 * currentState.viewport.zoom);
-      
-      const viewportBounds: AABB = {
-        minX: currentState.viewport.x - halfWidth,
-        minY: currentState.viewport.y - halfHeight,
-        maxX: currentState.viewport.x + halfWidth,
-        maxY: currentState.viewport.y + halfHeight,
-      };
-      
-      const visibleNodes = spatial.getVisibleNodes(viewportBounds);
-      const visibleEdges = state.edges.filter((edge) => 
-      visibleNodes.find((node) => node.id === edge.sourceNodeId || node.id === edge.targetNodeId));
-    
-      const canvasSize = {
-        width: canvasRef.current.width,
-        height: canvasRef.current.height,
-      };
-      
-    
-      
-      try {
-        rendererRef.current.render(visibleNodes, visibleEdges, currentState.viewport, canvasSize, currentState.interaction.selectedNodes, currentState.interaction.selectedEdges, drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined);
-      } catch (error) {
-        console.error('Render error:', error);
-      }
+        const canvasSize = {
+          width: canvasRef.current!.width,
+          height: canvasRef.current!.height,
+        };
+        
+        try {
+          rendererRef.current!.render(
+            visibleNodes, 
+            visibleEdges, 
+            currentState.viewport, 
+            canvasSize, 
+            currentState.interaction.selectedNodes, 
+            currentState.interaction.selectedEdges, 
+            drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined
+          );
+        } catch (error) {
+          console.error('Render error:', error);
+        }
+      });
     }
-  }, [spatial, spatial.getVisibleNodes, canvasRef.current?.width, canvasRef.current?.height]); // Only depend on spatial
+  }, [spatial, drawingState]); // Depend on spatial and drawingState
 
   // Initialize renderer
   const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {

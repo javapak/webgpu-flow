@@ -115,7 +115,7 @@ useEffect(() => {
     }
   };
   
-  updateSampleCount();
+  updateSampleCount()
 }, [sampleCount, getRenderer, renderFrame]);
 
   // Initialize renderer once
@@ -144,19 +144,18 @@ useEffect(() => {
     initCanvas();
   }, [initializeRenderer, getRenderer, setSupportedSampleCount]);
 
-  // Update viewport size when canvas size changes
   useEffect(() => {
       const updateOnSizeChange = async () => {
       setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
       await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
+      // Effect will handle render
       }
       updateOnSizeChange();
   }, [width, height, setViewport, getRenderer]);
-
-  // Trigger render when viewport changes
+  
   useEffect(() => {
     if (isRendererInitialized() && !getRenderer()?.isReconfiguring && canvasRef.current) {
-      renderFrame();
+      requestAnimationFrame(() => renderFrame());
     }
   }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, viewport.zoom, viewport.width, viewport.height, isRendererInitialized, getRenderer, renderFrame]);
 

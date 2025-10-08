@@ -892,103 +892,104 @@ export class WebGPURenderer {
     });
   }
   
-  async updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
-      if (!this.device || !this.canvas) {
-        console.log('No device or canvas');
-        return;
+   async updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
+    if (!this.device || !this.canvas) {
+      console.log('⚠️ No device or canvas');
+      return;
+    }
+    
+    // Block all operations during reconfiguration or rendering
+    if (this._isReconfiguring || this._isResizing) {
+      console.log('⏭️ Skipping resize - system busy');
+      return;
+    }
+    
+    // Validate size
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) {
+      console.warn('⚠️ Invalid canvas size:', canvasSize);
+      return;
+    }
+    
+    // Check if size actually changed
+    if (this.canvas.width === canvasSize.width && this.canvas.height === canvasSize.height) {
+      return;
+    }
+    
+    console.log(`🔄 Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
+    
+    // Set ONLY the resize flag - don't block rendering completely
+    this._isResizing = true;
+    
+    try {
+      // Simple approach: just wait for current GPU work
+      await this.device.queue.onSubmittedWorkDone();
+      
+      const sampleCountNum = parseInt(this.sampleCount);
+      
+      // Destroy old textures
+      if (this.depthTexture) {
+        this.depthTexture.destroy();
+        this.depthTexture = null;
+      }
+      if (this.multisampledTexture) {
+        this.multisampledTexture.destroy();
+        this.multisampledTexture = null;
       }
       
-      // Block all operations during reconfiguration or rendering
-      if (this._isReconfiguring || this._isResizing) {
-        console.log('Skipping resize - system busy');
-        return;
-      }
+      // Update canvas size
+      this.canvas.width = canvasSize.width;
+      this.canvas.height = canvasSize.height;
       
-      // Validate size
-      if (canvasSize.width <= 0 || canvasSize.height <= 0) {
-        console.warn('⚠️ Invalid canvas size:', canvasSize);
-        return;
-      }
+      // Recreate textures immediately
+      this.depthTexture = this.device.createTexture({
+        label: `depth-${canvasSize.width}x${canvasSize.height}`,
+        size: { width: canvasSize.width, height: canvasSize.height },
+        sampleCount: sampleCountNum,
+        format: 'depth24plus',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
       
-      // Check if size actually changed
-      if (this.canvas.width === canvasSize.width && this.canvas.height === canvasSize.height) {
-        return;
-      }
-      
-      console.log(`Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
-      
-      // Set ONLY the resize flag - don't block rendering completely
-      this._isResizing = true;
-      
-      try {
-        // Simple approach: just wait for current GPU work
-        await this.device.queue.onSubmittedWorkDone();
-        
-        const sampleCountNum = parseInt(this.sampleCount);
-        
-        // Destroy old textures
-        if (this.depthTexture) {
-          this.depthTexture.destroy();
-          this.depthTexture = null;
-        }
-        if (this.multisampledTexture) {
-          this.multisampledTexture.destroy();
-          this.multisampledTexture = null;
-        }
-        
-        // Update canvas size
-        this.canvas.width = canvasSize.width;
-        this.canvas.height = canvasSize.height;
-        
-        // Recreate textures immediately
-        this.depthTexture = this.device.createTexture({
-          label: `depth-${canvasSize.width}x${canvasSize.height}`,
+      if (sampleCountNum > 1) {
+        this.multisampledTexture = this.device.createTexture({
+          label: `msaa-${canvasSize.width}x${canvasSize.height}`,
           size: { width: canvasSize.width, height: canvasSize.height },
+          format: navigator.gpu.getPreferredCanvasFormat(),
           sampleCount: sampleCountNum,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+      }
+      
+      console.log(`✅ Resize complete: ${canvasSize.width}x${canvasSize.height}`);
+      
+    } catch (error) {
+      console.error('❌ Resize error:', error);
+      
+      // Simple recovery: recreate with sample count 1
+      try {
+        if (this.canvas.width === 0) this.canvas.width = canvasSize.width || 800;
+        if (this.canvas.height === 0) this.canvas.height = canvasSize.height || 600;
+        
+        this.depthTexture = this.device.createTexture({
+          label: 'recovery-depth',
+          size: { width: this.canvas.width, height: this.canvas.height },
+          sampleCount: 1,
           format: 'depth24plus',
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
         
-        if (sampleCountNum > 1) {
-          this.multisampledTexture = this.device.createTexture({
-            label: `msaa-${canvasSize.width}x${canvasSize.height}`,
-            size: { width: canvasSize.width, height: canvasSize.height },
-            format: navigator.gpu.getPreferredCanvasFormat(),
-            sampleCount: sampleCountNum,
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-          });
-        }
+        this.multisampledTexture = null;
+        this.sampleCount = '1';
         
-        console.log(`Resize complete: ${canvasSize.width}x${canvasSize.height}`);
-        
-      } catch (error) {
-        console.error('Resize error:', error);
-        
-        // Simple recovery: recreate with sample count 1
-        try {
-          if (this.canvas.width === 0) this.canvas.width = canvasSize.width || 800;
-          if (this.canvas.height === 0) this.canvas.height = canvasSize.height || 600;
-          
-          this.depthTexture = this.device.createTexture({
-            label: 'recovery-depth',
-            size: { width: this.canvas.width, height: this.canvas.height },
-            sampleCount: 1,
-            format: 'depth24plus',
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-          });
-          
-          this.multisampledTexture = null;
-          this.sampleCount = '1';
-          
-          console.log('Recovered with multisampling disabled');
-        } catch (recoveryError) {
-          console.error('Recovery failed:', recoveryError);
-          this.initialized = false;
-        }
-      } finally {
-        this._isResizing = false;
+        console.log('⚕️ Recovered with MSAA disabled');
+      } catch (recoveryError) {
+        console.error('💀 Recovery failed:', recoveryError);
+        this.initialized = false;
       }
+    } finally {
+      this._isResizing = false;
+    }
   }
+  
   async render(
     visibleNodes: DiagramNode[],
     visibleEdges: DiagramEdge[],

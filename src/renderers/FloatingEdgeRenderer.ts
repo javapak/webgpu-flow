@@ -461,7 +461,6 @@ export class FloatingEdgeRenderer {
     const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
     
     if (!sourceNode) {  
-      console.warn('Source node not found for edge:', edge.id);
       return new Float32Array(0);
     }
 

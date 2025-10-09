@@ -261,7 +261,7 @@ export class WebGPURenderer {
         
         // Wait again after destroying renderers
         await this.device.queue.onSubmittedWorkDone();
-        console.log('✅ Renderers destroyed');
+        console.log('Renderers destroyed');
         
         // Destroy textures
         if (this._depthTexture) {
@@ -522,6 +522,12 @@ export class WebGPURenderer {
           case 9: { // Actor - use full bounds
             distance = sdActor(p_square);
           }
+
+        
+          case 10: {
+            discard;
+          }
+
           default: { // Default to rectangle
             distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95));
           }
@@ -1050,22 +1056,27 @@ export class WebGPURenderer {
       // Early exit if no nodes to render
       if (visibleNodes.length === 0) {
         // Still clear the canvas and render grid
+        try {
         const commandEncoder = this.device.createCommandEncoder();
         const canvasView = canvasTexture.createView();
-        const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
-  ? {
-      view: this.multisampledTexture!.createView(),
-      resolveTarget: canvasView, // Resolve to canvas
-      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-      loadOp: 'clear',
-      storeOp: 'store',
-    }
-  : {
-      view: canvasView,
-      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-      loadOp: 'clear',
-      storeOp: 'store',
-    };
+        let colorAttachment: GPURenderPassColorAttachment = 
+      {
+        view: canvasView,
+        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      };
+
+      if (parseInt(this.sampleCount) > 1) {
+        colorAttachment = {
+          view: this.multisampledTexture!.createView(),
+          resolveTarget: canvasView, 
+          clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }
+      }
+  
 
     const renderPass = commandEncoder.beginRenderPass({
       label: 'main-render-pass',
@@ -1081,6 +1092,13 @@ export class WebGPURenderer {
         
         renderPass.end();
         this.device.queue.submit([commandEncoder.finish()]);
+        }
+        catch (e) {
+
+        }
+        finally {
+        this._renderInProgress = false;
+        }
         return;
       }
 
@@ -1120,14 +1138,11 @@ export class WebGPURenderer {
           console.warn('Invalid node structure:', node);
           return null;
         }
-
-        if (node.visual?.shape === 'none'){
-          console.log('skip rendering of none')
-          return null;
-        }
         
-        const color = this.hexToRgba(node.visual?.color || '#3b82f6');
+        let color = this.hexToRgba(node.visual?.color || '#3b82f6');
         const size = node.visual?.size || { width: 100, height: 60 };
+
+
         
         // Debug: Log what shape we're getting
         console.log('Node shape debug:', {
@@ -1136,7 +1151,12 @@ export class WebGPURenderer {
           shapeType: SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0
         });
         
-        const shapeType = SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0;
+        let shapeType = SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0;
+        if (node.visual?.shape === 'none') {
+          color = this.hexToRgba('#00000000');
+          shapeType = 10;
+        }
+
         const isSelected = selectedNodeIds.has(node.id) ? 1 : 0;
         
         return {
@@ -1150,7 +1170,7 @@ export class WebGPURenderer {
       }).filter(Boolean) as NodeInstanceData[]; // Remove null entries
 
       if (nodeData.length === 0) {
-        console.warn('No valid node data to render');
+        this._renderInProgress = false;
         return;
       }
 
@@ -1271,20 +1291,23 @@ export class WebGPURenderer {
   const commandEncoder = this.device.createCommandEncoder();
   const canvasView = canvasTexture.createView();
 
-  const colorAttachment: GPURenderPassColorAttachment = parseInt(this.sampleCount) > 1 && this.multisampledTexture
-  ? {
-      view: this.multisampledTexture.createView(),
-      resolveTarget: canvasView, // Resolve to canvas
-      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-      loadOp: 'clear',
-      storeOp: 'store',
-    }
-  : {
+  let colorAttachment: GPURenderPassColorAttachment = 
+    {
       view: canvasView,
       clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
       loadOp: 'clear',
       storeOp: 'store',
     };
+
+    if (parseInt(this.sampleCount) > 1) {
+      colorAttachment = {
+        view: this.multisampledTexture!.createView(),
+        resolveTarget: canvasView, 
+        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }
+    }
 
 const renderPass = commandEncoder.beginRenderPass({
   label: 'main-render-pass',
@@ -1317,10 +1340,10 @@ const renderPass = commandEncoder.beginRenderPass({
         renderPass.draw(6, handleData.length);
       }
 
-      if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
+    if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
     try {
     const labelData = this.labelRenderer.prepareLabelData(
-      visibleNodes, visibleEdges, viewport);
+    visibleNodes, visibleEdges, viewport);
     const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
 
 
@@ -1363,12 +1386,14 @@ const renderPass = commandEncoder.beginRenderPass({
       this.device.queue.submit([commandEncoder.finish()]);
 
       console.log('WebGPU render completed successfully');
-      this._renderInProgress = false;
 
     } 
     
   } catch (e) {
 
+  }
+  finally {
+    this._renderInProgress = false;
   }
 }
 
@@ -1652,5 +1677,6 @@ export const SHAPE_TYPES = {
   initialNode: 6,
   finalNode: 7,
   oval: 8,
-  actor: 9
+  actor: 9,
+  none: 10
 } as const;

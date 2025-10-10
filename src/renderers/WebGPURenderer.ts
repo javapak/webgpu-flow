@@ -228,7 +228,7 @@ export class WebGPURenderer {
       return;
     } 
     
-    console.log(`🔄 Starting sample count change from ${this.sampleCount} to ${count}`);
+    console.log(`Starting sample count change from ${this.sampleCount} to ${count}`);
     
     // IMMEDIATELY set reconfiguring flag before anything else
     this._isReconfiguring = true;
@@ -241,9 +241,6 @@ export class WebGPURenderer {
       const sampleCountNum = parseInt(count);
       
       try {
-        // Wait for all GPU operations to complete
-        await this.device.queue.onSubmittedWorkDone();
-        console.log('✅ GPU queue empty');
         
         // Destroy all renderers first (they may have pending operations)
         if (this.labelRenderer) {
@@ -321,13 +318,12 @@ export class WebGPURenderer {
           1000,
           count
         );
-        console.log('✅ Renderers recreated');
+        console.log('Renderers recreated');
         
-        console.log(`✅ Sample count change complete: ${count}x MSAA`);
+        console.log(`Sample count change complete: ${count}x MSAA`);
       } catch (error) {
-        console.error('❌ Error during sample count change:', error);
+        console.error('Error during sample count change:', error);
       } finally {
-        // Always clear the reconfiguring flag
         this._isReconfiguring = false;
         this._renderInProgress = false;
       }
@@ -909,30 +905,26 @@ export class WebGPURenderer {
     }
     
     // Block all operations during reconfiguration or rendering
-    if (this._isReconfiguring || this._isResizing) {
-      console.log('⏭️ Skipping resize - system busy');
+    if (this.isBusy) {
+      console.log('Skipping resize - system busy');
       return;
     }
     
     // Validate size
     if (canvasSize.width <= 0 || canvasSize.height <= 0) {
-      console.warn('⚠️ Invalid canvas size:', canvasSize);
+      console.warn('Invalid canvas size:', canvasSize);
       return;
     }
+
+
     
-    // Check if size actually changed
-    if (this.canvas.width === canvasSize.width && this.canvas.height === canvasSize.height) {
-      return;
-    }
     
-    console.log(`Starting resize: ${this.canvas.width}x${this.canvas.height} → ${canvasSize.width}x${canvasSize.height}`);
     
     // Set ONLY the resize flag - don't block rendering completely
     this._isResizing = true;
     
     try {
       // Simple approach: just wait for current GPU work
-      await this.device.queue.onSubmittedWorkDone();
       
       const sampleCountNum = parseInt(this.sampleCount);
       
@@ -1037,7 +1029,7 @@ export class WebGPURenderer {
       }
 
       if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
-        console.log("Canvas size changed, will update on next frame");
+        console.log("Canvas size changed, will update on' next frame");
         requestAnimationFrame(() => {
           this.updateDepthTextureOnSizeChange(canvasSize);
         });

@@ -1215,9 +1215,13 @@ function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): nu
 const setSampleCount = useCallback(async (count: string) => {
   if (rendererRef.current) {
     await rendererRef.current.setSampleCount(count);
-    scheduleRender();
   }
-}, [scheduleRender]);
+
+}, []);
+
+useEffect(() => {
+  scheduleRender();
+}, [setSampleCount, scheduleRender]);
 
 
 

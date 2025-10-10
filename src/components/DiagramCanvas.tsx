@@ -102,21 +102,20 @@ useEffect(() => {
 
 
   useEffect(() => {
-    if (getRenderer()?.currentSampleCount !== sampleCount)
-        setSampleCount(sampleCount);
-  }, [sampleCount, setSampleCount, getRenderer]);
-
-  useEffect(() => {
   const updateSampleCount = async () => {
     if (getRenderer() && sampleCount) {
-      console.log('📊 DiagramCanvas: Updating sample count to', sampleCount);
-      await getRenderer()?.setSampleCount(sampleCount);
-      renderFrame();
+      console.log('DiagramCanvas: Updating sample count to', sampleCount);
+      await setSampleCount(sampleCount);
+    
+    
     }
   };
   
-  updateSampleCount()
-}, [sampleCount, getRenderer, renderFrame]);
+  updateSampleCount();
+
+
+
+}, [sampleCount, setSampleCount, getRenderer, renderFrame]);
 
   useEffect(() => {
     if (!canvasRef.current || initializationAttempted.current) {
@@ -151,8 +150,6 @@ useEffect(() => {
       return;
     }
     
-    // IMPORTANT: Update depth texture FIRST, synchronously
-    // This prevents race conditions with the render effect
     try {
       await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
       

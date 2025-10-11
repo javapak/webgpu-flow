@@ -10,6 +10,7 @@ import { ShaderBasedEdgeDetector } from '../compute/ShaderBasedEdgeDetector';
 import GPUCapabilities from '../utils/GPUCapabilities';
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import { GridSnapping } from '../utils/GridSnapping';
+import SupersamplingManager from './SupersamplingManager';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -48,17 +49,26 @@ export class WebGPURenderer {
   private multisampledTexture: GPUTexture | null = null;
   private edgeRenderer: FloatingEdgeRenderer | null = null;
   private visualContentNodeManager: VisualContentNodeManager | null = null;
-  private gpuCapibilitiesRef: GPUCapabilities | null = null;
+  private _gpuCapibilitiesRef: GPUCapabilities | null = null;
   private sampleCount: string = '1';
   private _isReconfiguring: boolean = false;
   private _isResizing: boolean = false;
   private _renderInProgress: boolean = false;
+  private _supersamplingManager: SupersamplingManager | null = null;
 
 
 
 // In WebGPURenderer.ts, improve error handling in initialize():
   get isReconfiguring() {
     return this._isReconfiguring;
+  }
+
+  get gpuCapibilitiesRef() {
+    return this._gpuCapibilitiesRef;
+  }
+
+  get supersamplingManager() {
+    return this._supersamplingManager;
   }
 
   get isResizing() {
@@ -93,8 +103,8 @@ export class WebGPURenderer {
       
       // Check MSAA support
       try {
-        this.gpuCapibilitiesRef = new GPUCapabilities(this.device!);
-        const msaaSupport = await this.gpuCapibilitiesRef.checkMSAASupport();
+        this._gpuCapibilitiesRef = new GPUCapabilities(this.device!);
+        const msaaSupport = await this._gpuCapibilitiesRef.checkMSAASupport();
         
         // Ensure we start with a supported sample count
         if (!msaaSupport.supportedCounts.includes(this.sampleCount)) {
@@ -169,10 +179,18 @@ export class WebGPURenderer {
         // Non-fatal - continue without visual content
       }
 
+      try {
+        this._supersamplingManager = new SupersamplingManager(this.device!);
+      }
+      catch (error) {
+        console.log('SupersamplingManager init failed...');
+
+      }
+
       // Create depth texture
       try {
         const sampleCountNum = parseInt(this.sampleCount);
-        console.log(`📐 Creating initial depth texture with sample count ${this.sampleCount}`);
+        console.error(`Creating initial depth texture with sample count ${this.sampleCount}`);
         
         this._depthTexture = this.device!.createTexture({
           label: 'initial-depth-texture',
@@ -193,32 +211,56 @@ export class WebGPURenderer {
           });
         }
         
-        console.log('✅ Depth textures created');
+        console.log('Depth textures created');
       } catch (error) {
-        console.error('❌ Failed to create depth textures:', error);
+        console.error('Failed to create depth textures:', error);
         return false;
       }
 
-      console.log('✅ WebGPU renderer fully initialized');
+      console.log('WebGPU renderer fully initialized');
       return true;
       
     } catch (error) {
-      console.error('❌ WebGPU initialization failed:', error);
+      console.error('WebGPU initialization failed:', error);
       this.initialized = false;
       return false;
     }
   }
 
   get sampleCountsSupported() {
-    return this.gpuCapibilitiesRef?.sampleCountsSupported;
+    return this._gpuCapibilitiesRef?.sampleCountsSupported;
   }
 
   get currentSampleCount(): string {
     return this.sampleCount;
   }
 
+  async setSupersamplingFactor(factor: number) {
+  if (!this.supersamplingManager || !this.canvas) return;
+  
+  this._isReconfiguring = true;
+  
+  try {
+    this.supersamplingManager.setSupersamplingFactor(factor);
+    
+    if (factor > 1) {
+      // Create supersampled textures
+      this.supersamplingManager.createSupersampledTextures(
+        this.canvas.width,
+        this.canvas.height,
+        parseInt(this.sampleCount),
+        navigator.gpu.getPreferredCanvasFormat()
+      );
+    }
+    
+    console.log(`Supersampling set to ${factor}x`);
+  } finally {
+    this._isReconfiguring = false;
+  }
+}
+
   async setSampleCount(count: string) {
-    if (!this.gpuCapibilitiesRef?.sampleCountsSupported?.includes(count)) {
+    if (!this._gpuCapibilitiesRef?.sampleCountsSupported?.includes(count)) {
       console.warn(`Sample count ${count} not supported`);
       return;
     }
@@ -1044,6 +1086,32 @@ export class WebGPURenderer {
         return;
       }
 
+    const useSupersampling = this.supersamplingManager?.isEnabled();
+    let renderTarget: GPUTexture;
+    let depthTarget: GPUTexture;
+    let renderWidth: number;
+    let renderHeight: number;
+
+    
+    if (useSupersampling) {
+      const textures = this.supersamplingManager!.getSupersampledTextures();
+      renderTarget = textures.colorTexture!;
+      depthTarget = textures.depthTexture!;
+      const dimensions = this.supersamplingManager!.getSupersampledDimensions(
+        canvasSize.width, 
+        canvasSize.height
+      );
+      renderWidth = dimensions.width;
+      renderHeight = dimensions.height;
+      console.log('gpucapref....', renderWidth, renderHeight);
+      console.log(`🎨 Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling`);
+    } else {
+      renderTarget = canvasTexture;
+      depthTarget = this._depthTexture!;
+      renderWidth = canvasSize.width;
+      renderHeight = canvasSize.height;
+    }
+
 
       // Early exit if no nodes to render
       if (visibleNodes.length === 0) {
@@ -1083,6 +1151,9 @@ export class WebGPURenderer {
         this.renderGrid(renderPass, viewport, canvasSize);
         
         renderPass.end();
+        if (useSupersampling) {
+          this.supersamplingManager!.downsample(commandEncoder, canvasTexture);
+        }
         this.device.queue.submit([commandEncoder.finish()]);
         }
         catch (e) {

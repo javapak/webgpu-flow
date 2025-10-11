@@ -7,7 +7,6 @@ interface DiagramCanvasProps {
   width: number;
   height: number;
   className?: string;
-  sampleCount: string;
   showDebugInfo?: boolean;
   onNodeClick?: (node: any) => void;
   onNodeDropped?: (nodeType: any, position: {x: number, y: number}) => void;
@@ -16,7 +15,6 @@ interface DiagramCanvasProps {
   selectedNodeType?: any; // For mobile tap-to-place
   onPlaceNode?: (nodeType: any, position: {x: number, y: number}) => void;
   setSupportedSampleCount: React.Dispatch<React.SetStateAction<string[] | undefined>>
-  onSampleCountChange?: (count: string) => void;
 }
 
 // Mobile detection utility
@@ -34,7 +32,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   onNodeDropped,
   selectedNodeType,
   onPlaceNode,
-  sampleCount,
   setSupportedSampleCount
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,7 +80,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     screenToWorld,
     getRenderer,
     getSpatialDebugInfo,
-    setSampleCount,
     initializeRenderer,
     isRendererInitialized,
     renderFrame,
@@ -100,22 +96,6 @@ useEffect(() => {
   };
 }, []);
 
-
-  useEffect(() => {
-  const updateSampleCount = async () => {
-    if (getRenderer() && sampleCount) {
-      console.log('DiagramCanvas: Updating sample count to', sampleCount);
-      await setSampleCount(sampleCount);
-    
-    
-    }
-  };
-  
-  updateSampleCount();
-
-
-
-}, [sampleCount, setSampleCount, getRenderer, renderFrame]);
 
   useEffect(() => {
     if (!canvasRef.current || initializationAttempted.current) {
@@ -454,6 +434,7 @@ useEffect(() => {
     return () =>  canvasRef.current!.removeEventListener('touchcancel', handleTouchCancel as unknown as (e: TouchEvent) => void);
   }, [handleTouchCancel]);
 
+  
 
 
   useEffect(() => {

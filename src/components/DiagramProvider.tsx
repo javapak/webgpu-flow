@@ -27,11 +27,14 @@ export interface DiagramContextValue extends DiagramState {
   addNode: (node: DiagramNode) => void;
   addEdge: (edge: DiagramEdge) => void;
   removeNode: (nodeId: string) => void;
+  supportedSupersamplingFactors:number[];
+  supersamplingWarnings: string[];
   updateNode: (node: DiagramNode) => void;
   updateEdge: (edge: DiagramEdge) => void;
   removeEdge: (edgeId: string) => void;
   selectEdge: (edge: DiagramEdge | null) => void;
   clearEdgeSelection: () => void;
+  supersamplingOptions: string[];
   getVisibleNodes: () => DiagramNode[];
   hitTestPoint: (screenPoint: Point) => DiagramNode[];
   hitTestWithHandles: (screenPoint: Point) => { nodes: DiagramNode[]; resizeHandle: ResizeHandle };
@@ -73,10 +76,13 @@ export interface DiagramContextValue extends DiagramState {
   isRendererInitialized: () => boolean;
   initializeRenderer: (canvas: HTMLCanvasElement) => Promise<boolean>;
   renderFrame: () => void;
-  setSampleCount: (sampleCount: string) => Promise<void>; 
   
   // Debug
   getSpatialDebugInfo: () => any;
+  handleSampleCountChange: (value: string) => Promise<void>;
+  handleSupersamplingChange: (value: string) => Promise<void>;
+  sampleCount: string;
+  supersamplingValue: string
 }
 
 const DiagramContext = createContext<DiagramContextValue | null>(null);
@@ -658,7 +664,11 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const rendererRef = useRef<WebGPURenderer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef(state); // Keep current state in ref
+  const [supersamplingValue, setSuperSamplingValue] = useState('Disabled');
+  const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([1]);
+  const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
   
+  const [sampleCount, setSampleCount] = useState('1');
   const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
   const [drawingState, setDrawingState] = useState<EdgeDrawingState>({
     isDrawing: false,
@@ -717,6 +727,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     const visible = spatial.getVisibleNodes(viewportBounds);
     return visible;
   }, [spatial, state.viewport, state.nodes.length]);
+
 
   // Simplified render scheduling
  const scheduleRender = useCallback(() => {
@@ -962,6 +973,38 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     };
   }, [setAltKey]);
 
+    // Check supersampling support when canvas size or MSAA changes
+  useEffect(() => {
+    const checkSupport = async () => {
+      const renderer = getRenderer();
+      if (renderer && renderer.gpuCapibilitiesRef) {
+        const support = await renderer.gpuCapibilitiesRef.checkSupersamplingSupport(
+          canvasRef.current!.width,
+          canvasRef.current!.height,
+          parseInt(sampleCount)
+        );
+        
+        setSupportedSupersamplingFactors(support.supportedFactors);
+        setSupersamplingWarnings(support.warnings);
+        
+        console.log('Supersampling recommendations:', support.recommendations);
+        
+        // If current setting is not supported, fall back
+        if (supersamplingValue !== 'Disabled') {
+          const currentFactor = parseInt(supersamplingValue.replace('x', ''));
+          if (!support.supportedFactors.includes(currentFactor)) {
+            console.warn(`Current supersampling ${currentFactor}x not supported, disabling`);
+            setSuperSamplingValue('Disabled');
+            await renderer.setSupersamplingFactor(1);
+          }
+        }
+      }
+    };
+
+    if (supportedSupersamplingFactors.length > 0)
+      checkSupport();
+  });
+
 
   const toggleMode = useCallback(() => {
 
@@ -1140,6 +1183,48 @@ const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): n
 }, [screenToWorld, state.viewport.zoom]);
 
 
+  const handleSampleCountChange = useCallback(async (value: string) => {
+    setSampleCount(value);
+    const renderer = getRenderer();
+    if (renderer) {
+      await renderer.setSampleCount(value);
+    }
+    renderFrame();
+  }, [getRenderer, renderFrame, sampleCount]);
+
+
+
+  const handleSupersamplingChange = useCallback(async (value: string) => {
+    console.log('Changing supersampling to:', value);
+    setSuperSamplingValue(value);
+    
+    const renderer = getRenderer();
+    if (renderer) {
+      const factor = value === 'Disabled' ? 1 : parseInt(value.replace('x', ''));
+      
+      // Check if this factor is supported
+      if (factor > 1 && !supportedSupersamplingFactors.includes(factor)) {
+        console.error(`Supersampling factor ${factor}x is not supported!`);
+        alert(`${factor}x supersampling is not supported on your GPU. Maximum supported: ${Math.max(...supportedSupersamplingFactors)}x`);
+        return;
+      }
+      
+      await renderer.setSupersamplingFactor(factor);
+      
+      if (factor > 1) {
+        const sampleCountNum = parseInt(sampleCount);
+        await renderer.supersamplingManager?.createSupersampledTextures(
+          canvasRef.current!.width,
+          canvasRef.current!.height,
+          sampleCountNum
+        );
+      }
+      
+      renderFrame();
+    }
+  }, [getRenderer, renderFrame, sampleCount, supportedSupersamplingFactors]);
+
+
 const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean} => {
   const worldPoint = screenToWorld(screenPoint);
   const threshold = 5; 
@@ -1167,6 +1252,7 @@ const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null,
       targetNode.data.position,
     ];
     
+    
     // Check each line segment
     for (let i = 0; i < pathPoints.length - 1; i++) {
       const p1 = pathPoints[i];
@@ -1181,6 +1267,8 @@ const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null,
   
   return { edge: null, vertexIndex: -1, isVertex: false };
 }, [screenToWorld, hitTestEdgeVertex, state.viewport.zoom, state.interaction.selectedEdges, state.edges, state.nodes]);
+
+
 
 
 
@@ -1212,16 +1300,15 @@ function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): nu
 
 }
 
-const setSampleCount = useCallback(async (count: string) => {
-  if (rendererRef.current) {
-    await rendererRef.current.setSampleCount(count);
-  }
-
-}, []);
 
 useEffect(() => {
   scheduleRender();
 }, [setSampleCount, scheduleRender]);
+
+  const supersamplingOptions = [
+    'Disabled',
+    ...supportedSupersamplingFactors.filter(f => f > 1).map(f => `${f}x`)
+  ];
 
 
 
@@ -1231,10 +1318,13 @@ useEffect(() => {
   const contextValue: DiagramContextValue = useMemo(() => ({
     ...state,
     mode,
+    supersamplingOptions,
     drawingState,
     toggleMode,
     setSampleCount,
     exitDrawMode,
+    supportedSupersamplingFactors,
+    supersamplingWarnings,
     startDrawing,
     addControlPoint,
     completeEdge,
@@ -1277,6 +1367,11 @@ useEffect(() => {
     renderFrame,
     // Debug methods
     getSpatialDebugInfo,
+    handleSampleCountChange,
+    handleSupersamplingChange,
+    sampleCount,
+    supersamplingValue
+    
   }), [
     state,
     addNode,

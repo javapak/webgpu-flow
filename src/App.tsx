@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback} from 'react';
-import { DiagramProvider, DiagramCanvas } from './index';
+import { DiagramCanvas } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import '@mantine/core/styles.css'
 import './App.css';
@@ -8,6 +8,7 @@ import VisualPropertyEditor from './components/VisualPropertyEditor';
 import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 import { ActionIcon, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
+import { useDiagram } from './components/DiagramProvider';
 
 
 // Mobile detection utility
@@ -36,25 +37,12 @@ export const DiagramDemo: React.FC = () => {
   const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
-  const [sampleCount, setSampleCount] = useState('1');
-  const [superSamplingValue, setSuperSamplingValue] = useState('Disabled');
-  
-  // Handle window resize for responsive design
-  useEffect(() => {
-    const handleResize = () => {
-      const mobile = isMobileDevice();
-      setIsMobile(mobile);
-      setCanvasSize(getOptimalCanvasSize());
-      
-      // Auto-hide palette on mobile when resizing
-      if (mobile && window.innerWidth < 768) {
-        setPaletteVisible(false);
-      }
-    };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+
+  const {handleSampleCountChange, supersamplingOptions, handleSupersamplingChange,  supersamplingValue, sampleCount, supersamplingWarnings, supportedSupersamplingFactors} = useDiagram();
+  
+
+
 
 
   // Mobile viewport setup
@@ -78,6 +66,22 @@ export const DiagramDemo: React.FC = () => {
     }
   }, [isMobile]);
 
+    useEffect(() => {
+    const handleResize = () => {
+      const mobile = isMobileDevice();
+      setIsMobile(mobile);
+      setCanvasSize(getOptimalCanvasSize());
+      
+      // Auto-hide palette on mobile when resizing
+      if (mobile && window.innerWidth < 768) {
+        setPaletteVisible(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleNodeDragStart = (nodeType: NodeType, event: React.DragEvent) => {
     console.log('Started dragging node type:', nodeType.name, event);
   };
@@ -95,18 +99,13 @@ export const DiagramDemo: React.FC = () => {
      setSettingsOpen(!settingsOpen);
   }, [settingsOpen, setSettingsOpen])
 
-  const handleSampleCountChange = useCallback(async (newSampleCount: string) => {
-    console.log('Changing sample count to:', newSampleCount);
-    setSampleCount(newSampleCount);
-    // Renderer handles recreation internally, no need to remount canvas
-  }, []);
 
   const togglePalette = () => {
     setPaletteVisible(!paletteVisible);
   };
 
   return (
-    <DiagramProvider>
+    
       <div style={{ 
         backgroundColor: '#313131ff',
         minHeight: '100vh',
@@ -194,21 +193,8 @@ export const DiagramDemo: React.FC = () => {
           <div style={{position: 'absolute',  placeSelf: 'top',  top: 150, zIndex: '100' }}><VisualPropertyEditor/></div>
 
           <div style={{position: 'fixed', paddingTop: 200, paddingRight: 50, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
+      
 
-          {settingsOpen && <div style={{backgroundColor: '#3e3e3eff', position: 'absolute',  width: 250, placeSelf: 'center', top: 250, zIndex: '100'}}>
-          <div className="SettingsContentContainer">
-            <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
-            <h3 style={{justifyContent: 'center'}}>Settings</h3>
-
-            <div style={{display: 'block'}}>MSAA:
-                {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
-            </div>
-          <div style={{display: 'block'}}>
-              Supersampling: 
-              <NativeSelect data={['Disabled', '2x', '4x', '8x']} onChange={(e) => {setSuperSamplingValue(e.currentTarget.value)}} value={superSamplingValue}/></div>
-          </div>
-          </div>}
-          
           {/* Canvas Container */}
           <div style={{ 
             flex: '1',
@@ -220,16 +206,14 @@ export const DiagramDemo: React.FC = () => {
             alignItems: 'center'
           }}>
 
-          <DiagramCanvas 
-            width={canvasSize.width}
-            height={canvasSize.height}
-            setSupportedSampleCount={setSupportedSampleCount}
-            onNodeDropped={handleNodeDropped}
-            onSampleCountChange={setSampleCount}
-            sampleCount={sampleCount}
-          />
+            <DiagramCanvas 
+              width={canvasSize.width}
+              height={canvasSize.height}
+              setSupportedSampleCount={setSupportedSampleCount}
+              onNodeDropped={handleNodeDropped}
+            />
 
-          <VisualContentNodesTest />
+            <VisualContentNodesTest />
           </div>
 
           {/* Mobile Instructions */}
@@ -251,9 +235,71 @@ export const DiagramDemo: React.FC = () => {
             </div>
           )}
 
+          {/* Settings Panel */}
+          {settingsOpen && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              width: isMobile ? '100vw' : 340,
+              height: isMobile ? '100vh' : 'auto',
+              backgroundColor: '#222',
+              zIndex: 200,
+              boxShadow: '0 0 16px #000a',
+              padding: 24,
+              overflowY: 'auto'
+            }}>
+              <div className="SettingsContentContainer">
+
+                <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
+                {/* ... MSAA section ... */}
+
+                
+            <div style={{display: 'block'}}>MSAA:
+                  {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
+            </div>
+                {/* Supersampling Setting */}
+                <div style={{display: 'block', marginBottom: '15px'}}>
+                  <label style={{color: '#ffffff', marginBottom: '5px', display: 'block'}}>
+                    Supersampling:
+                  </label>
+                  <NativeSelect 
+                    data={supersamplingOptions} 
+                    onChange={(e) => handleSupersamplingChange(e.currentTarget.value)} 
+                    value={supersamplingValue}
+                    disabled={supportedSupersamplingFactors.length === 1}
+                  />
+                  <small style={{color: '#aaa', fontSize: '11px', display: 'block', marginTop: '4px'}}>
+                    {supportedSupersamplingFactors.length === 1 
+                      ? 'No supersampling support detected'
+                      : `Supported: up to ${Math.max(...supportedSupersamplingFactors)}x`
+                    }
+                  </small>
+                </div>
+
+                {/* Warnings */}
+                {supersamplingWarnings.length > 0 && (
+                  <div style={{
+                    backgroundColor: '#3a2a1a',
+                    padding: '10px',
+                    borderRadius: '4px',
+                    marginBottom: '10px',
+                    fontSize: '11px',
+                    color: '#ffcc00'
+                  }}>
+                    <strong>⚠️ Warnings:</strong>
+                    <ul style={{margin: '4px 0 0 0', paddingLeft: '20px'}}>
+                      {supersamplingWarnings.map((warning, i) => (
+                        <li key={i}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+      
+          )}
         </div>
       </div>
-    </DiagramProvider>
-    
   );
 };

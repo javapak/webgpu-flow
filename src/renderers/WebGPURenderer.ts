@@ -1103,7 +1103,7 @@ export class WebGPURenderer {
       );
       renderWidth = dimensions.width;
       renderHeight = dimensions.height;
-      console.log('gpucapref....', renderWidth, renderHeight);
+      console.log('gpucapref....', renderWidth, renderHeight, renderTarget, depthTarget);
       console.log(`🎨 Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling`);
     } else {
       renderTarget = canvasTexture;

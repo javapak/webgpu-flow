@@ -667,6 +667,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const [supersamplingValue, setSuperSamplingValue] = useState('Disabled');
   const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([1]);
   const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
+  const [initComplete, setInitComplete] = useState<boolean>(false);
   
   const [sampleCount, setSampleCount] = useState('1');
   const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
@@ -944,6 +945,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
 
   // Cleanup on unmount
   useEffect(() => {
+    setInitComplete(!initComplete);
     return () => {
       if (rendererRef.current) {
         rendererRef.current.destroy();
@@ -1001,9 +1003,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
       }
     };
 
-    if (supportedSupersamplingFactors.length > 0)
       checkSupport();
-  });
+  }, [canvasRef.current?.width, canvasRef.current?.height]);
 
 
   const toggleMode = useCallback(() => {

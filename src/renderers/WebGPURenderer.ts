@@ -180,7 +180,7 @@ export class WebGPURenderer {
       }
 
       try {
-        this._supersamplingManager = new SupersamplingManager(this.device!);
+        this._supersamplingManager = new SupersamplingManager(this.device!, this.sampleCount);
       }
       catch (error) {
         console.log('SupersamplingManager init failed...');
@@ -341,8 +341,16 @@ export class WebGPURenderer {
         
         // Recreate pipelines
         await this.setupRenderPipelines();
-        console.log('Pipelines recreated');
+        this.supersamplingManager?.createSupersampledTextures(
+            this.canvas.width,
+            this.canvas.height,
+            sampleCountNum,
+            navigator.gpu.getPreferredCanvasFormat()
+        );
         
+
+        this.supersamplingManager?.updateSampleCount(count);
+
         // Recreate renderers
         this.labelRenderer = new LabelRenderer(this.device, this.uniformBuffer!, count);
         await this.labelRenderer.initialize();
@@ -1104,7 +1112,7 @@ export class WebGPURenderer {
       renderWidth = dimensions.width;
       renderHeight = dimensions.height;
       console.log('gpucapref....', renderWidth, renderHeight, renderTarget, depthTarget);
-      console.log(`🎨 Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling`);
+      console.log(`Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling`);
     } else {
       renderTarget = canvasTexture;
       depthTarget = this._depthTexture!;

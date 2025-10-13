@@ -6,20 +6,24 @@ export default class SupersamplingManager {
   private downsamplePipeline: GPURenderPipeline | null = null;
   private downsampleBindGroup: GPUBindGroup | null = null;
   private sampler: GPUSampler | null = null;
+  private sampleCount: string | null = null;
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, sampleCount: string) {
+    this.sampleCount = sampleCount;
     this.device = device;
-    this.createDownsamplePipeline();
+    this.createDownsamplePipeline(sampleCount);
   }
 
-  private createDownsamplePipeline() {
-    // Create high-quality sampler for downsampling
+  private createDownsamplePipeline(sampleCount: string) {
+    this.sampleCount = sampleCount;
+
     this.sampler = this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
       mipmapFilter: 'linear',
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge',
+
     });
 
     const downsampleShader = `
@@ -94,7 +98,8 @@ export default class SupersamplingManager {
       },
       primitive: {
         topology: 'triangle-list'
-      }
+      },
+      multisample: {count: parseInt(this.sampleCount as string)}
     });
   }
 
@@ -171,6 +176,11 @@ export default class SupersamplingManager {
       colorTexture: this.supersampledTexture,
       depthTexture: this.supersampledDepthTexture
     };
+  }
+
+  updateSampleCount(sampleCount: string) {
+    this.sampleCount = sampleCount;
+    this.createDownsamplePipeline(sampleCount);
   }
 
   getSupersampledDimensions(baseWidth: number, baseHeight: number) {

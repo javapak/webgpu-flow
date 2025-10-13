@@ -238,9 +238,10 @@ export const DiagramDemo: React.FC = () => {
           {/* Settings Panel */}
           {settingsOpen && (
             <div style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
               width: isMobile ? '100vw' : 340,
               height: isMobile ? '100vh' : 'auto',
               backgroundColor: '#222',

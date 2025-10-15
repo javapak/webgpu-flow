@@ -77,6 +77,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     addControlPoint,
     endDrag,
     setViewport,
+    supersamplingValue,
     screenToWorld,
     getRenderer,
     getSpatialDebugInfo,
@@ -595,8 +596,13 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     
     const canvasPos = getCanvasMousePos(e as unknown as React.MouseEvent);
     const worldPosBeforeZoom = screenToWorld(canvasPos);
+
+    let factorAsInt = parseInt(supersamplingValue.replace('x', ''));
+    if (supersamplingValue === 'Disabled')
+      factorAsInt = 1;
     
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+
     const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
     
     const worldPosAfterZoom = {
@@ -612,7 +618,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
       x: viewport.x + deltaX,
       y: viewport.y + deltaY,
     });
-  }, [isMobile, getCanvasMousePos, screenToWorld, viewport, setViewport]);
+  }, [isMobile, getCanvasMousePos, screenToWorld, viewport, setViewport, supersamplingValue]);
 
   useEffect(() => {
     if (canvasRef.current && !isMobile) {

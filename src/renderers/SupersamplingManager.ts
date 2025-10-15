@@ -2,6 +2,7 @@ export default class SupersamplingManager {
   private device: GPUDevice;
   private supersamplingFactor: number = 1;
   private supersampledTexture: GPUTexture | null = null;
+  private supersampledResolveTexture: GPUTexture | null = null; // For MSAA resolve
   private supersampledDepthTexture: GPUTexture | null = null;
   private downsamplePipeline: GPURenderPipeline | null = null;
   private downsampleBindGroup: GPUBindGroup | null = null;
@@ -11,7 +12,7 @@ export default class SupersamplingManager {
   constructor(device: GPUDevice, sampleCount: string) {
     this.sampleCount = sampleCount;
     this.device = device;
-    this.createDownsamplePipeline(sampleCount);
+    this.createDownsamplePipeline(this.sampleCount);
   }
 
   private createDownsamplePipeline(sampleCount: string) {
@@ -23,7 +24,6 @@ export default class SupersamplingManager {
       mipmapFilter: 'linear',
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge',
-
     });
 
     const downsampleShader = `
@@ -98,8 +98,8 @@ export default class SupersamplingManager {
       },
       primitive: {
         topology: 'triangle-list'
-      },
-      multisample: {count: parseInt(this.sampleCount as string)}
+      }
+      // No multisample for downsample pipeline - it renders to canvas directly
     });
   }
 
@@ -109,7 +109,11 @@ export default class SupersamplingManager {
       console.warn(`Invalid supersampling factor ${factor}, using 1`);
       factor = 1;
     }
-    this.supersamplingFactor = factor;
+    
+    if (this.supersamplingFactor !== factor) {
+      console.log(`Supersampling factor changed: ${this.supersamplingFactor}x → ${factor}x`);
+      this.supersamplingFactor = factor;
+    }
   }
 
   getSupersamplingFactor(): number {
@@ -126,6 +130,9 @@ export default class SupersamplingManager {
     if (this.supersampledTexture) {
       this.supersampledTexture.destroy();
     }
+    if (this.supersampledResolveTexture) {
+      this.supersampledResolveTexture.destroy();
+    }
     if (this.supersampledDepthTexture) {
       this.supersampledDepthTexture.destroy();
     }
@@ -133,34 +140,55 @@ export default class SupersamplingManager {
     const supersampledWidth = width * this.supersamplingFactor;
     const supersampledHeight = height * this.supersamplingFactor;
 
-    console.log(`Creating supersampled textures: ${supersampledWidth}x${supersampledHeight} (${this.supersamplingFactor}x)`);
+    console.log(`Creating supersampled textures: ${supersampledWidth}x${supersampledHeight} (${this.supersamplingFactor}x) with ${sampleCount}x MSAA`);
 
-    // Create color texture for supersampled rendering
-    this.supersampledTexture = this.device.createTexture({
-      size: { width: supersampledWidth, height: supersampledHeight },
-      format: format,
-      sampleCount: sampleCount,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-      label: `supersampled-color-${this.supersamplingFactor}x`
-    });
+    if (sampleCount > 1) {
+      this.supersampledTexture = this.device.createTexture({
+        size: { width: supersampledWidth, height: supersampledHeight },
+        format: format,
+        sampleCount: sampleCount,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        label: `supersampled-msaa-${this.supersamplingFactor}x-${sampleCount}xMSAA`
+      });
+      
+      this.supersampledResolveTexture = this.device.createTexture({
+        size: { width: supersampledWidth, height: supersampledHeight },
+        format: format,
+        sampleCount: 1,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+        label: `supersampled-resolve-${this.supersamplingFactor}x`
+      });
+    } else {
+      // Without MSAA: single texture
+      this.supersampledTexture = this.device.createTexture({
+        size: { width: supersampledWidth, height: supersampledHeight },
+        format: format,
+        sampleCount: 1,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+        label: `supersampled-color-${this.supersamplingFactor}x`
+      });
+      this.supersampledResolveTexture = null;
+    }
 
-    // Create depth texture for supersampled rendering
+    // Create depth texture
     this.supersampledDepthTexture = this.device.createTexture({
       size: { width: supersampledWidth, height: supersampledHeight },
       format: 'depth24plus',
       sampleCount: sampleCount,
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
-      label: `supersampled-depth-${this.supersamplingFactor}x`
+      label: `supersampled-depth-${this.supersamplingFactor}x-${sampleCount}xMSAA`
     });
 
     // Create bind group for downsampling
+    // We downsample from the resolve texture (or main texture if no MSAA)
     if (this.downsamplePipeline) {
+      const textureToSample = this.supersampledResolveTexture || this.supersampledTexture;
       this.downsampleBindGroup = this.device.createBindGroup({
         layout: this.downsamplePipeline.getBindGroupLayout(0),
         entries: [
           {
             binding: 0,
-            resource: this.supersampledTexture.createView()
+            resource: textureToSample.createView()
           },
           {
             binding: 1,
@@ -174,6 +202,7 @@ export default class SupersamplingManager {
   getSupersampledTextures() {
     return {
       colorTexture: this.supersampledTexture,
+      resolveTexture: this.supersampledResolveTexture,
       depthTexture: this.supersampledDepthTexture
     };
   }
@@ -191,12 +220,37 @@ export default class SupersamplingManager {
   }
 
   downsample(commandEncoder: GPUCommandEncoder, targetTexture: GPUTexture) {
-    if (!this.downsamplePipeline || !this.downsampleBindGroup || !this.supersampledTexture) {
+    if (!this.downsamplePipeline) {
       console.warn('Downsample pipeline not ready');
       return;
     }
+    
+    // Verify we have something to sample from
+    const sourceTexture = this.supersampledResolveTexture || this.supersampledTexture;
+    if (!sourceTexture) {
+      console.warn('No source texture for downsampling');
+      return;
+    }
+    
+    // Recreate bind group if needed (in case texture changed)
+    if (!this.downsampleBindGroup) {
+      this.downsampleBindGroup = this.device.createBindGroup({
+        layout: this.downsamplePipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: sourceTexture.createView()
+          },
+          {
+            binding: 1,
+            resource: this.sampler!
+          }
+        ]
+      });
+    }
 
     const renderPass = commandEncoder.beginRenderPass({
+      label: 'downsample-pass',
       colorAttachments: [{
         view: targetTexture.createView(),
         loadOp: 'clear',
@@ -220,6 +274,10 @@ export default class SupersamplingManager {
     if (this.supersampledTexture) {
       this.supersampledTexture.destroy();
       this.supersampledTexture = null;
+    }
+    if (this.supersampledResolveTexture) {
+      this.supersampledResolveTexture.destroy();
+      this.supersampledResolveTexture = null;
     }
     if (this.supersampledDepthTexture) {
       this.supersampledDepthTexture.destroy();

@@ -665,7 +665,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef(state); // Keep current state in ref
   const [supersamplingValue, setSuperSamplingValue] = useState('Disabled');
-  const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([1]);
+  const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([]);
   const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
   const [initComplete, setInitComplete] = useState<boolean>(false);
   
@@ -976,35 +976,91 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   }, [setAltKey]);
 
     // Check supersampling support when canvas size or MSAA changes
+
+ 
   useEffect(() => {
-    const checkSupport = async () => {
+    const checkSupersamplingSupport = async () => {
       const renderer = getRenderer();
-      if (renderer && renderer.gpuCapibilitiesRef) {
+      
+      if (!renderer || !renderer.gpuCapibilitiesRef || !canvasRef.current) {
+        console.log('Waiting for initialization...');
+        return;
+      }
+      
+      const currentWidth = canvasRef.current.width;
+      const currentHeight = canvasRef.current.height;
+      
+      if (currentWidth === 0 || currentHeight === 0) {
+        console.log('Waiting for valid canvas dimensions...');
+        return;
+      }
+      
+      const isInitialCheck = supportedSupersamplingFactors.length === 0;
+      
+      console.log(
+        isInitialCheck 
+          ? `📊 Initial supersampling check: ${currentWidth}x${currentHeight}` 
+          : `📊 Rechecking supersampling: ${currentWidth}x${currentHeight}`
+      );
+      
+      try {
         const support = await renderer.gpuCapibilitiesRef.checkSupersamplingSupport(
-          canvasRef.current!.width,
-          canvasRef.current!.height,
+          currentWidth,
+          currentHeight,
           parseInt(sampleCount)
         );
         
         setSupportedSupersamplingFactors(support.supportedFactors);
         setSupersamplingWarnings(support.warnings);
         
-        console.log('Supersampling recommendations:', support.recommendations);
+        console.log(isInitialCheck ? '✓ Initial support loaded' : '✓ Support updated', {
+          supported: support.supportedFactors,
+          maxFactor: support.maxFactor,
+          warnings: support.warnings.length
+        });
         
-        // If current setting is not supported, fall back
-        if (supersamplingValue !== 'Disabled') {
+        if (!isInitialCheck && supersamplingValue !== 'Disabled') {
           const currentFactor = parseInt(supersamplingValue.replace('x', ''));
           if (!support.supportedFactors.includes(currentFactor)) {
-            console.warn(`Current supersampling ${currentFactor}x not supported, disabling`);
+            console.warn(`Supersampling ${currentFactor}x no longer supported, disabling`);
             setSuperSamplingValue('Disabled');
             await renderer.setSupersamplingFactor(1);
           }
         }
+      } catch (error) {
+        console.error('Failed to check supersampling support:', error);
+        if (isInitialCheck) {
+          // On initial check failure, set safe defaults
+          setSupportedSupersamplingFactors([1]);
+          setSupersamplingWarnings(['Failed to detect GPU capabilities']);
+        }
       }
     };
 
-      checkSupport();
-  }, [canvasRef.current?.width, canvasRef.current?.height]);
+    // For initial check, use a small delay
+    // For resize checks, use RAF
+    const isInitialCheck = supportedSupersamplingFactors.length === 0;
+    
+    if (isInitialCheck) {
+      const timeoutId = setTimeout(() => {
+        checkSupersamplingSupport();
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    } else {
+      const rafId = requestAnimationFrame(() => {
+        checkSupersamplingSupport();
+      });
+      return () => cancelAnimationFrame(rafId);
+    }
+  }, [
+    canvasRef.current?.width, 
+    canvasRef.current?.height, 
+    sampleCount,
+    getRenderer,
+    supportedSupersamplingFactors.length // Tracks if initial check is done
+  ]);
+
+
 
 
   const toggleMode = useCallback(() => {

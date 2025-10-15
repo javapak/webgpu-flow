@@ -236,28 +236,39 @@ export class WebGPURenderer {
   }
 
   async setSupersamplingFactor(factor: number) {
-  if (!this.supersamplingManager || !this.canvas) return;
-  
-  this._isReconfiguring = true;
-  
-  try {
-    this.supersamplingManager.setSupersamplingFactor(factor);
+    if (!this.supersamplingManager || !this.canvas) return;
     
-    if (factor > 1) {
-      // Create supersampled textures
-      this.supersamplingManager.createSupersampledTextures(
-        this.canvas.width,
-        this.canvas.height,
-        parseInt(this.sampleCount),
-        navigator.gpu.getPreferredCanvasFormat()
-      );
+    this._isReconfiguring = true;
+    
+    try {
+      this.supersamplingManager.setSupersamplingFactor(factor);
+      
+      if (factor > 1) {
+        // Create supersampled textures
+        const sampleCountNum = parseInt(this.sampleCount);
+        
+        this.supersamplingManager.createSupersampledTextures(
+          this.canvas.width,
+          this.canvas.height,
+          sampleCountNum,
+          navigator.gpu.getPreferredCanvasFormat()
+        );
+        
+        console.log(`✓ Supersampling configured: ${factor}x with ${sampleCountNum}x MSAA`);
+      } else {
+        console.log('✓ Supersampling disabled');
+      }
+      
+    } catch (error) {
+      console.error('Failed to set supersampling:', error);
+      // Fallback to disabled
+      this.supersamplingManager.setSupersamplingFactor(1);
+    } finally {
+      this._isReconfiguring = false;
     }
-    
-    console.log(`Supersampling set to ${factor}x`);
-  } finally {
-    this._isReconfiguring = false;
   }
-}
+
+
 
   async setSampleCount(count: string) {
     if (!this._gpuCapibilitiesRef?.sampleCountsSupported?.includes(count)) {
@@ -341,15 +352,7 @@ export class WebGPURenderer {
         
         // Recreate pipelines
         await this.setupRenderPipelines();
-        this.supersamplingManager?.createSupersampledTextures(
-            this.canvas.width,
-            this.canvas.height,
-            sampleCountNum,
-            navigator.gpu.getPreferredCanvasFormat()
-        );
         
-
-        this.supersamplingManager?.updateSampleCount(count);
 
         // Recreate renderers
         this.labelRenderer = new LabelRenderer(this.device, this.uniformBuffer!, count);
@@ -367,6 +370,15 @@ export class WebGPURenderer {
           20,
           1000,
           count
+        );
+
+        this.supersamplingManager?.updateSampleCount(count);
+
+        this.supersamplingManager?.createSupersampledTextures(
+            this.canvas.width,
+            this.canvas.height,
+            sampleCountNum,
+            navigator.gpu.getPreferredCanvasFormat()
         );
         console.log('Renderers recreated');
         
@@ -803,6 +815,7 @@ export class WebGPURenderer {
           binding: 0,
           visibility: GPUShaderStage.VERTEX,
           buffer: { type: 'uniform' as const }
+
         }
       ]
     });
@@ -1094,30 +1107,48 @@ export class WebGPURenderer {
         return;
       }
 
-    const useSupersampling = this.supersamplingManager?.isEnabled();
-    let renderTarget: GPUTexture;
-    let depthTarget: GPUTexture;
-    let renderWidth: number;
-    let renderHeight: number;
-
+       const useSupersampling = this.supersamplingManager?.isEnabled();
+    
+    // Determine which textures to use for rendering
+    let colorAttachmentView: GPUTextureView;
+    let resolveTarget: GPUTextureView | undefined;
+    let depthAttachmentView: GPUTextureView;
     
     if (useSupersampling) {
       const textures = this.supersamplingManager!.getSupersampledTextures();
-      renderTarget = textures.colorTexture!;
-      depthTarget = textures.depthTexture!;
+      const sampleCountNum = parseInt(this.sampleCount);
+      
+      if (sampleCountNum > 1 && textures.resolveTexture) {
+        // MSAA + Supersampling: render to MSAA texture, resolve to intermediate texture
+        colorAttachmentView = textures.colorTexture!.createView();
+        resolveTarget = textures.resolveTexture.createView();
+      } else {
+        // Just supersampling: render directly to supersampled texture
+        colorAttachmentView = textures.colorTexture!.createView();
+        resolveTarget = undefined;
+      }
+      
+      depthAttachmentView = textures.depthTexture!.createView();
+      
       const dimensions = this.supersamplingManager!.getSupersampledDimensions(
         canvasSize.width, 
         canvasSize.height
       );
-      renderWidth = dimensions.width;
-      renderHeight = dimensions.height;
-      console.log('gpucapref....', renderWidth, renderHeight, renderTarget, depthTarget);
-      console.log(`Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling`);
+      console.log(`Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling at ${dimensions.width}x${dimensions.height}`);
     } else {
-      renderTarget = canvasTexture;
-      depthTarget = this._depthTexture!;
-      renderWidth = canvasSize.width;
-      renderHeight = canvasSize.height;
+      const sampleCountNum = parseInt(this.sampleCount);
+      
+      if (sampleCountNum > 1) {
+        // Just MSAA: render to MSAA texture, resolve to canvas
+        colorAttachmentView = this.multisampledTexture!.createView();
+        resolveTarget = canvasTexture.createView();
+      } else {
+        // No MSAA or supersampling: render directly to canvas
+        colorAttachmentView = canvasTexture.createView();
+        resolveTarget = undefined;
+      }
+      
+      depthAttachmentView = this._depthTexture!.createView();
     }
 
 
@@ -1125,44 +1156,46 @@ export class WebGPURenderer {
       if (visibleNodes.length === 0) {
         // Still clear the canvas and render grid
         try {
-        const commandEncoder = this.device.createCommandEncoder();
-        const canvasView = canvasTexture.createView();
-        let colorAttachment: GPURenderPassColorAttachment = 
-      {
-        view: canvasView,
-        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      };
+          const commandEncoder = this.device.createCommandEncoder();
 
-      if (parseInt(this.sampleCount) > 1) {
-        colorAttachment = {
-          view: this.multisampledTexture!.createView(),
-          resolveTarget: canvasView, 
-          clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }
-      }
-  
+            // Setup color attachment based on configuration
+            let colorAttachment: GPURenderPassColorAttachment = {
+              view: colorAttachmentView,
+              clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store',
+            };
+            
+            // Add resolve target if needed
+            if (resolveTarget) {
+              colorAttachment.resolveTarget = resolveTarget;
+              console.log('Using MSAA resolve target');
+            }
+            
+            if (useSupersampling) {
+              console.log(`Supersampling active: rendering to ${this.supersamplingManager!.getSupersampledDimensions(canvasSize.width, canvasSize.height).width}x${this.supersamplingManager!.getSupersampledDimensions(canvasSize.width, canvasSize.height).height}`);
+            }
 
-    const renderPass = commandEncoder.beginRenderPass({
-      label: 'main-render-pass',
-      colorAttachments: [colorAttachment],
-      depthStencilAttachment: {
-        view: this._depthTexture!.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-      }
-    });
-        this.renderGrid(renderPass, viewport, canvasSize);
+          const renderPass = commandEncoder.beginRenderPass({
+            label: 'main-render-pass',
+            colorAttachments: [colorAttachment], 
+            depthStencilAttachment: {
+              view: depthAttachmentView,
+              depthClearValue: 1.0,
+              depthLoadOp: 'clear',
+              depthStoreOp: 'store',
+            }
+
+          });
+
         
-        renderPass.end();
-        if (useSupersampling) {
-          this.supersamplingManager!.downsample(commandEncoder, canvasTexture);
-        }
-        this.device.queue.submit([commandEncoder.finish()]);
+          this.renderGrid(renderPass, viewport, canvasSize);
+          
+          renderPass.end();
+          if (useSupersampling) {
+            this.supersamplingManager!.downsample(commandEncoder, canvasTexture);
+          }
+          this.device.queue.submit([commandEncoder.finish()]);
         }
         catch (e) {
 
@@ -1177,7 +1210,7 @@ export class WebGPURenderer {
       // Create proper view-projection matrix for 2D rendering
       const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
 
-              // Still render grid even without nodes
+      // Still render grid even without nodes
       
 
       // Update uniform buffers
@@ -1454,6 +1487,11 @@ const renderPass = commandEncoder.beginRenderPass({
 
 
       renderPass.end();
+      
+      if (useSupersampling) {
+        this.supersamplingManager!.downsample(commandEncoder, canvasTexture);
+      }
+      
       this.device.queue.submit([commandEncoder.finish()]);
 
       console.log('WebGPU render completed successfully');

@@ -596,10 +596,6 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     
     const canvasPos = getCanvasMousePos(e as unknown as React.MouseEvent);
     const worldPosBeforeZoom = screenToWorld(canvasPos);
-
-    let factorAsInt = parseInt(supersamplingValue.replace('x', ''));
-    if (supersamplingValue === 'Disabled')
-      factorAsInt = 1;
     
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
 

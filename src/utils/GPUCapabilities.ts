@@ -21,7 +21,7 @@ export default class GPUCapabilities {
       
       try {
         testTexture = this.device.createTexture({
-          size: { width: 4, height: 4 },
+          size: { width: 10, height: 10 },
           format: format,
           sampleCount: sampleCount,
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
@@ -64,7 +64,7 @@ export default class GPUCapabilities {
         });
         
         depthTexture = this.device.createTexture({
-          size: { width: 4, height: 4 },
+          size: { width: 10, height: 10 },
           format: 'depth24plus',
           sampleCount: sampleCount,
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
@@ -78,7 +78,7 @@ export default class GPUCapabilities {
         
         if (memoryError || validationError) {
           const error = memoryError || validationError;
-          console.log(`Sample count ${sampleCount} not supported: ${error?.message}`);
+          console.warn(`Sample count ${sampleCount} not supported: ${error?.message}`);
         } else {
           console.log(`Sample count ${sampleCount} is supported`);
           this.supportedSampleCounts.push(sampleCount.toString());

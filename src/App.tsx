@@ -6,7 +6,7 @@ import '@mantine/core/styles.css'
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
 import { VisualContentNodesTest } from './components/VisualContentNodesTest';
-import { ActionIcon, Checkbox, Input, NativeSelect } from '@mantine/core';
+import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
 

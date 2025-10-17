@@ -39,7 +39,7 @@ export const DiagramDemo: React.FC = () => {
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
 
 
-  const {handleSampleCountChange, fxaaEnabled, setFXAAEnabled, supersamplingOptions, handleSupersamplingChange,  supersamplingValue, sampleCount, supersamplingWarnings, supportedSupersamplingFactors} = useDiagram();
+  const {handleSampleCountChange, fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled, supersamplingOptions, handleSupersamplingChange,  supersamplingValue, sampleCount, supersamplingWarnings, supportedSupersamplingFactors} = useDiagram();
   
 
 
@@ -261,6 +261,8 @@ export const DiagramDemo: React.FC = () => {
             </div>
             
             <div style={{display: 'block'}}><Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/></div>
+            <div style={{display: 'block'}}><Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/></div>
+
             </div>
 
                 {/* Supersampling Setting */}

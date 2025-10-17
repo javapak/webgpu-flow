@@ -12,6 +12,7 @@ import type { EdgeDrawingState } from '../components/DiagramProvider';
 import { GridSnapping } from '../utils/GridSnapping';
 import SupersamplingManager from './SupersamplingManager';
 import { FXAARenderer } from './FXAARendererer';
+import { SMAARenderer } from './SMAARenderer';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -57,8 +58,12 @@ export class WebGPURenderer {
   private _renderInProgress: boolean = false;
   private _supersamplingManager: SupersamplingManager | null = null;
   private fxaaRenderer: FXAARenderer | null = null;
+  private smaaRenderer: SMAARenderer | null = null;
   private fxaaEnabled: boolean = false;
-  private intermediateTexture: GPUTexture | null = null; // For MSAA + FXAA
+  private smaaEnabled: boolean = false;
+  private intermediateTexture: GPUTexture | null = null; 
+  private intermediateTexture2: GPUTexture | null = null;
+
 
 
 
@@ -227,9 +232,15 @@ export class WebGPURenderer {
         this.fxaaRenderer = new FXAARenderer(this.device!, canvasFormat);
       }
       catch (e) {
-
+        console.error('Failed to create FXAA renderer:', e);
       }
 
+      try {
+        const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+        this.smaaRenderer = new SMAARenderer(this.device!, canvasFormat);
+      } catch (e) { 
+        console.error('Failed to create SMAA renderer:', e);
+      }
       console.log('WebGPU renderer fully initialized');
       return true;
       
@@ -267,9 +278,9 @@ export class WebGPURenderer {
           navigator.gpu.getPreferredCanvasFormat()
         );
         
-        console.log(`✓ Supersampling configured: ${factor}x with ${sampleCountNum}x MSAA`);
+        console.log(`Supersampling configured: ${factor}x with ${sampleCountNum}x MSAA`);
       } else {
-        console.log('✓ Supersampling disabled');
+        console.log('Supersampling disabled');
       }
       
     } catch (error) {
@@ -281,22 +292,38 @@ export class WebGPURenderer {
     }
   }
 
-  private createIntermediateTexture(width: number, height: number) {
-    if (this.intermediateTexture) {
-      this.intermediateTexture.destroy();
-    }
-
-    this.intermediateTexture = this.device!.createTexture({
-      size: { width, height },
-      format: navigator.gpu.getPreferredCanvasFormat(),
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-      label: 'intermediate-texture-for-fxaa'
-    });
+private createIntermediateTexture(width: number, height: number) {
+  if (this.intermediateTexture) {
+    this.intermediateTexture.destroy();
   }
+  if (this.intermediateTexture2) {
+    this.intermediateTexture2.destroy();
+  }
+
+  const textureDescriptor = {
+    size: { width, height },
+    format: navigator.gpu.getPreferredCanvasFormat(),
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    label: 'intermediate-texture-for-aa'
+  };
+
+  this.intermediateTexture = this.device!.createTexture(textureDescriptor);
+  
+  // Second texture for ping-pong when both SMAA and FXAA are enabled
+  this.intermediateTexture2 = this.device!.createTexture({
+    ...textureDescriptor,
+    label: 'intermediate-texture-2-for-aa'
+  });
+}
 
   setFXAAEnabled(enabled: boolean) {
     this.fxaaEnabled = enabled;
     console.log(`FXAA ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  setSMAAEnabled(enabled: boolean) {
+    this.smaaEnabled = enabled;
+    console.log(`SMAA ${enabled ? 'enabled' : 'disabled'}`);
   }
 
 
@@ -1140,9 +1167,10 @@ export class WebGPURenderer {
 
       const useFXAA = this.fxaaEnabled;
       const useMSAA = parseInt(this.sampleCount) > 1;
+      const useSMAA = this.smaaEnabled;
 
       // Ensure intermediate texture exists if FXAA is enabled
-      if (useFXAA) {
+      if (useFXAA || useSMAA) {
         if (!this.intermediateTexture || 
             this.intermediateTexture.width !== canvasSize.width ||
             this.intermediateTexture.height !== canvasSize.height) {
@@ -1155,17 +1183,17 @@ export class WebGPURenderer {
       let resolveTarget: GPUTextureView | undefined;
       let depthAttachmentView: GPUTextureView;
       
-      if (useFXAA && useMSAA) {
+      if ((useFXAA || useSMAA) && useMSAA) {
         // MSAA + FXAA: Render with MSAA → resolve to intermediate → FXAA → canvas
         colorAttachmentView = this.multisampledTexture!.createView();
         resolveTarget = this.intermediateTexture!.createView();
         
-      } else if (useFXAA && !useMSAA) {
+      } else if ((useFXAA || useSMAA) && !useMSAA) {
         // FXAA only: Render → intermediate → FXAA → canvas
         colorAttachmentView = this.intermediateTexture!.createView();
         resolveTarget = undefined;
         
-      } else if (!useFXAA && useMSAA) {
+      } else if ((!useFXAA || !useFXAA) && useMSAA) {
         // MSAA only: Render with MSAA → resolve to canvas
         colorAttachmentView = this.multisampledTexture!.createView();
         resolveTarget = canvasTexture.createView();
@@ -1405,10 +1433,19 @@ export class WebGPURenderer {
 
       renderPass.end();
 
-      // Apply FXAA if enabled
-      if (useFXAA && this.fxaaRenderer && this.intermediateTexture) {
-        this.fxaaRenderer.apply(commandEncoder, this.intermediateTexture, canvasTexture);
+      // Apply SMAA or FXAA or both in correct order if enabled.
+      if (this.intermediateTexture) {
+        if (useSMAA && useFXAA) {
+          // Both: SMAA first (better at edges), then FXAA (catches remaining artifacts)
+          this.smaaRenderer!.apply(commandEncoder, this.intermediateTexture, this.intermediateTexture2!);
+          this.fxaaRenderer!.apply(commandEncoder, this.intermediateTexture2!, canvasTexture);
+        } else if (useSMAA) {
+          this.smaaRenderer!.apply(commandEncoder, this.intermediateTexture, canvasTexture);
+        } else if (useFXAA) {
+          this.fxaaRenderer!.apply(commandEncoder, this.intermediateTexture, canvasTexture);
+        }
       }
+
 
       this.device.queue.submit([commandEncoder.finish()]);
 

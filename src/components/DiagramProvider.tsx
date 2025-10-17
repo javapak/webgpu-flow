@@ -48,6 +48,8 @@ export interface DiagramContextValue extends DiagramState {
   cancelDrawing: () => void;
   fxaaEnabled: boolean;
   setFXAAEnabled: (enabled: boolean) => void;
+  smaaEnabled: boolean;
+  setSMAAEnabled: (enabled: boolean) => void;
 
   // Edge vertex manipulation
   updateEdgeVertex: (edgeId: string, vertexIndex: number, newPosition: {x: number, y: number}) => void;
@@ -671,6 +673,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
   const [initComplete, setInitComplete] = useState<boolean>(false);
   const [fxaaEnabled, setFXAAEnabledState] = useState(false);
+  const [smaaEnabled, setSMAAEnabledState] = useState(false);
   const [sampleCount, setSampleCount] = useState('1');
   const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
   const [drawingState, setDrawingState] = useState<EdgeDrawingState>({
@@ -1379,6 +1382,15 @@ useEffect(() => {
     }
   }, [getRenderer]);
 
+    
+  const setSMAAEnabled = useCallback((enabled: boolean) => {
+    setSMAAEnabledState(enabled);
+    const renderer = getRenderer();
+    if (renderer) {
+      renderer.setSMAAEnabled(enabled);
+    }
+  }, [getRenderer]);
+
 
 
 
@@ -1388,7 +1400,8 @@ useEffect(() => {
     ...state,
     fxaaEnabled,
     setFXAAEnabled,
-    initComplete,
+    smaaEnabled,
+    setSMAAEnabled,
     mode,
     supersamplingOptions,
     drawingState,

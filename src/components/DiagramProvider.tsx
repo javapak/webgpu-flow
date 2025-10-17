@@ -23,7 +23,7 @@ export interface EdgeDrawingState {
 
 
 export interface DiagramContextValue extends DiagramState {
-  // Spatial-aware methods
+  
   addNode: (node: DiagramNode) => void;
   addEdge: (edge: DiagramEdge) => void;
   removeNode: (nodeId: string) => void;
@@ -46,6 +46,8 @@ export interface DiagramContextValue extends DiagramState {
   addControlPoint: (point: {x: number, y: number}, replaceLast?: boolean) => void;
   completeEdge: (targetNodeId: string) => FloatingEdge | null;
   cancelDrawing: () => void;
+  fxaaEnabled: boolean;
+  setFXAAEnabled: (enabled: boolean) => void;
 
   // Edge vertex manipulation
   updateEdgeVertex: (edgeId: string, vertexIndex: number, newPosition: {x: number, y: number}) => void;
@@ -668,7 +670,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([]);
   const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
   const [initComplete, setInitComplete] = useState<boolean>(false);
-  
+  const [fxaaEnabled, setFXAAEnabledState] = useState(false);
   const [sampleCount, setSampleCount] = useState('1');
   const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
   const [drawingState, setDrawingState] = useState<EdgeDrawingState>({
@@ -728,6 +730,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     const visible = spatial.getVisibleNodes(viewportBounds);
     return visible;
   }, [spatial, state.viewport, state.nodes.length]);
+  
 
 
   // Simplified render scheduling
@@ -1367,6 +1370,15 @@ useEffect(() => {
     ...supportedSupersamplingFactors.filter(f => f > 1).map(f => `${f}x`)
   ];
 
+  
+  const setFXAAEnabled = useCallback((enabled: boolean) => {
+    setFXAAEnabledState(enabled);
+    const renderer = getRenderer();
+    if (renderer) {
+      renderer.setFXAAEnabled(enabled);
+    }
+  }, [getRenderer]);
+
 
 
 
@@ -1374,6 +1386,9 @@ useEffect(() => {
   // Context value
   const contextValue: DiagramContextValue = useMemo(() => ({
     ...state,
+    fxaaEnabled,
+    setFXAAEnabled,
+    initComplete,
     mode,
     supersamplingOptions,
     drawingState,

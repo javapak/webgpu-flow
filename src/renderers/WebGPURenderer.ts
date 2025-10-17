@@ -11,6 +11,7 @@ import GPUCapabilities from '../utils/GPUCapabilities';
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import { GridSnapping } from '../utils/GridSnapping';
 import SupersamplingManager from './SupersamplingManager';
+import { FXAARenderer } from './FXAARendererer';
 
 interface NodeInstanceData {
   position: [number, number];
@@ -55,6 +56,9 @@ export class WebGPURenderer {
   private _isResizing: boolean = false;
   private _renderInProgress: boolean = false;
   private _supersamplingManager: SupersamplingManager | null = null;
+  private fxaaRenderer: FXAARenderer | null = null;
+  private fxaaEnabled: boolean = false;
+  private intermediateTexture: GPUTexture | null = null; // For MSAA + FXAA
 
 
 
@@ -210,11 +214,20 @@ export class WebGPURenderer {
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
           });
         }
+
         
         console.log('Depth textures created');
       } catch (error) {
         console.error('Failed to create depth textures:', error);
         return false;
+      }
+
+      try {
+        const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+        this.fxaaRenderer = new FXAARenderer(this.device!, canvasFormat);
+      }
+      catch (e) {
+
       }
 
       console.log('WebGPU renderer fully initialized');
@@ -268,6 +281,23 @@ export class WebGPURenderer {
     }
   }
 
+  private createIntermediateTexture(width: number, height: number) {
+    if (this.intermediateTexture) {
+      this.intermediateTexture.destroy();
+    }
+
+    this.intermediateTexture = this.device!.createTexture({
+      size: { width, height },
+      format: navigator.gpu.getPreferredCanvasFormat(),
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      label: 'intermediate-texture-for-fxaa'
+    });
+  }
+
+  setFXAAEnabled(enabled: boolean) {
+    this.fxaaEnabled = enabled;
+    console.log(`FXAA ${enabled ? 'enabled' : 'disabled'}`);
+  }
 
 
   async setSampleCount(count: string) {
@@ -1069,15 +1099,16 @@ export class WebGPURenderer {
       return;
     }
 
-  if (this.isBusy) {
-    return;
-  }
+    if (this._isReconfiguring) {
+      console.log('Skipping render - reconfiguring');
+      return;
+    }
 
-  if (!this._depthTexture || !this.uniformBuffer) {
-    return;
-  }
+    if (!this._depthTexture || !this.uniformBuffer) {
+      return;
+    }
 
-   this._renderInProgress = true;
+    this._renderInProgress = true;
 
     try {
       // Validate input data
@@ -1092,7 +1123,7 @@ export class WebGPURenderer {
       }
 
       if (this.canvas && (this.canvas.width !== canvasSize.width || this.canvas.height !== canvasSize.height)) {
-        console.log("Canvas size changed, will update on' next frame");
+        console.log("Canvas size changed, will update on next frame");
         requestAnimationFrame(() => {
           this.updateDepthTextureOnSizeChange(canvasSize);
         });
@@ -1107,111 +1138,48 @@ export class WebGPURenderer {
         return;
       }
 
-       const useSupersampling = this.supersamplingManager?.isEnabled();
-    
-    // Determine which textures to use for rendering
-    let colorAttachmentView: GPUTextureView;
-    let resolveTarget: GPUTextureView | undefined;
-    let depthAttachmentView: GPUTextureView;
-    
-    if (useSupersampling) {
-      const textures = this.supersamplingManager!.getSupersampledTextures();
-      const sampleCountNum = parseInt(this.sampleCount);
-      
-      if (sampleCountNum > 1 && textures.resolveTexture) {
-        // MSAA + Supersampling: render to MSAA texture, resolve to intermediate texture
-        colorAttachmentView = textures.colorTexture!.createView();
-        resolveTarget = textures.resolveTexture.createView();
-      } else {
-        // Just supersampling: render directly to supersampled texture
-        colorAttachmentView = textures.colorTexture!.createView();
-        resolveTarget = undefined;
+      const useFXAA = this.fxaaEnabled;
+      const useMSAA = parseInt(this.sampleCount) > 1;
+
+      // Ensure intermediate texture exists if FXAA is enabled
+      if (useFXAA) {
+        if (!this.intermediateTexture || 
+            this.intermediateTexture.width !== canvasSize.width ||
+            this.intermediateTexture.height !== canvasSize.height) {
+          this.createIntermediateTexture(canvasSize.width, canvasSize.height);
+        }
       }
+
+      // Determine render target configuration
+      let colorAttachmentView: GPUTextureView;
+      let resolveTarget: GPUTextureView | undefined;
+      let depthAttachmentView: GPUTextureView;
       
-      depthAttachmentView = textures.depthTexture!.createView();
-      
-      const dimensions = this.supersamplingManager!.getSupersampledDimensions(
-        canvasSize.width, 
-        canvasSize.height
-      );
-      console.log(`Rendering with ${this.supersamplingManager!.getSupersamplingFactor()}x supersampling at ${dimensions.width}x${dimensions.height}`);
-    } else {
-      const sampleCountNum = parseInt(this.sampleCount);
-      
-      if (sampleCountNum > 1) {
-        // Just MSAA: render to MSAA texture, resolve to canvas
+      if (useFXAA && useMSAA) {
+        // MSAA + FXAA: Render with MSAA → resolve to intermediate → FXAA → canvas
+        colorAttachmentView = this.multisampledTexture!.createView();
+        resolveTarget = this.intermediateTexture!.createView();
+        
+      } else if (useFXAA && !useMSAA) {
+        // FXAA only: Render → intermediate → FXAA → canvas
+        colorAttachmentView = this.intermediateTexture!.createView();
+        resolveTarget = undefined;
+        
+      } else if (!useFXAA && useMSAA) {
+        // MSAA only: Render with MSAA → resolve to canvas
         colorAttachmentView = this.multisampledTexture!.createView();
         resolveTarget = canvasTexture.createView();
+        
       } else {
-        // No MSAA or supersampling: render directly to canvas
+        // Neither: Render directly to canvas
         colorAttachmentView = canvasTexture.createView();
         resolveTarget = undefined;
       }
       
       depthAttachmentView = this._depthTexture!.createView();
-    }
 
-
-      // Early exit if no nodes to render
-      if (visibleNodes.length === 0) {
-        // Still clear the canvas and render grid
-        try {
-          const commandEncoder = this.device.createCommandEncoder();
-
-            // Setup color attachment based on configuration
-            let colorAttachment: GPURenderPassColorAttachment = {
-              view: colorAttachmentView,
-              clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-              loadOp: 'clear',
-              storeOp: 'store',
-            };
-            
-            // Add resolve target if needed
-            if (resolveTarget) {
-              colorAttachment.resolveTarget = resolveTarget;
-              console.log('Using MSAA resolve target');
-            }
-            
-            if (useSupersampling) {
-              console.log(`Supersampling active: rendering to ${this.supersamplingManager!.getSupersampledDimensions(canvasSize.width, canvasSize.height).width}x${this.supersamplingManager!.getSupersampledDimensions(canvasSize.width, canvasSize.height).height}`);
-            }
-
-          const renderPass = commandEncoder.beginRenderPass({
-            label: 'main-render-pass',
-            colorAttachments: [colorAttachment], 
-            depthStencilAttachment: {
-              view: depthAttachmentView,
-              depthClearValue: 1.0,
-              depthLoadOp: 'clear',
-              depthStoreOp: 'store',
-            }
-
-          });
-
-        
-          this.renderGrid(renderPass, viewport, canvasSize);
-          
-          renderPass.end();
-          if (useSupersampling) {
-            this.supersamplingManager!.downsample(commandEncoder, canvasTexture);
-          }
-          this.device.queue.submit([commandEncoder.finish()]);
-        }
-        catch (e) {
-
-        }
-        finally {
-        this._renderInProgress = false;
-        }
-        return;
-      }
-
-
-      // Create proper view-projection matrix for 2D rendering
+      // Create view-projection matrix
       const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
-
-      // Still render grid even without nodes
-      
 
       // Update uniform buffers
       this.device.queue.writeBuffer(
@@ -1223,21 +1191,19 @@ export class WebGPURenderer {
         ])
       );
 
-      // Update grid uniform buffer with canvas dimensions
       this.device.queue.writeBuffer(
         this.gridUniformBuffer!,
         0,
         new Float32Array([
           ...viewProjectionMatrix,
           viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height,
-          canvasSize.width, canvasSize.height, 0, 0 // Canvas size + padding
+          canvasSize.width, canvasSize.height, 0, 0
         ])
       );
 
-      // Prepare node data with selection information
+      // Prepare node data (your existing code)
       const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
       const nodeData: NodeInstanceData[] = visibleNodes.map(node => {
-        // Validate node structure
         if (!node.data || !node.data.position) {
           console.warn('Invalid node structure:', node);
           return null;
@@ -1245,15 +1211,6 @@ export class WebGPURenderer {
         
         let color = this.hexToRgba(node.visual?.color || '#3b82f6');
         const size = node.visual?.size || { width: 100, height: 60 };
-
-
-        
-        // Debug: Log what shape we're getting
-        console.log('Node shape debug:', {
-          nodeId: node.id,
-          rawShape: node.visual?.shape,
-          shapeType: SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0
-        });
         
         let shapeType = SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0;
         if (node.visual?.shape === 'none') {
@@ -1269,71 +1226,93 @@ export class WebGPURenderer {
           color: [color.r, color.g, color.b, color.a],
           shapeType,
           isSelected,
-          padding: [0, 0, 0], // padding for struct alignment
+          padding: [0, 0, 0],
         };
-      }).filter(Boolean) as NodeInstanceData[]; // Remove null entries
+      }).filter(Boolean) as NodeInstanceData[];
 
-      if (nodeData.length === 0) {
-        this._renderInProgress = false;
-        return;
+      // Create command encoder
+      const commandEncoder = this.device.createCommandEncoder();
+
+      // Setup color attachment
+      let colorAttachment: GPURenderPassColorAttachment = {
+        view: colorAttachmentView,
+        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      };
+      
+      if (resolveTarget) {
+        colorAttachment.resolveTarget = resolveTarget;
       }
 
-      // Debug: Log the first few nodes to see what we're actually sending
-      console.log('First node data being sent to GPU:', nodeData.slice(0, 3));
-
-      // Resize node buffer if needed
-      const requiredNodeSize = nodeData.length * 64; // 16 floats * 4 bytes = 64 bytes per node
-      if (requiredNodeSize > this.nodeBuffer!.size) {
-        console.log('Resizing node buffer from', this.nodeBuffer!.size, 'to', requiredNodeSize * 2);
-        
-        this.nodeBuffer!.destroy();
-        this.nodeBuffer = this.device.createBuffer({
-          size: requiredNodeSize * 2, // Double the size for future growth
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        });
-        
-        this.nodeBindGroup = this.device.createBindGroup({
-          layout: this.nodeRenderPipeline.getBindGroupLayout(0),
-          entries: [
-            { binding: 0, resource: { buffer: this.uniformBuffer! } },
-            { binding: 1, resource: { buffer: this.nodeBuffer } }
-          ]
-        });
-      }
-
-      // Write node data to buffer - MUST match WGSL struct layout exactly!
-      const flatNodeData = new Float32Array(nodeData.length * 16); // 16 floats per node to match struct
-      nodeData.forEach((node, i) => {
-        const offset = i * 16;
-        // position: vec2<f32>
-        flatNodeData[offset] = node.position[0];
-        flatNodeData[offset + 1] = node.position[1];
-        // size: vec2<f32>  
-        flatNodeData[offset + 2] = node.size[0];
-        flatNodeData[offset + 3] = node.size[1];
-        // color: vec4<f32>
-        flatNodeData[offset + 4] = node.color[0];
-        flatNodeData[offset + 5] = node.color[1];
-        flatNodeData[offset + 6] = node.color[2];
-        flatNodeData[offset + 7] = node.color[3];
-        // isSelected: f32
-        flatNodeData[offset + 8] = node.isSelected;
-        // shapeType: f32 - This is the critical one!
-        flatNodeData[offset + 9] = node.shapeType;
-        // padding: vec3<f32> (to align to 16-float boundary)
-        flatNodeData[offset + 10] = node.padding[0];
-        flatNodeData[offset + 11] = node.padding[1];
-        flatNodeData[offset + 12] = node.padding[2];
-        flatNodeData[offset + 13] = 0; // Extra padding
-        flatNodeData[offset + 14] = 0; // Extra padding  
-        flatNodeData[offset + 15] = 0; // Extra padding
+      // Main render pass
+      const renderPass = commandEncoder.beginRenderPass({
+        label: 'main-render-pass',
+        colorAttachments: [colorAttachment], 
+        depthStencilAttachment: {
+          view: depthAttachmentView,
+          depthClearValue: 1.0,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store',
+        }
       });
 
-      this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
+      // Render grid
+      this.renderGrid(renderPass, viewport, canvasSize);
 
+      // Render nodes if we have data
+      if (nodeData.length > 0) {
+        // Update node buffer (your existing code)
+        const requiredNodeSize = nodeData.length * 64;
+        if (requiredNodeSize > this.nodeBuffer!.size) {
+          this.nodeBuffer!.destroy();
+          this.nodeBuffer = this.device.createBuffer({
+            size: requiredNodeSize * 2,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+          });
+          
+          this.nodeBindGroup = this.device.createBindGroup({
+            layout: this.nodeRenderPipeline.getBindGroupLayout(0),
+            entries: [
+              { binding: 0, resource: { buffer: this.uniformBuffer! } },
+              { binding: 1, resource: { buffer: this.nodeBuffer } }
+            ]
+          });
+        }
+
+        const flatNodeData = new Float32Array(nodeData.length * 16);
+        nodeData.forEach((node, i) => {
+          const offset = i * 16;
+          flatNodeData[offset] = node.position[0];
+          flatNodeData[offset + 1] = node.position[1];
+          flatNodeData[offset + 2] = node.size[0];
+          flatNodeData[offset + 3] = node.size[1];
+          flatNodeData[offset + 4] = node.color[0];
+          flatNodeData[offset + 5] = node.color[1];
+          flatNodeData[offset + 6] = node.color[2];
+          flatNodeData[offset + 7] = node.color[3];
+          flatNodeData[offset + 8] = node.isSelected;
+          flatNodeData[offset + 9] = node.shapeType;
+          flatNodeData[offset + 10] = node.padding[0];
+          flatNodeData[offset + 11] = node.padding[1];
+          flatNodeData[offset + 12] = node.padding[2];
+          flatNodeData[offset + 13] = 0;
+          flatNodeData[offset + 14] = 0;
+          flatNodeData[offset + 15] = 0;
+        });
+
+        this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
+
+        // Draw nodes
+        renderPass.setPipeline(this.nodeRenderPipeline);
+        renderPass.setBindGroup(0, this.nodeBindGroup!);
+        renderPass.draw(6, nodeData.length);
+      }
+
+      // Render handles (your existing code for selected nodes)
       const handleData: HandleInstanceData[] = [];
       if (selectedNodes.length > 0) {
-        const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8px handles
+        const handleSize = Math.max(12 / viewport.zoom, 8);
 
         selectedNodes.forEach(node => {
           if (!node.data || !node.data.position) return;
@@ -1342,7 +1321,6 @@ export class WebGPURenderer {
           const shape = node.visual?.shape || 'rectangle';
           const { x, y } = node.data.position;
           
-          // Get shape-specific handle positions
           const handlePositions = this.getShapeHandlePositions(x, y, size.width, size.height, shape);
           
           handlePositions.forEach(handlePos => {
@@ -1357,8 +1335,8 @@ export class WebGPURenderer {
           });
         });
       }
-      // Update handle buffer if we have handles
-      if (handleData.length > 0) {
+
+      if (handleData.length > 0 && this.handleRenderPipeline) {
         const requiredHandleSize = handleData.length * 32;
         if (requiredHandleSize > this.handleBuffer!.size) {
           this.handleBuffer!.destroy();
@@ -1376,7 +1354,7 @@ export class WebGPURenderer {
           });
         }
 
-      const flatHandleData = new Float32Array(handleData.length * 8); // 8 floats per handle
+        const flatHandleData = new Float32Array(handleData.length * 8);
         handleData.forEach((handle, i) => {
           const offset = i * 8;
           flatHandleData[offset] = handle.position[0];
@@ -1390,121 +1368,56 @@ export class WebGPURenderer {
         });
 
         this.device.queue.writeBuffer(this.handleBuffer!, 0, flatHandleData);
-      }
-
-  const commandEncoder = this.device.createCommandEncoder();
-  const canvasView = canvasTexture.createView();
-
-  let colorAttachment: GPURenderPassColorAttachment = 
-    {
-      view: canvasView,
-      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-      loadOp: 'clear',
-      storeOp: 'store',
-    };
-
-    if (parseInt(this.sampleCount) > 1) {
-      colorAttachment = {
-        view: this.multisampledTexture!.createView(),
-        resolveTarget: canvasView, 
-        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }
-    }
-
-const renderPass = commandEncoder.beginRenderPass({
-  label: 'main-render-pass',
-  colorAttachments: [colorAttachment], 
-  depthStencilAttachment: {
-    view: this._depthTexture!.createView(),
-    depthClearValue: 1.0,
-    depthLoadOp: 'clear',
-    depthStoreOp: 'store',
-  }
-
-});
-  this.renderGrid(renderPass, viewport, canvasSize);
-
-
-
-      // Render nodes
-      if (nodeData.length > 0) {
-        renderPass.setPipeline(this.nodeRenderPipeline);
-        renderPass.setBindGroup(0, this.nodeBindGroup!);
-        renderPass.draw(6, nodeData.length);
-      }
-
-  
-
-      // Render handles
-      if (handleData.length > 0 && this.handleRenderPipeline) {
+        
         renderPass.setPipeline(this.handleRenderPipeline);
         renderPass.setBindGroup(0, this.handleBindGroup!);
         renderPass.draw(6, handleData.length);
       }
 
-    if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
-    try {
-    const labelData = this.labelRenderer.prepareLabelData(
-    visibleNodes, visibleEdges, viewport);
-    const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
+      // Render edges, labels, visual content (your existing code)
+      if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
+        try {
+          const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
+          const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
 
+          await this.edgeRenderer!.render(
+            renderPass,
+            visibleEdges,
+            visibleNodes,
+            viewProjectionMatrix,
+            this.visualContentNodeManager!,
+            previewEdge ? previewEdge : undefined,
+            selectedEdges,
+            viewport
+          );
 
-      await this.edgeRenderer!.render(
-          renderPass,
-          visibleEdges,
-          visibleNodes, // Pass nodes array directly
-          viewProjectionMatrix,
-          this.visualContentNodeManager!, // Pass the manager
-          previewEdge ? previewEdge : undefined,
-          selectedEdges,
-          viewport
-      );
-
-    if (visualData?.length) {
-      this.visualRenderer?.render(renderPass, visualData);
-        
-    }
-
-    
-    if (labelData.length > 0) {
-      console.log('About to render labels:', labelData.length);
-      this.labelRenderer.render(renderPass, labelData);
-    } else {
-      console.log('No label data to render');
-    }
-  } catch (error) {
-    console.error('Error rendering labels:', error);
-  }
-
-
-      if (visibleEdges) {
-        console.log('visible edge info: ', visibleEdges);
+          if (visualData?.length) {
+            this.visualRenderer?.render(renderPass, visualData);
+          }
+          
+          if (labelData.length > 0) {
+            this.labelRenderer.render(renderPass, labelData);
+          }
+        } catch (error) {
+          console.error('Error rendering labels:', error);
+        }
       }
-
-
-
 
       renderPass.end();
-      
-      if (useSupersampling) {
-        this.supersamplingManager!.downsample(commandEncoder, canvasTexture);
+
+      // Apply FXAA if enabled
+      if (useFXAA && this.fxaaRenderer && this.intermediateTexture) {
+        this.fxaaRenderer.apply(commandEncoder, this.intermediateTexture, canvasTexture);
       }
-      
+
       this.device.queue.submit([commandEncoder.finish()]);
 
-      console.log('WebGPU render completed successfully');
-
-    } 
-    
-  } catch (e) {
-
+    } catch (error) {
+      console.error('Render error:', error);
+    } finally {
+      this._renderInProgress = false;
+    }
   }
-  finally {
-    this._renderInProgress = false;
-  }
-}
 
   clearTextAtlas(): void {
     if (this.labelRenderer) {
@@ -1620,6 +1533,16 @@ const renderPass = commandEncoder.beginRenderPass({
       if (this.nodeBuffer) {
         this.nodeBuffer.destroy();
         this.nodeBuffer = null;
+      }
+
+      if (this.intermediateTexture) {
+        this.intermediateTexture.destroy();
+        this.intermediateTexture = null;
+      }
+
+      if (this.fxaaRenderer) {
+        this.fxaaRenderer.destroy();
+        this.fxaaRenderer = null;
       }
       
       if (this.handleBuffer) {

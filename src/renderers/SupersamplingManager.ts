@@ -37,16 +37,15 @@ export default class SupersamplingManager {
 
       @vertex
       fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-        // Full-screen quad
         let positions = array<vec2<f32>, 6>(
           vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
           vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
         );
         
-        let uvs = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
-          vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
-        );
+      let uvs = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
+      );
 
         var output: VertexOutput;
         output.position = vec4<f32>(positions[vertexIndex], 0.0, 1.0);
@@ -98,7 +97,7 @@ export default class SupersamplingManager {
       },
       primitive: {
         topology: 'triangle-list'
-      }
+      },
       // No multisample for downsample pipeline - it renders to canvas directly
     });
   }
@@ -219,52 +218,48 @@ export default class SupersamplingManager {
     };
   }
 
-  downsample(commandEncoder: GPUCommandEncoder, targetTexture: GPUTexture) {
-    if (!this.downsamplePipeline) {
-      console.warn('Downsample pipeline not ready');
-      return;
-    }
-    
-    // Verify we have something to sample from
-    const sourceTexture = this.supersampledResolveTexture || this.supersampledTexture;
-    if (!sourceTexture) {
-      console.warn('No source texture for downsampling');
-      return;
-    }
-    
-    // Recreate bind group if needed (in case texture changed)
-    if (!this.downsampleBindGroup) {
-      this.downsampleBindGroup = this.device.createBindGroup({
-        layout: this.downsamplePipeline.getBindGroupLayout(0),
-        entries: [
-          {
-            binding: 0,
-            resource: sourceTexture.createView()
-          },
-          {
-            binding: 1,
-            resource: this.sampler!
-          }
-        ]
-      });
-    }
-
-    const renderPass = commandEncoder.beginRenderPass({
-      label: 'downsample-pass',
-      colorAttachments: [{
-        view: targetTexture.createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1.0 }
-      }]
-    });
-
-    renderPass.setPipeline(this.downsamplePipeline);
-    renderPass.setBindGroup(0, this.downsampleBindGroup);
-    renderPass.draw(6); // Full-screen quad
-
-    renderPass.end();
+downsample(commandEncoder: GPUCommandEncoder, targetTexture: GPUTexture) {
+  if (!this.downsamplePipeline) {
+    console.warn('Downsample pipeline not ready');
+    return;
   }
+  
+  const sourceTexture = this.supersampledResolveTexture || this.supersampledTexture;
+  if (!sourceTexture) {
+    console.warn('No source texture for downsampling');
+    return;
+  }
+  
+  // ALWAYS recreate bind group to ensure correct texture reference
+  this.downsampleBindGroup = this.device.createBindGroup({
+    layout: this.downsamplePipeline.getBindGroupLayout(0),
+    entries: [
+      {
+        binding: 0,
+        resource: sourceTexture.createView()
+      },
+      {
+        binding: 1,
+        resource: this.sampler!
+      }
+    ]
+  });
+
+  const renderPass = commandEncoder.beginRenderPass({
+    label: 'downsample-pass',
+    colorAttachments: [{
+      view: targetTexture.createView(),
+      loadOp: 'clear',
+      storeOp: 'store',
+      clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1.0 }
+    }]
+  });
+
+  renderPass.setPipeline(this.downsamplePipeline);
+  renderPass.setBindGroup(0, this.downsampleBindGroup);
+  renderPass.draw(6);
+  renderPass.end();
+}
 
   isEnabled(): boolean {
     return this.supersamplingFactor > 1;

@@ -6,7 +6,7 @@ import '@mantine/core/styles.css'
 import './App.css';
 import VisualPropertyEditor from './components/VisualPropertyEditor';
 import { VisualContentNodesTest } from './components/VisualContentNodesTest';
-import { ActionIcon, NativeSelect } from '@mantine/core';
+import { ActionIcon, Checkbox, Input, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
 
@@ -39,7 +39,7 @@ export const DiagramDemo: React.FC = () => {
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
 
 
-  const {handleSampleCountChange, supersamplingOptions, handleSupersamplingChange,  supersamplingValue, sampleCount, supersamplingWarnings, supportedSupersamplingFactors} = useDiagram();
+  const {handleSampleCountChange, fxaaEnabled, setFXAAEnabled, supersamplingOptions, handleSupersamplingChange,  supersamplingValue, sampleCount, supersamplingWarnings, supportedSupersamplingFactors} = useDiagram();
   
 
 
@@ -259,6 +259,10 @@ export const DiagramDemo: React.FC = () => {
             <div style={{display: 'block'}}>MSAA:
                   {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
             </div>
+            
+            <div style={{display: 'block'}}><Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/></div>
+            </div>
+
                 {/* Supersampling Setting */}
                 <div style={{display: 'block', marginBottom: '15px'}}>
                   <label style={{color: '#ffffff', marginBottom: '5px', display: 'block'}}>
@@ -268,7 +272,7 @@ export const DiagramDemo: React.FC = () => {
                     data={supersamplingOptions} 
                     onChange={(e) => handleSupersamplingChange(e.currentTarget.value)} 
                     value={supersamplingValue}
-                    disabled={supportedSupersamplingFactors.length === 1}
+                    disabled
                   />
                   <small style={{color: '#aaa', fontSize: '11px', display: 'block', marginTop: '4px'}}>
                     {supportedSupersamplingFactors.length === 1 
@@ -297,8 +301,6 @@ export const DiagramDemo: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
-      
           )}
         </div>
       </div>

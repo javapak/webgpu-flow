@@ -135,7 +135,7 @@ useEffect(() => {
       await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
       
       // Only update viewport state AFTER depth texture is ready
-      setViewport({ width, height, x: 100, y: 100, zoom: 0.5 });
+      setViewport({ width, height });
     } catch (error) {
       console.error('Failed to update depth texture on size change:', error);
     }
@@ -596,6 +596,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     
     const canvasPos = getCanvasMousePos(e as unknown as React.MouseEvent);
     const worldPosBeforeZoom = screenToWorld(canvasPos);
+
     
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
 

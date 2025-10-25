@@ -1,5 +1,4 @@
 import { Edge } from "./Edge";
-import { type MarkerType } from "../renderers/FloatingEdgeRenderer";
 import { Node } from "./Node";
 
 export const VisualContentNodesTest = () => {

@@ -2,10 +2,12 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
 import type { DiagramNode } from '../types';
+import { Button } from '@mantine/core';
 
 interface DiagramCanvasProps {
   width: number;
   height: number;
+  internalResolutionRef: React.RefObject<{width: number, height: number}>;
   className?: string;
   showDebugInfo?: boolean;
   onNodeClick?: (node: any) => void;
@@ -29,6 +31,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   showDebugInfo = false,
   onNodeClick,
   onCanvasClick,
+  internalResolutionRef,
   onNodeDropped,
   selectedNodeType,
   onPlaceNode,
@@ -38,6 +41,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [currentCursor, setCurrentCursor] = useState<string>('grab');
   const initializationAttempted = useRef(false);
+
   const isMobile = isMobileDevice();
 
   
@@ -77,7 +81,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     addControlPoint,
     endDrag,
     setViewport,
-    supersamplingValue,
     screenToWorld,
     getRenderer,
     getSpatialDebugInfo,
@@ -123,6 +126,8 @@ useEffect(() => {
     initCanvas();
   }, [initializeRenderer, getRenderer, setSupportedSampleCount]);
 
+
+
 useEffect(() => {
   const updateOnSizeChange = async () => {
     // Check if renderer is busy before attempting resize
@@ -132,10 +137,10 @@ useEffect(() => {
     }
     
     try {
-      await getRenderer()?.updateDepthTextureOnSizeChange({width, height});
-      
-      // Only update viewport state AFTER depth texture is ready
       setViewport({ width, height });
+      console.log('Updated depth texture on size change');
+
+
     } catch (error) {
       console.error('Failed to update depth texture on size change:', error);
     }
@@ -144,11 +149,10 @@ useEffect(() => {
   updateOnSizeChange();
 }, [width, height, setViewport, getRenderer]);
 
-// Keep the render effect the same, but add a safety check:
 useEffect(() => {
   // Only render if initialized and not busy with resize/reconfiguration
   if (isRendererInitialized() && !getRenderer()?.isBusy && canvasRef.current) {
-    // Additional safety: check if depth texture exists and matches canvas size
+    // check if depth texture exists and matches canvas size
     const renderer = getRenderer();
     if (renderer && renderer.depthTexture) {
       requestAnimationFrame(() => {
@@ -173,17 +177,24 @@ useEffect(() => {
       return () => clearInterval(interval);
     }
   }, [showDebugInfo, getSpatialDebugInfo]);
-
-  // Helper functions
+  
   const getCanvasMousePos = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
+    if (!rect || !canvasRef.current) return { x: 0, y: 0 };
+  
+    const visualX = e.clientX - rect.left;
+    const visualY = e.clientY - rect.top;
+    
+    // ADD SCALE FACTOR:
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
     
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x: visualX * scaleX,
+      y: visualY * scaleY,
     };
-  }, []);
+}, []);
+
 
   const getCanvasTouchPos = useCallback((touch: Touch) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -419,6 +430,7 @@ useEffect(() => {
     return () =>  canvasRef.current!.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
   }, [handleTouchMove]);
 
+
   useEffect(() => {
     if (isMobile && canvasRef.current){
       canvasRef.current.addEventListener('touchend', 
@@ -451,6 +463,8 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
   const canvasPos = getCanvasMousePos(e);
   const hitResult = performHitTest(canvasPos);
   const worldPos = screenToWorld(canvasPos);
+
+  
 
   if (mode === 'draw_edge' && drawingState.isDrawing) {
     // Always keep one vertex as the preview vert that follows the cursor
@@ -580,6 +594,12 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     }
   }, [isMobile, interaction.dragState.isDragging, endDrag]);
 
+  const zoomCurrentViewport = useCallback(() => {
+    setViewport({
+      zoom: viewport.zoom + 0.1 });
+  }, [setViewport, viewport.zoom]);
+
+
   const handleMouseLeave = useCallback(() => {
     if (isMobile) return; // Skip on mobile
     
@@ -590,32 +610,44 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
 
   // Wheel zoom (desktop only)
   const handleWheel = useCallback((e: WheelEvent) => {
-    if (isMobile) return; // Skip on mobile
+    if (isMobile) return;
     
     e.preventDefault();
     
-    const canvasPos = getCanvasMousePos(e as unknown as React.MouseEvent);
-    const worldPosBeforeZoom = screenToWorld(canvasPos);
-
+    if (!canvasRef.current) return;
     
+    const rect = canvasRef.current.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    
+    // Convert screen to canvas coordinates
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const canvasX = screenX * scaleX;
+    const canvasY = screenY * scaleY;
+    
+    // Get world position at mouse before zoom
+    const worldBeforeZoom = screenToWorld({ x: screenX, y: screenY });
+    
+    // Calculate new zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-
     const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
     
-    const worldPosAfterZoom = {
-      x: (canvasPos.x - viewport.width / 2) / newZoom + viewport.x,
-      y: (canvasPos.y - viewport.height / 2) / newZoom + viewport.y,
-    };
+    // Calculate new viewport position to keep mouse point stationary
+    // Formula: worldPos = (canvasPos - canvasCenter) / zoom + viewportPos
+    // Solving for viewportPos: viewportPos = worldPos - (canvasPos - canvasCenter) / zoom
+    const canvasCenterX = canvasRef.current.width / 2;
+    const canvasCenterY = canvasRef.current.height / 2;
     
-    const deltaX = worldPosAfterZoom.x - worldPosBeforeZoom.x;
-    const deltaY = worldPosAfterZoom.y - worldPosBeforeZoom.y;
+    const newViewportX = worldBeforeZoom.x - (canvasX - canvasCenterX) / newZoom;
+    const newViewportY = worldBeforeZoom.y - (canvasY - canvasCenterY) / newZoom;
     
     setViewport({
       zoom: newZoom,
-      x: viewport.x + deltaX,
-      y: viewport.y + deltaY,
+      x: newViewportX,
+      y: newViewportY,
     });
-  }, [isMobile, getCanvasMousePos, screenToWorld, viewport, setViewport, supersamplingValue]);
+  }, [isMobile, screenToWorld, canvasRef, viewport.zoom, setViewport]);
 
   useEffect(() => {
     if (canvasRef.current && !isMobile) {
@@ -639,6 +671,17 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     console.log('Edge completed');
   }, [completeEdge]);
 
+  const dragEventToWorld = (e: React.DragEvent, canvas: HTMLCanvasElement, viewport: any) => {
+    console.log(viewport);
+    const rect = canvas.getBoundingClientRect();
+    const top = rect.top;
+    const left = rect.left;
+    return screenToWorld({
+      x: e.clientX - left,
+      y: e.clientY - top
+    });
+  }
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     if (isMobile) return;
     e.preventDefault();
@@ -650,7 +693,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
       if (!nodeTypeData) return;
       
       const nodeType: any = JSON.parse(nodeTypeData);
-      const worldPos = MouseInteractions.dragEventToWorld(e, canvasRef.current, viewport);
+      const worldPos = dragEventToWorld(e, canvasRef.current, viewport);
       
       const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
@@ -701,13 +744,19 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
   };
 
   return (
-    <div>
+    <>
+    <Button onClick={zoomCurrentViewport}></Button>
+    <div style={{ overflow: 'hidden', width: `${width}px`, height: `${height}px` }} >
       <canvas
         ref={canvasRef}
-        width={width}
-        height={height}
+        width={internalResolutionRef.current.width}
+        height={internalResolutionRef.current.height}
         style={{ 
+          width: `${width}px`,
+          height: `${height}px`,
           cursor: currentCursor,
+          transform: `scale(${internalResolutionRef.current.width / width}, ${internalResolutionRef.current.height / height})`,
+
           touchAction: isMobile ? 'none' : 'auto',
           userSelect: 'none',
           backgroundColor: selectedNodeType ? '#f0f8ff' : 'transparent'
@@ -767,7 +816,10 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
           </div>
         )}
       </div>
+
+      
     </div>
+    </>
   );
 };
 
@@ -811,6 +863,7 @@ export const DiagramPerformanceMonitor: React.FC<PerformanceMonitorProps> = ({
           <span className="font-medium">Max Depth:</span> {stats ? getMaxDepth(stats.quadTreeInfo) : 0}
         </div>
       </div>
+      
     </div>
   );
 };

@@ -1,5 +1,6 @@
 // index.ts - Main library exports with spatial indexing
 
+import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
 import type { SHAPE_TYPES } from '../renderers/WebGPURenderer';
 import type { ResizeHandle } from '../utils/MouseInteractions';
 import type { Point, AABB } from './spatial-indexing/types';
@@ -73,6 +74,8 @@ export interface DiagramEdge {
     color: [number, number, number, number];
     thickness: number;
     dashPattern?: number[]; // Optional dashing
+    sourceMarker? : MarkerType;
+    targetMarker? : MarkerType;
   };
 }
 

@@ -11,20 +11,30 @@ export class MouseInteractions {
     canvas: HTMLCanvasElement, 
     viewport: { x: number; y: number; zoom: number; width: number; height: number }
   ): { x: number; y: number } {
-    // Get mouse position relative to canvas
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = screenX - rect.left;
-    const canvasY = screenY - rect.top;
-    
-    // Convert canvas coordinates to world coordinates
-    // Canvas origin (0,0) is top-left, world origin is viewport center
-    const screenCenterX = viewport.width / 2;
-    const screenCenterY = viewport.height / 2;
-    
-    const worldX = (canvasX - screenCenterX) / viewport.zoom + viewport.x;
-    const worldY = (canvasY - screenCenterY) / viewport.zoom + viewport.y;
-    
-    return { x: worldX, y: worldY };
+;
+  
+  if (!canvas) {
+    return { x: 0, y: 0 };
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  
+  // ADD SCALE FACTOR:
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  
+  // screenPoint is already in canvas coordinates, so apply scale
+  const canvasX = screenX * scaleX;
+  const canvasY = screenY * scaleY;
+  
+  // Convert to world coordinates
+  const screenCenterX = rect.width / 2;
+  const screenCenterY = rect.height / 2;
+  
+  const worldX = (canvasX - screenCenterX) / viewport.zoom + viewport.x;
+  const worldY = (canvasY - screenCenterY) / viewport.zoom + viewport.y;
+  
+  return { x: worldX, y: worldY };
   }
 
   // Convert world coordinates to screen coordinates
@@ -438,6 +448,9 @@ private static determineHandleType(
     canvas: HTMLCanvasElement,
     viewport: { x: number; y: number; zoom: number; width: number; height: number }
   ): { x: number; y: number } {
+
+    
+
     return this.screenToWorld(event.clientX, event.clientY, canvas, viewport);
   }
 
@@ -447,9 +460,11 @@ private static determineHandleType(
     canvas: HTMLCanvasElement
   ): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY
     };
   }
 }

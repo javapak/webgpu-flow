@@ -687,41 +687,71 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     stateRef.current = state;
   }, [state]);
 
-  // Fixed coordinate transformation utilities
+
   const screenToWorld = useCallback((screenPoint: Point): Point => {
-    // Use current state from ref to avoid stale closures
-    const currentState = stateRef.current;
-    // Convert screen coordinates to world coordinates
-    // Screen origin (0,0) is top-left, world origin (0,0) is center
-    const screenCenterX = currentState.viewport.width / 2;
-    const screenCenterY = currentState.viewport.height / 2;
-    
-    // Convert screen point relative to center, then scale by zoom and add viewport offset
-    const worldX = (screenPoint.x - screenCenterX) / currentState.viewport.zoom + currentState.viewport.x;
-    const worldY = (screenPoint.y - screenCenterY) / currentState.viewport.zoom + currentState.viewport.y;
-    
-    return { x: worldX, y: worldY };
-  }, [stateRef]);
+  const currentState = stateRef.current;
+  
+  if (!canvasRef.current) {
+    return { x: 0, y: 0 };
+  }
+  
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
+  
+  // screenPoint comes in screen/CSS coordinates
+  // With CSS transform, rect size reflects the transformed size
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  
+  // Scale to canvas coordinates
+  const canvasX = screenPoint.x * scaleX;
+  const canvasY = screenPoint.y * scaleY;
+  
+  // Convert to world coordinates using canvas center
+  const canvasCenterX = canvas.width / 2;  // 960 for 1920px width
+  const canvasCenterY = canvas.height / 2; // 540 for 1080px height
+  
+  const worldX = (canvasX - canvasCenterX) / currentState.viewport.zoom + currentState.viewport.x;
+  const worldY = (canvasY - canvasCenterY) / currentState.viewport.zoom + currentState.viewport.y;
+  
+  return { x: worldX, y: worldY };
+  }, [stateRef, canvasRef]);
 
   const worldToScreen = useCallback((worldPoint: Point): Point => {
-    // Use current state from ref to avoid stale closures
     const currentState = stateRef.current;
-    // Convert world coordinates to screen coordinates
-    const screenCenterX = currentState.viewport.width / 2;
-    const screenCenterY = currentState.viewport.height / 2;
     
-    // Transform world point relative to viewport, scale by zoom, then offset to screen center
-    const screenX = (worldPoint.x - currentState.viewport.x) * currentState.viewport.zoom + screenCenterX;
-    const screenY = (worldPoint.y - currentState.viewport.y) * currentState.viewport.zoom + screenCenterY;
+    if (!canvasRef.current) {
+      return { x: 0, y: 0 };
+    }
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    // Convert world to canvas coordinates
+    const canvasCenterX = canvas.width / 2;
+    const canvasCenterY = canvas.height / 2;
+    
+    const canvasX = (worldPoint.x - currentState.viewport.x) * currentState.viewport.zoom + canvasCenterX;
+    const canvasY = (worldPoint.y - currentState.viewport.y) * currentState.viewport.zoom + canvasCenterY;
+    
+    // Convert canvas to screen coordinates
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+    
+    const screenX = canvasX * scaleX;
+    const screenY = canvasY * scaleY;
     
     return { x: screenX, y: screenY };
-  }, [stateRef]);
+  }, [stateRef, canvasRef]);
 
   // Get only visible nodes for efficient rendering
   const getVisibleNodes = useCallback(() => {
-    // Calculate viewport bounds in world coordinates
-    const halfWidth = state.viewport.width / (2 * state.viewport.zoom);
-    const halfHeight = state.viewport.height / (2 * state.viewport.zoom);
+    if (!canvasRef.current) return [];
+    
+    // Calculate viewport bounds in world coordinates using canvas dimensions
+    const canvas = canvasRef.current;
+    const halfWidth = canvas.width / (2 * state.viewport.zoom);
+    const halfHeight = canvas.height / (2 * state.viewport.zoom);
     
     const viewportBounds: AABB = {
       minX: state.viewport.x - halfWidth,
@@ -732,7 +762,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     
     const visible = spatial.getVisibleNodes(viewportBounds);
     return visible;
-  }, [spatial, state.viewport, state.nodes.length]);
+  }, [spatial, state.viewport, state.nodes.length, canvasRef]);
   
 
 
@@ -745,10 +775,12 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
         
         // Get fresh state values directly from ref
         const currentState = stateRef.current;
+        const canvas = canvasRef.current;
         
-        // Calculate visible nodes with fresh state
-        const halfWidth = currentState.viewport.width / (2 * currentState.viewport.zoom);
-        const halfHeight = currentState.viewport.height / (2 * currentState.viewport.zoom);
+        // Calculate visible nodes using CANVAS dimensions, not viewport dimensions
+        // This is critical for proper zoom rendering!
+        const halfWidth = canvas.width / (2 * currentState.viewport.zoom);
+        const halfHeight = canvas.height / (2 * currentState.viewport.zoom);
         
         const viewportBounds: AABB = {
           minX: currentState.viewport.x - halfWidth,
@@ -762,8 +794,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
           visibleNodes.find((node) => node.id === edge.sourceNodeId || node.id === edge.targetNodeId));
       
         const canvasSize = {
-          width: canvasRef.current!.width,
-          height: canvasRef.current!.height,
+          width: canvas.width,
+          height: canvas.height,
         };
         
         try {
@@ -947,7 +979,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   // Schedule render when state changes
   useEffect(() => {
     scheduleRender();
-  }, [scheduleRender]);
+  }, [scheduleRender, state.viewport, state.nodes, canvasRef.current?.width, canvasRef.current?.height, state.edges, state.interaction]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1005,8 +1037,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
       
       console.log(
         isInitialCheck 
-          ? `📊 Initial supersampling check: ${currentWidth}x${currentHeight}` 
-          : `📊 Rechecking supersampling: ${currentWidth}x${currentHeight}`
+          ? `Initial supersampling check: ${currentWidth}x${currentHeight}` 
+          : `Rechecking supersampling: ${currentWidth}x${currentHeight}`
       );
       
       try {
@@ -1042,9 +1074,9 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
         }
       }
     };
-
-    // For initial check, use a small delay
-    // For resize checks, use RAF
+    
+    if (!canvasRef.current) return;
+    getRenderer()?.updateDepthTextureOnSizeChange({width: canvasRef.current.width, height: canvasRef.current.height});
     const isInitialCheck = supportedSupersamplingFactors.length === 0;
     
     if (isInitialCheck) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useDiagram } from "../components/DiagramProvider";
+import type { MarkerType } from "../renderers/FloatingEdgeRenderer";
 
 
 // Edge component
@@ -14,7 +15,9 @@ export interface EdgeProps{
     labelColor?: string,
     color: [number, number, number, number];
     thickness: number;
-    dashPattern?: number[]; // Optional dashing
+    dashPattern?: number[];
+    sourceMarker? : MarkerType;
+    targetMarker? : MarkerType;
   };
 }
 
@@ -46,7 +49,7 @@ export const Edge: React.FC<EdgeProps> = ({
       addEdge(edge);
       hasAddedRef.current = true;
     }
-  }, []); // Empty dependency array - only run once
+  }, []); 
 
   return null;
 };

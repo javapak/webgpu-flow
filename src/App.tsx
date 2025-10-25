@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback} from 'react';
+import React, { useState, useEffect, useCallback, useRef} from 'react';
 import { DiagramCanvas } from './index';
 import { NodePalette, type NodeType } from './components/NodePalette';
 import '@mantine/core/styles.css'
@@ -37,9 +37,19 @@ export const DiagramDemo: React.FC = () => {
   const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
+  const internalResolutionRef = useRef({ width: 1920, height: 1080 });
+  const [internalResolution, setInternalResolution] = useState({ 
+    width: 1920, 
+    height: 1080 
+  });
 
+  const changeResolution = (newRes: { width: number; height: number }) => {
+    console.log(internalResolution);
+    internalResolutionRef.current = newRes; 
+    setInternalResolution(newRes);            
+  };
 
-  const {handleSampleCountChange, fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled, supersamplingOptions, handleSupersamplingChange,  supersamplingValue, sampleCount, supersamplingWarnings, supportedSupersamplingFactors} = useDiagram();
+  const {handleSampleCountChange, fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled, sampleCount} = useDiagram();
   
 
 
@@ -77,6 +87,7 @@ export const DiagramDemo: React.FC = () => {
         setPaletteVisible(false);
       }
     };
+    handleResize(); // Initial check
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -85,6 +96,7 @@ export const DiagramDemo: React.FC = () => {
   const handleNodeDragStart = (nodeType: NodeType, event: React.DragEvent) => {
     console.log('Started dragging node type:', nodeType.name, event);
   };
+
 
   const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
     console.log(`Dropped ${nodeType.name} at position:`, position);
@@ -103,6 +115,7 @@ export const DiagramDemo: React.FC = () => {
   const togglePalette = () => {
     setPaletteVisible(!paletteVisible);
   };
+  
 
   return (
     
@@ -211,6 +224,8 @@ export const DiagramDemo: React.FC = () => {
               height={canvasSize.height}
               setSupportedSampleCount={setSupportedSampleCount}
               onNodeDropped={handleNodeDropped}
+              internalResolutionRef={internalResolutionRef}
+              showDebugInfo
             />
 
             <VisualContentNodesTest />
@@ -255,56 +270,24 @@ export const DiagramDemo: React.FC = () => {
                 <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
                 {/* ... MSAA section ... */}
 
-                
-            <div style={{display: 'block'}}>MSAA:
-                  {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
-            </div>
+            <NativeSelect label='Resolution' data={['1280x720', '1920x1080', '2560x1440', '3840x2160']} value={`${internalResolutionRef.current.width}x${internalResolutionRef.current.height}`} onChange={(e) => {
+              const widthHeight = e.currentTarget.value.split('x').map(v => parseInt(v));
+              changeResolution({width: widthHeight[0], height: widthHeight[1]});
+              console.log('internal resolution selected', e.currentTarget.value)
+            }} />
+       
+            {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect label='MSAA' onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
+      
             
             <div style={{display: 'block'}}><Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/></div>
             <div style={{display: 'block'}}><Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/></div>
 
             </div>
 
-                {/* Supersampling Setting */}
-                <div style={{display: 'block', marginBottom: '15px'}}>
-                  <label style={{color: '#ffffff', marginBottom: '5px', display: 'block'}}>
-                    Supersampling:
-                  </label>
-                  <NativeSelect 
-                    data={supersamplingOptions} 
-                    onChange={(e) => handleSupersamplingChange(e.currentTarget.value)} 
-                    value={supersamplingValue}
-                    disabled
-                  />
-                  <small style={{color: '#aaa', fontSize: '11px', display: 'block', marginTop: '4px'}}>
-                    {supportedSupersamplingFactors.length === 1 
-                      ? 'No supersampling support detected'
-                      : `Supported: up to ${Math.max(...supportedSupersamplingFactors)}x`
-                    }
-                  </small>
-                </div>
-
-                {/* Warnings */}
-                {supersamplingWarnings.length > 0 && (
-                  <div style={{
-                    backgroundColor: '#3a2a1a',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    marginBottom: '10px',
-                    fontSize: '11px',
-                    color: '#ffcc00'
-                  }}>
-                    <strong>⚠️ Warnings:</strong>
-                    <ul style={{margin: '4px 0 0 0', paddingLeft: '20px'}}>
-                      {supersamplingWarnings.map((warning, i) => (
-                        <li key={i}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-          )}
-        </div>
+                
+              
+        </div>)}
       </div>
+    </div>
   );
 };

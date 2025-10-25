@@ -1,18 +1,56 @@
+// Enhanced FloatingEdgeRenderer with comprehensive marker support
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { VisualContentNodeManager } from '../compute/VisualContentNode';
 import type { DiagramEdge, DiagramNode } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
+
+// Marker type definitions
+export type MarkerType = 
+  // UML Association markers
+  | 'none'
+  | 'arrow'                    
+  | 'open-arrow'              
+  | 'filled-arrow'            
+  | 'diamond'                
+  | 'filled-diamond'          
+  | 'circle'                 
+  | 'cross'                   
+  
+  // Database relationship markers
+  | 'crow-foot'                
+  | 'crow-foot-optional'       
+  | 'crow-foot-mandatory'     
+  | 'one'                     
+  | 'one-optional'            
+  | 'many-optional'           
+  
+  // OCL/Constraint markers
+  | 'constraint'               
+  | 'inheritance'              
+  | 'realization'             
+  
+  // Additional useful markers
+  | 'double-arrow'            
+  | 'bar'                      
+  | 'dot'                      
+  | 'square'                   
+  | 'filled-square';          
+
+export interface EdgeStyle {
+  color: [number, number, number, number];
+  thickness: number;
+  dashPattern?: number[];
+  sourceMarker?: MarkerType;
+  targetMarker?: MarkerType;
+  labelColor?: string;
+}
 
 export interface FloatingEdge {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
   userVertices: Array<{x: number, y: number}>;
-  style: {
-    color: [number, number, number, number];
-    thickness: number;
-    dashPattern?: number[];
-  };
+  style: EdgeStyle;
 }
 
 class EdgeConnectionCalculator {
@@ -127,11 +165,14 @@ class EdgeConnectionCalculator {
 export class FloatingEdgeRenderer {
   private device!: GPUDevice;
   private edgeBuffer!: GPUBuffer;
+  private markerBuffer!: GPUBuffer;
   private uniformBuffer!: GPUBuffer;
   private vertexHandleBuffer!: GPUBuffer;
   private renderPipeline!: GPURenderPipeline;
+  private markerPipeline!: GPURenderPipeline;
   private handleRenderPipeline!: GPURenderPipeline;
   private bindGroup!: GPUBindGroup;
+  private markerBindGroup!: GPUBindGroup;
   private handleBindGroup!: GPUBindGroup;  
   private maxVerticesPerEdge: number;
   private maxEdges: number;
@@ -153,32 +194,39 @@ export class FloatingEdgeRenderer {
     
     this.createBuffers();
     this.createPipeline(format);
+    this.createMarkerPipeline(format);
     this.createHandlePipeline(format);
     this.createBindGroup();
   }
   
   private createBuffers() {
-      const verticesPerSegment = 6;
-      const bufferSize = this.maxEdges * this.maxVerticesPerEdge * verticesPerSegment * 8 * 4;
-      
-      this.edgeBuffer = this.device.createBuffer({
-        size: bufferSize,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-        label: 'floating-edge-buffer'
-      });
-      
-      // Buffer for vertex handles
-      this.vertexHandleBuffer = this.device.createBuffer({
-        size: this.maxVerticesPerEdge * this.maxEdges * 32, // 8 floats per handle
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        label: 'edge-vertex-handle-buffer'
-      });
-      
-      this.uniformBuffer = this.device.createBuffer({
-        size: 64,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        label: 'edge-uniforms'
-      });
+    const verticesPerSegment = 6;
+    const bufferSize = this.maxEdges * this.maxVerticesPerEdge * verticesPerSegment * 8 * 4;
+    
+    this.edgeBuffer = this.device.createBuffer({
+      size: bufferSize,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      label: 'floating-edge-buffer'
+    });
+    
+    // Buffer for markers (more instances needed)
+    this.markerBuffer = this.device.createBuffer({
+      size: this.maxEdges * 2 * 48, // 2 markers per edge, 12 floats each
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: 'edge-marker-buffer'
+    });
+    
+    this.vertexHandleBuffer = this.device.createBuffer({
+      size: this.maxVerticesPerEdge * this.maxEdges * 32,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: 'edge-vertex-handle-buffer'
+    });
+    
+    this.uniformBuffer = this.device.createBuffer({
+      size: 64,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      label: 'edge-uniforms'
+    });
   }
 
   private createBindGroup() {
@@ -193,7 +241,21 @@ export class FloatingEdgeRenderer {
       label: 'edge-bind-group'
     });
     
-    // Create handle bind group
+    this.markerBindGroup = this.device.createBindGroup({
+      layout: this.markerPipeline.getBindGroupLayout(0),
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: this.uniformBuffer }
+        },
+        {
+          binding: 1,
+          resource: { buffer: this.markerBuffer }
+        }
+      ],
+      label: 'marker-bind-group'
+    });
+    
     this.handleBindGroup = this.device.createBindGroup({
       layout: this.handleRenderPipeline.getBindGroupLayout(0),
       entries: [
@@ -210,7 +272,7 @@ export class FloatingEdgeRenderer {
     });
   }
 
-   private createHandlePipeline(format: GPUTextureFormat) {
+  private createHandlePipeline(format: GPUTextureFormat) {
     const handleShaderCode = `
       struct Uniforms {
         viewProjection: mat4x4<f32>,
@@ -263,8 +325,7 @@ export class FloatingEdgeRenderer {
         @location(0) color: vec4<f32>,
         @location(1) uv: vec2<f32>
       ) -> @location(0) vec4<f32> {
-        // Diamond shape for vertex handles
-        let center = abs(uv - 0.5) * 2.0; // Scale to [0, 1] range
+        let center = abs(uv - 0.5) * 2.0;
         let diamond = center.x + center.y;
         
         let edgeWidth = 0.1;
@@ -278,7 +339,6 @@ export class FloatingEdgeRenderer {
         let innerDiamond = (center.x + center.y) / (1.0 - borderWidth);
         let borderAlpha = smoothstep(0.9, 1.0, innerDiamond);
         
-        // Mix border color (darker) with fill color
         let borderColor = vec4<f32>(0.1, 0.1, 0.1, 1.0);
         let finalColor = mix(color, borderColor, borderAlpha);
         
@@ -406,15 +466,260 @@ export class FloatingEdgeRenderer {
         depthCompare: 'less',
       },
       multisample: {count: parseInt(this.sampleCount) }
-
     });
   }
   
+  private createMarkerPipeline(format: GPUTextureFormat) {
+    // place markers slightly in front of edges; using a smaller depth so they pass the depth test
+    const markerDepth = Z_LAYERS.EDGES - 0.01;
 
+    const markerShaderCode = `
+      struct Uniforms {
+        viewProjection: mat4x4<f32>,
+      }
+      
+      // Note: storage arrays require explicit padding/alignment to match the host layout.
+      // Host writes 12 floats per marker (position.xy, direction.xy, size, markerType, color.xyzw, pad, pad) => 48 bytes.
+      struct MarkerData {
+        position: vec2<f32>,
+        direction: vec2<f32>,
+        size: f32,
+        markerType: f32,
+        color: vec4<f32>,
+        padding: vec2<f32>, 
+      }
+      
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var<storage, read> markerData: array<MarkerData>;
+      
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) color: vec4<f32>,
+        @location(1) uv: vec2<f32>,
+        @location(2) markerType: f32,
+        @location(3) direction: vec2<f32>,
+      }
+      
+      @vertex
+      fn vs_main(
+        @builtin(vertex_index) vertexIndex: u32,
+        @builtin(instance_index) instanceIndex: u32
+      ) -> VertexOutput {
+        let positions = array<vec2<f32>, 6>(
+          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+          vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
+        );
+        
+        let uvs = array<vec2<f32>, 6>(
+          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+          vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0)
+        );
+        
+        let marker = markerData[instanceIndex];
+        let localPos = positions[vertexIndex];
+        
+        // Rotate to align with direction
+        let angle = atan2(marker.direction.y, marker.direction.x);
+        let cosA = cos(angle);
+        let sinA = sin(angle);
+        let rotated = vec2<f32>(
+          localPos.x * cosA - localPos.y * sinA,
+          localPos.x * sinA + localPos.y * cosA
+        );
+        
+        let worldPos = marker.position + rotated * marker.size;
+        
+        var output: VertexOutput;
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${markerDepth}, 1.0);
+        output.color = marker.color;
+        output.uv = uvs[vertexIndex];
+        output.markerType = marker.markerType;
+        output.direction = marker.direction;
+        
+        return output;
+      }
+      
+      @fragment
+      fn fs_main(
+        @location(0) color: vec4<f32>,
+        @location(1) uv: vec2<f32>,
+        @location(2) markerType: f32,
+        @location(3) direction: vec2<f32>
+      ) -> @location(0) vec4<f32> {
+        // Center UV coordinates (-0.5 to 0.5)
+        let centered = uv - 0.5;
+        var alpha = 0.0;
+        
+        let type_int = i32(markerType + 0.5);
+        
+        // Create marker shapes
+        switch(type_int) {
+          case 1: { // arrow - simple triangle pointing right
+            let inTriangle = (centered.x > -0.4) && 
+                            (centered.x < 0.4) && 
+                            (abs(centered.y) < (0.4 - centered.x));
+            alpha = select(0.0, 1.0, inTriangle);
+          }
+          case 2, 12: { // open-arrow / inheritance - hollow triangle
+            let outerTriangle = (centered.x > -0.4) && 
+                               (centered.x < 0.4) && 
+                               (abs(centered.y) < (0.4 - centered.x));
+            let innerTriangle = (centered.x > -0.3) && 
+                               (centered.x < 0.3) && 
+                               (abs(centered.y) < (0.25 - centered.x * 0.7));
+            alpha = select(0.0, 1.0, outerTriangle && !innerTriangle);
+          }
+          case 3: { // filled-arrow
+            let inTriangle = (centered.x > -0.4) && 
+                            (centered.x < 0.4) && 
+                            (abs(centered.y) < (0.4 - centered.x));
+            alpha = select(0.0, 1.0, inTriangle);
+          }
+          case 4: { // diamond (hollow)
+            let diamondDist = abs(centered.x) + abs(centered.y);
+            let outer = diamondDist < 0.45;
+            let inner = diamondDist < 0.3;
+            alpha = select(0.0, 1.0, outer && !inner);
+          }
+          case 5: { // filled-diamond
+            let diamondDist = abs(centered.x) + abs(centered.y);
+            alpha = select(0.0, 1.0, diamondDist < 0.45);
+          }
+          case 6, 11: { // circle / one-optional (hollow circle)
+            let dist = length(centered);
+            let outer = dist < 0.35;
+            let inner = dist < 0.25;
+            alpha = select(0.0, 1.0, outer && !inner);
+          }
+          case 7: { // cross
+            let horizontal = abs(centered.y) < 0.06;
+            let vertical = abs(centered.x) < 0.06;
+            alpha = select(0.0, 1.0, horizontal || vertical);
+          }
+          case 8: { // crow-foot (three lines converging)
+            let line1 = (abs(centered.y - 0.25) < 0.04) && (centered.x > -0.4 && centered.x < 0.2);
+            let line2 = (abs(centered.y) < 0.04) && (centered.x > -0.4 && centered.x < 0.2);
+            let line3 = (abs(centered.y + 0.25) < 0.04) && (centered.x > -0.4 && centered.x < 0.2);
+            alpha = select(0.0, 1.0, line1 || line2 || line3);
+          }
+          case 9: { // crow-foot-optional (with circle)
+            let circleDist = length(centered - vec2<f32>(-0.25, 0.0));
+            let hasCircle = circleDist < 0.12;
+            let line1 = (abs(centered.y - 0.25) < 0.04) && (centered.x > 0.0 && centered.x < 0.4);
+            let line2 = (abs(centered.y) < 0.04) && (centered.x > 0.0 && centered.x < 0.4);
+            let line3 = (abs(centered.y + 0.25) < 0.04) && (centered.x > 0.0 && centered.x < 0.4);
+            alpha = select(0.0, 1.0, hasCircle || line1 || line2 || line3);
+          }
+          case 10, 14: { // one / bar (single vertical line)
+            alpha = select(0.0, 1.0, abs(centered.x + 0.35) < 0.06);
+          }
+          case 13: { // double-arrow (two triangles)
+            let tri1 = (centered.x > -0.2 && centered.x < 0.2) && (abs(centered.y) < (0.3 - abs(centered.x - 0.1)));
+            let tri2 = (centered.x > -0.2 && centered.x < 0.2) && (abs(centered.y) < (0.3 - abs(centered.x + 0.1)));
+            alpha = select(0.0, 1.0, tri1 || tri2);
+          }
+          case 15: { // dot
+            let dist = length(centered);
+            alpha = select(0.0, 1.0, dist < 0.2);
+          }
+          case 16: { // square (hollow)
+            let outer = (abs(centered.x) < 0.35) && (abs(centered.y) < 0.35);
+            let inner = (abs(centered.x) < 0.25) && (abs(centered.y) < 0.25);
+            alpha = select(0.0, 1.0, outer && !inner);
+          }
+          case 17: { // filled-square
+            let inSquare = (abs(centered.x) < 0.35) && (abs(centered.y) < 0.35);
+            alpha = select(0.0, 1.0, inSquare);
+          }
+          default: { // Fallback - show a circle so we know something rendered
+            let dist = length(centered);
+            alpha = select(0.0, 1.0, dist < 0.3);
+          }
+        }
+        
+        // Discard fully transparent pixels
+        if (alpha < 0.01) {
+          discard;
+        }
+        
+        // Return the marker color with calculated alpha
+        return vec4<f32>(color.rgb, alpha * color.a);
+      }
+    `;
+    
+    const markerShaderModule = this.device.createShaderModule({
+      code: markerShaderCode,
+      label: 'marker-shader'
+    });
+    this.markerPipeline = this.device.createRenderPipeline({
+      label: 'marker-pipeline',
+      layout: 'auto',
+      vertex: {
+        module: markerShaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: markerShaderModule,
+        entryPoint: 'fs_main',
+        targets: [{
+          format: format,
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+            }
+          }
+        }]
+      },
+      primitive: {
+        topology: 'triangle-list',
+      },
+      depthStencil: {
+        format: 'depth24plus',
+        // Do not write depth for markers so they don't occlude other items; keep a normal depth test to respect scene order.
+        depthWriteEnabled: false,
+        depthCompare: 'less',
+      },
+      multisample: {count: parseInt(this.sampleCount)}
+    });
+  }
+
+  private getMarkerTypeValue(type: MarkerType): number {
+    const markerMap: Record<MarkerType, number> = {
+      'none': 0,
+      'arrow': 1,
+      'open-arrow': 2,
+      'filled-arrow': 3,
+      'diamond': 4,
+      'filled-diamond': 5,
+      'circle': 6,
+      'cross': 7,
+      'crow-foot': 8,
+      'crow-foot-optional': 9,
+      'crow-foot-mandatory': 8, 
+      'one': 10,
+      'one-optional': 11,
+      'many-optional': 9, 
+      'constraint': 2, 
+      'inheritance': 12,
+      'realization': 12, 
+      'double-arrow': 13,
+      'bar': 14,
+      'dot': 15,
+      'square': 16,
+      'filled-square': 17
+    };
+    
+    return markerMap[type] || 0;
+  }
   
   private generateLineStripGeometry(
     vertices: Array<{x: number, y: number}>, 
-    style: FloatingEdge['style']
+    style: EdgeStyle
   ): Float32Array {
     if (vertices.length < 2) return new Float32Array(0);
     
@@ -451,8 +756,6 @@ export class FloatingEdgeRenderer {
     return new Float32Array(geometry);
   }
 
-  
-  
   async generateEdgeGeometry(
     edge: FloatingEdge, 
     nodes: DiagramNode[],
@@ -555,7 +858,107 @@ export class FloatingEdgeRenderer {
     return this.generateLineStripGeometry(allVertices, edge.style);
   }
   
- async render(
+  private generateMarkerData(
+    edge: FloatingEdge,
+    nodes: DiagramNode[]
+  ): Array<{
+    position: [number, number],
+    direction: [number, number],
+    size: number,
+    markerType: number,
+    color: [number, number, number, number]
+  }> {
+    const markers: Array<{
+      position: [number, number],
+      direction: [number, number],
+      size: number,
+      markerType: number,
+      color: [number, number, number, number]
+    }> = [];
+    
+    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
+    const targetNode = nodes.find(n => n.id === edge.targetNodeId);
+    
+    // default marker size in world units (choose a reasonable default so markers are visible but not huge)
+    const markerSize = 12;
+    
+    // Source marker
+    if (edge.style.sourceMarker && edge.style.sourceMarker !== 'none') {
+      const firstVertex = edge.userVertices.length > 0 
+        ? edge.userVertices[0] 
+        : targetNode?.data.position;
+      
+      const direction = {
+        x: sourceNode!.data.position.x - firstVertex!.x,
+        y: sourceNode!.data.position.y - firstVertex!.y
+      };
+      
+      const length = Math.sqrt(direction!.x ** 2 + direction.y ** 2);
+      if (length > 0) {
+        const normalized = {
+          x: direction.x / length,
+          y: direction.y / length
+        };
+        
+        // Position marker at source node edge
+        const sourceEdge = this.connectionCalculator.calculateNodeEdgePoint(
+          sourceNode!.data.position,
+          sourceNode!.visual!.size,
+          sourceNode!.visual!.shape as string,
+          { x: -normalized.x, y: -normalized.y }
+        );
+        
+        markers.push({
+          position: [sourceEdge.x, sourceEdge.y],
+          direction: [normalized.x, normalized.y],
+          size: markerSize,
+          markerType: this.getMarkerTypeValue(edge.style.sourceMarker),
+          color: edge.style.color
+        });
+      }
+    }
+    
+    // Target marker
+    if (edge.style.targetMarker && edge.style.targetMarker !== 'none') {
+      const lastVertex = edge.userVertices.length > 0
+        ? edge.userVertices[edge.userVertices.length - 1]
+        : sourceNode!.data.position;
+      
+      const direction = {
+        x: targetNode!.data.position.x - lastVertex.x,
+        y: targetNode!.data.position.y - lastVertex.y
+      };
+      
+      const length = Math.sqrt(direction.x ** 2 + direction.y ** 2);
+      if (length > 0) {
+        const normalized = {
+          x: direction.x / length,
+          y: direction.y / length
+        };
+        
+        // Position marker at target node edge
+        const targetEdge = this.connectionCalculator.calculateNodeEdgePoint(
+          targetNode!.data.position,
+          targetNode!.visual!.size,
+          targetNode!.visual!.shape as string,
+          { x: -normalized.x, y: -normalized.y }
+        );
+        
+        markers.push({
+          position: [targetEdge.x, targetEdge.y],
+          direction: [normalized.x, normalized.y],
+          size: markerSize,
+          markerType: this.getMarkerTypeValue(edge.style.targetMarker),
+          color: edge.style.color
+        });
+      }
+    }
+    console.log('Generated markers:', markers);
+    
+    return markers;
+  }
+  
+  async render(
     renderPass: GPURenderPassEncoder, 
     edges: FloatingEdge[], 
     nodes: DiagramNode[],
@@ -571,22 +974,23 @@ export class FloatingEdgeRenderer {
     
     let bufferOffset = 0;
     let totalVertices = 0;
+    const allMarkers: Array<any> = [];
     
     // Render regular edges
     for (const edge of edges) {
-        let geometry = await this.generateEdgeGeometry(
+      let geometry = await this.generateEdgeGeometry(
         edge, 
         nodes, 
         visualContentNodeManager,
       );
+      
       if (edge.id === selectedEdges?.[0]?.id) {
         geometry = await this.generateEdgeGeometry(
-        {...edge, style: { ...edge.style, thickness: edge.style.thickness + 2, color: [1.0, 0.5, 0.0, 1.0] }},
-        nodes, 
-        visualContentNodeManager,
+          {...edge, style: { ...edge.style, thickness: edge.style.thickness + 2, color: [1.0, 0.5, 0.0, 1.0] }},
+          nodes, 
+          visualContentNodeManager,
         );
       }
-
       
       if (geometry.length === 0) continue;
       
@@ -601,6 +1005,10 @@ export class FloatingEdgeRenderer {
       const vertexCount = geometry.length / 8;
       bufferOffset += geometry.byteLength;
       totalVertices += vertexCount;
+      
+      // Generate marker data for this edge
+      const markerData = this.generateMarkerData(edge, nodes);
+      allMarkers.push(...markerData);
     }
 
     // Render preview edge if it exists
@@ -644,6 +1052,34 @@ export class FloatingEdgeRenderer {
       renderPass.draw(totalVertices);
     }
     
+    // Draw markers
+    if (allMarkers.length > 0) {
+      const flatMarkerData = new Float32Array(allMarkers.length * 12);
+      allMarkers.forEach((marker, i) => {
+        const offset = i * 12;
+        flatMarkerData[offset + 0] = marker.position[0];
+        flatMarkerData[offset + 1] = marker.position[1];
+        flatMarkerData[offset + 2] = marker.direction[0];
+        flatMarkerData[offset + 3] = marker.direction[1];
+        flatMarkerData[offset + 4] = marker.size;
+        flatMarkerData[offset + 5] = marker.markerType;
+        flatMarkerData[offset + 6] = marker.color[0];
+        flatMarkerData[offset + 7] = marker.color[1];
+        flatMarkerData[offset + 8] = marker.color[2];
+        flatMarkerData[offset + 9] = marker.color[3];
+        flatMarkerData[offset + 10] = 0; // padding
+        flatMarkerData[offset + 11] = 0; // padding
+      });
+      
+      this.device.queue.writeBuffer(this.markerBuffer, 0, flatMarkerData);
+      
+      renderPass.setPipeline(this.markerPipeline);
+      renderPass.setBindGroup(0, this.markerBindGroup);
+      renderPass.draw(6, allMarkers.length);
+      console.log('Rendered markers count:', allMarkers.length);
+    }
+    
+    // Draw vertex handles for selected edges
     if (selectedEdges && selectedEdges.length > 0 && viewport) {
       const handleData = this.generateVertexHandles(selectedEdges[0], viewport.zoom);
       
@@ -681,22 +1117,25 @@ export class FloatingEdgeRenderer {
       handles.push({
         position: [vertex.x, vertex.y],
         size: [handleSize, handleSize],
-        color: [0.3, 0.8, 1.0, 1.0], // Brighter blue for better visibility
+        color: [0.3, 0.8, 1.0, 1.0],
       });
     }
     
     return handles;
   }
   
-destroy() {
-  if (this.edgeBuffer) {
-    this.edgeBuffer.destroy();
+  destroy() {
+    if (this.edgeBuffer) {
+      this.edgeBuffer.destroy();
+    }
+    if (this.uniformBuffer) {
+      this.uniformBuffer.destroy();
+    }
+    if (this.vertexHandleBuffer) {
+      this.vertexHandleBuffer.destroy();
+    }
+    if (this.markerBuffer) {
+      this.markerBuffer.destroy();
+    }
   }
-  if (this.uniformBuffer) {
-    this.uniformBuffer.destroy();
-  }
-  if (this.vertexHandleBuffer) {
-    this.vertexHandleBuffer.destroy();
-  }
-}
 }

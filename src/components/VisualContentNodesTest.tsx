@@ -1,4 +1,5 @@
 import { Edge } from "./Edge";
+import { type MarkerType } from "../renderers/FloatingEdgeRenderer";
 import { Node } from "./Node";
 
 export const VisualContentNodesTest = () => {
@@ -9,7 +10,7 @@ export const VisualContentNodesTest = () => {
       <Node 
         id="some-actor" 
         type="test" 
-        position={{ x: -200, y: -100 }} 
+        position={{ x: 0, y: 0 }} 
         data={{ label: "Actor (User)" }}
         visual={{ 
           labelColor: "#ffffff",
@@ -83,7 +84,7 @@ export const VisualContentNodesTest = () => {
 
       <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="some-service" userVertices={[{x: -150, y: -100}, {x: -150 , y: -50}]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 2}}/>
 
-      <Edge id='hi' data={{label: 'hosts'}} sourceNodeId="some-server" targetNodeId="some-service" userVertices={[]} style={{color: [1,1,1,1], labelColor: '#7300ffff', thickness: 2}} />
+      <Edge id='hi' data={{label: 'hosts'}} sourceNodeId="some-server"  targetNodeId="some-service" userVertices={[]} style={{color: [1,1,1,1], labelColor: '#7300ffff', thickness: 2, sourceMarker: 'double-arrow'}} />
     </>
   );
 };

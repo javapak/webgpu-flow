@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
 import type { DiagramNode } from '../types';
-import { Button } from '@mantine/core';
 
 interface DiagramCanvasProps {
   width: number;
@@ -594,11 +593,6 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     }
   }, [isMobile, interaction.dragState.isDragging, endDrag]);
 
-  const zoomCurrentViewport = useCallback(() => {
-    setViewport({
-      zoom: viewport.zoom + 0.1 });
-  }, [setViewport, viewport.zoom]);
-
 
   const handleMouseLeave = useCallback(() => {
     if (isMobile) return; // Skip on mobile
@@ -745,7 +739,6 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
 
   return (
     <>
-    <Button onClick={zoomCurrentViewport}></Button>
     <div style={{ overflow: 'hidden', width: `${width}px`, height: `${height}px` }} >
       <canvas
         ref={canvasRef}

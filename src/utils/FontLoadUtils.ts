@@ -25,14 +25,19 @@ export const DIAGRAM_FONTS = [
 export type DiagramFont = typeof DIAGRAM_FONTS[number];
 
 export function loadDiagramFonts() {
-  const googleFonts = DIAGRAM_FONTS.slice(0, -6); // Exclude system fonts
+  if (typeof window === 'undefined') return;
   
+  if (document.getElementById('google-fonts-link')) return;
+  
+  const googleFonts = DIAGRAM_FONTS.slice(0, -6);
   const fontParams = googleFonts
     .map(font => `family=${font.replace(/ /g, '+')}:wght@400;700`)
     .join('&');
   
   const link = document.createElement('link');
-  link.href = `https://fonts.googleapis.com/css2?${fontParams}&display=swap`;
+  link.id = 'google-fonts-link';
   link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?${fontParams}&display=swap`;
+  
   document.head.appendChild(link);
 }

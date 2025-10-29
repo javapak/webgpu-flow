@@ -9,7 +9,6 @@ import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
-import { loadDiagramFonts } from './utils/FontLoadUtils';
 
 
 // Mobile detection utility
@@ -78,7 +77,6 @@ export const DiagramDemo: React.FC = () => {
   }, [isMobile]);
 
     useEffect(() => {
-    loadDiagramFonts();
     const handleResize = () => {
       const mobile = isMobileDevice();
       setIsMobile(mobile);

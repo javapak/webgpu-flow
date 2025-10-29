@@ -30,10 +30,12 @@ export interface DiagramContextValue extends DiagramState {
   supportedSupersamplingFactors:number[];
   supersamplingWarnings: string[];
   updateNode: (node: DiagramNode) => void;
+  clearVertexSelection: () => void;
   updateEdge: (edge: DiagramEdge) => void;
   removeEdge: (edgeId: string) => void;
   selectEdge: (edge: DiagramEdge | null) => void;
   clearEdgeSelection: () => void;
+  selectEdgeVertex: (edgeID: string, vertexIndex: number | null) => void;
   supersamplingOptions: string[];
   getVisibleNodes: () => DiagramNode[];
   hitTestPoint: (screenPoint: Point) => DiagramNode[];
@@ -105,7 +107,9 @@ type DiagramAction =
   | { type: 'SET_ALT_KEY'; pressed: boolean }
   | { type: 'CLEAR_EDGE_SELECTION' }
   | { type: 'START_DRAG'; dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex'; startPos: Point; resizeHandle?: ResizeHandle; edgeId?: string; vertexIndex?: number }  | { type: 'UPDATE_DRAG'; currentPos: Point, isSnapped?: boolean }
-  | { type: 'END_DRAG' };
+  | { type: 'END_DRAG' }
+  | { type: 'SELECT_EDGE_VERTEX'; edgeID: string; vertexIndex: number | null }
+  | { type: 'CLEAR_VERTEX_SELECTION' };
 
 
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
@@ -151,6 +155,15 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
             node.id === action.node.id ? action.node : node
           ),
         },
+      };
+
+    case 'SELECT_EDGE_VERTEX':
+      return {
+        ...state,
+        interaction: {
+          ...state.interaction,
+          selectedVertex: {edgeId: action.edgeID, vertexIndex: action.vertexIndex as number}
+        } 
       };
 
     case 'ADD_EDGE':
@@ -247,6 +260,15 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           ...state.interaction,
           selectedEdges: [],
         },
+      };
+
+    case 'CLEAR_VERTEX_SELECTION':
+      return {
+        ...state,
+        interaction: {
+          ...state.interaction,
+          selectedVertex: null,
+        },  
       };
 
     case 'START_DRAG':
@@ -647,6 +669,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     interaction: {
       selectedNodes: [],
       selectedEdges: [],
+      selectedVertex: null,
       altKeyPressed: false,
       dragState: {
         isDragging: false,
@@ -1191,6 +1214,32 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'e' || e.key === 'E') {
         toggleMode();
+      }
+      else if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (mode === InteractionMode.DRAW_EDGE) {
+          cancelDrawing();
+        }
+        else if (state.interaction.selectedEdges.length > 0) {
+          if (state.interaction.selectedVertex) {
+            removeEdgeVertex(
+              state.interaction.selectedVertex.edgeId, 
+              state.interaction.selectedVertex.vertexIndex
+            );
+            clearVertexSelection();
+            clearEdgeSelection();
+            return;
+          }
+          state.interaction.selectedEdges.forEach(edge => {
+            removeEdge(edge.id);
+          });
+        }
+        
+        else if (state.interaction.selectedNodes.length > 0) {
+          state.interaction.selectedNodes.forEach(node => {
+            removeNode(node.id);
+          });
+        }
+
       } else if (e.key === 'Escape') {
         exitDrawMode();
       }
@@ -1198,14 +1247,22 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleMode, exitDrawMode]);
+  }, [toggleMode, exitDrawMode, cancelDrawing, state.interaction, removeEdge, removeNode]);
 
-  const selectEdge = useCallback((edge: DiagramEdge | null) => {
+const selectEdge = useCallback((edge: DiagramEdge | null) => {
   dispatch({ type: 'SELECT_EDGE', edge });
+}, []);
+
+const selectEdgeVertex = useCallback((edgeID: string, vertexIndex: number | null) => {
+  dispatch({ type: 'SELECT_EDGE_VERTEX', edgeID, vertexIndex });
 }, []);
 
 const clearEdgeSelection = useCallback(() => {
   dispatch({ type: 'CLEAR_EDGE_SELECTION' });
+}, []);
+
+const clearVertexSelection = useCallback(() => {
+  dispatch({ type: 'CLEAR_VERTEX_SELECTION' });
 }, []);
 
 const updateEdgeVertex = useCallback((edgeId: string, vertexIndex: number, newPosition: {x: number, y: number}) => {
@@ -1455,6 +1512,7 @@ useEffect(() => {
     addEdge,
     removeEdge,
     updateEdge,
+    selectEdgeVertex,
     // Spatial methods
     getVisibleNodes,
     hitTestPoint, // Keep the basic version for compatibility
@@ -1477,6 +1535,7 @@ useEffect(() => {
     hitTestEdgeVertex,
     selectEdge,
     clearEdgeSelection,
+    clearVertexSelection,
     // Renderer methods
     getRenderer,
     isRendererInitialized,
@@ -1494,6 +1553,7 @@ useEffect(() => {
     addNode,
     removeNode,
     updateNode,
+    selectEdgeVertex,
     addEdge,
     removeEdge,
     updateEdge,

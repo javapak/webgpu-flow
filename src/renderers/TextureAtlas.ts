@@ -1,3 +1,4 @@
+import type { DiagramFont } from "../utils/FontLoadUtils";
 
 export interface TextureAtlasEntry {
   texture: GPUTexture;
@@ -48,15 +49,15 @@ export class TextureAtlas {
     });
   }
 
-  addText(text: string, fontSize: number = 50, color: string = '#ffffff'): TextureAtlasEntry | null {
-    const cacheKey = `${text}-${fontSize}`;
+  addText(text: string, fontSize: number = 144, color: string = '#ffffff', fontFamily: DiagramFont): TextureAtlasEntry | null {
+    const cacheKey = `${text}-${fontSize}-${fontFamily}`;
     
     if (this.entries.has(cacheKey)) {
       return this.entries.get(cacheKey)!;
     }
 
     // Measure text
-    this.ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+    this.ctx.font = `${fontSize}px ${fontFamily}`;
     const metrics = this.ctx.measureText(text);
     const textWidth = Math.ceil(metrics.width + 8); // Add padding
     const textHeight = Math.ceil(fontSize * 1.5); // Add vertical padding
@@ -76,7 +77,7 @@ export class TextureAtlas {
     this.ctx.clearRect(this.currentX, this.currentY, textWidth, textHeight);
 
     // Render text to atlas
-    this.ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+    this.ctx.font = `${fontSize}px ${fontFamily}`;
     this.ctx.fillStyle = color;
     this.ctx.textAlign = 'left';
     this.ctx.textBaseline = 'top';

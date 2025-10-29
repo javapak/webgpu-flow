@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useDiagram } from "./DiagramProvider"
 import { ColorInput } from "@mantine/core";
 import type { DiagramNode } from "../types";
+import { FontPicker } from "./FontPicker";
+import type { DiagramFont } from "../utils/FontLoadUtils";
 
 export default function VisualPropertyEditor() {
     const {interaction, updateNode} = useDiagram();
@@ -38,7 +40,7 @@ export default function VisualPropertyEditor() {
     }, [nodeHexValue, interaction.selectedNodes, updateNode]);
 
 
-        const handleTextColorChange = useCallback((hexValue: string) => {
+    const handleTextColorChange = useCallback((hexValue: string) => {
         if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0]) {
             const updatedNode: DiagramNode = {...interaction.selectedNodes[0]}
             updatedNode.visual!.labelColor = hexValue;
@@ -48,17 +50,30 @@ export default function VisualPropertyEditor() {
 
     }, [nodeHexValue, interaction.selectedNodes, updateNode]);
 
+    const onChangeFont = useCallback((font: DiagramFont) => {
+        if (interaction.selectedNodes.length > 0 && interaction.selectedNodes[0]) {
+            const updatedNode: DiagramNode = {...interaction.selectedNodes[0]}
+            updatedNode.visual!.labelFont = font;
+            updateNode(updatedNode);
+        }
+    }, [interaction.selectedNodes, updateNode]);
+
 
     return (
     <>
     {interaction.selectedNodes.length > 0 && (
-        <div style={{margin: 50}} className='is-over-viewport-unselectable'>
+        <div style={{margin: 50, height: '100%'}} className='is-over-viewport-unselectable'>
             <h3>Visual properties:</h3>
+            
+            {interaction.selectedNodes[0].data.label && (<div><div><FontPicker onChange={onChangeFont} value={interaction.selectedNodes[0].visual!.labelFont as DiagramFont}/></div><div><ColorInput title='Label text color' label='Text color' pb={10} w={150} fixOnBlur={false}  value={textHexValue} defaultValue='#ffffff' 
+            onChange={handleTextColorChange} /></div>
+            </div>
+            )}
             {((interaction.selectedNodes[0].visual?.shape === 'none' && interaction.selectedNodes[0].visual.visualContent?.colorizable) || (interaction.selectedNodes[0].visual?.shape !== 'none')) && (<ColorInput title='Node color' pb={10} label='Node color' w={150} fixOnBlur={false} value={nodeHexValue} defaultValue='#ffffff'
             onChange={handleNodeColorChange} />)}
 
-            <ColorInput title='Label text color' label='Text color' w={150} fixOnBlur={false}  value={textHexValue} defaultValue='#ffffff' 
-            onChange={handleTextColorChange} />
+
+            
 
 
         </div>)}

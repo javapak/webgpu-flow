@@ -67,7 +67,7 @@ export class SMAARenderer {
 
       // Luma conversion constants
       const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
-      const EDGE_THRESHOLD = 0.1;
+      const EDGE_THRESHOLD = 0.5;
 
       fn rgb2luma(color: vec3<f32>) -> f32 {
         return dot(color, LUMA);
@@ -140,13 +140,13 @@ export class SMAARenderer {
         
         // Horizontal edge - blend vertically
         let hasHorzEdge = f32(edges.x > 0.0);
-        weights.x = edgeN * 0.5 * hasHorzEdge;
-        weights.y = edgeS * 0.5 * hasHorzEdge;
+        weights.x = edgeN * 0.45 * hasHorzEdge;
+        weights.y = edgeS * 0.45 * hasHorzEdge;
         
         // Vertical edge - blend horizontally
         let hasVertEdge = f32(edges.y > 0.0);
-        weights.z = edgeW * 0.5 * hasVertEdge;
-        weights.w = edgeE * 0.5 * hasVertEdge;
+        weights.z = edgeW * 0.45 * hasVertEdge;
+        weights.w = edgeE * 0.45 * hasVertEdge;
         
         return weights;
       }

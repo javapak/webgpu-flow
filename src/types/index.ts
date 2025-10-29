@@ -2,6 +2,7 @@
 
 import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
 import type { SHAPE_TYPES } from '../renderers/WebGPURenderer';
+import type { DiagramFont } from '../utils/FontLoadUtils';
 import type { ResizeHandle } from '../utils/MouseInteractions';
 import type { Point, AABB } from './spatial-indexing/types';
 
@@ -54,6 +55,7 @@ export interface DiagramNode {
   visual?: {
     iconColor?: string;
     labelColor?: string;
+    labelFont?: DiagramFont;
     color?: string;
     shape?: string;
     visualContent?: {type: 'svg' | 'image' | 'emoji', content: string, size: {width: number, height: number}, colorizable?: boolean}
@@ -90,6 +92,7 @@ export interface Viewport {
 export interface InteractionState {
   selectedNodes: DiagramNode[];
   selectedEdges: DiagramEdge[];
+  selectedVertex: {edgeId: string; vertexIndex: number} | null;
   altKeyPressed: boolean; // True when Alt key is pressed
   dragState: {
     isDragging: boolean;

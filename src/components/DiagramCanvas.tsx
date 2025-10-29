@@ -68,10 +68,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     hitTestWithHandles,
     selectNode,
     selectEdge,
+    clearVertexSelection,
     clearEdgeSelection,
     clearSelection,
     startDrag,
     updateDrag,
+    selectEdgeVertex,
     startDrawing,
     drawingState,
     exitDrawMode,
@@ -272,6 +274,7 @@ useEffect(() => {
       if (hitResult.selectedEdge) {
         console.log('Edge selected')
         clearEdgeSelection();
+        clearVertexSelection();
         clearSelection();
         selectEdge(hitResult.selectedEdge);
 
@@ -286,6 +289,7 @@ useEffect(() => {
         onNodeClick?.(topNode);
       } else {
         clearSelection();
+        clearVertexSelection();
         clearEdgeSelection();
         startDrag('viewport', canvasPos);
         onCanvasClick?.(hitResult.worldPos);
@@ -540,9 +544,18 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
 
 
   if (!drawingState.isDrawing && mode !== 'draw_edge') {
-    // First check for resize handles on selected nodes
 
     if (interaction.selectedEdges.length > 0 && hitResult.selectedEdge?.id && hitResult.isEdgeVertex) {
+
+      if (!interaction.selectedVertex) {
+        console.log('edge vertex not selected, selecting now');
+        selectEdgeVertex(hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
+      }
+      else {
+        console.log('edge vertex previously selected... updating now');
+        clearVertexSelection();
+        selectEdgeVertex(hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
+      }
       // Start dragging edge vertex
       console.log('======Starting edge vertex drag======');
       console.log('edge-vertex', canvasPos, hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
@@ -554,6 +567,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (hitResult.selectedEdge) {
       // Select edge, but do not block viewport drag if clicking on empty canvas
       clearSelection();
+      clearVertexSelection();
       selectEdge(hitResult.selectedEdge);
       // If not clicking on an edge vertex or handle, allow viewport drag
       if (!hitResult.isEdgeVertex && hitResult.nodes.length === 0 && hitResult.resizeHandle === 'none') {
@@ -602,10 +616,11 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     }
   }, [isMobile, interaction.dragState.isDragging, endDrag]);
 
+
   // Wheel zoom (desktop only)
   const handleWheel = useCallback((e: WheelEvent) => {
     if (isMobile) return;
-    
+
     e.preventDefault();
     
     if (!canvasRef.current) return;
@@ -625,7 +640,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     
     // Calculate new zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
+    const newZoom = Math.max(0.3, Math.min(5, viewport.zoom * zoomFactor));
     
     // Calculate new viewport position to keep mouse point stationary
     // Formula: worldPos = (canvasPos - canvasCenter) / zoom + viewportPos
@@ -689,7 +704,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
       const nodeType: any = JSON.parse(nodeTypeData);
       const worldPos = dragEventToWorld(e, canvasRef.current, viewport);
       
-      const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
       
       const newNode: DiagramNode = {
         id: newNodeId,
@@ -700,6 +715,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
           size: { width: nodeType.width, height: nodeType.height }
         },
         visual: {
+          labelFont: 'Arial',
           color: nodeType.color,
           shape: nodeType.shape,
           selected: false,
@@ -749,7 +765,6 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
           height: `${height}px`,
           cursor: currentCursor,
           transform: `scale(${internalResolutionRef.current.width / width}, ${internalResolutionRef.current.height / height})`,
-
           touchAction: isMobile ? 'none' : 'auto',
           userSelect: 'none',
           backgroundColor: selectedNodeType ? '#f0f8ff' : 'transparent'

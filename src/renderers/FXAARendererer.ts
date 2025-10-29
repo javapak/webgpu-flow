@@ -73,7 +73,7 @@ export class FXAARenderer {
       let lumaRange = lumaMax - lumaMin;
       
       // Compute edge threshold
-      let edgeThreshold = max(0.0312, lumaMax * 0.0125); 
+      let edgeThreshold = max(0.0312, lumaMax * 0.87); 
       // Determine if we should apply FXAA (but don't use textureSample in branches)
       let shouldApplyFXAA = f32(lumaRange >= edgeThreshold);
       
@@ -111,7 +111,7 @@ export class FXAARenderer {
       // Blend between original and filtered based on whether FXAA should apply
       let finalRgb = mix(rgbM, rgbF, shouldApplyFXAA);
 
-      const FXAA_SUBPIX = 1.0;  // 0.0 = off, 1.0 = max blur
+      const FXAA_SUBPIX = 0.25;  // 0.0 = off, 1.0 = max blur
       let lumaAvg = (lumaN + lumaS + lumaE + lumaW) * 0.25;
       let subpixelOffset = abs(lumaM - lumaAvg) / lumaRange;
       let subpixelBlend = smoothstep(0.0, 1.0, subpixelOffset);

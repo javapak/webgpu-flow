@@ -249,13 +249,14 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
   for (const node of nodesWithLabels) {
     const label = node.data.label!.trim();
     const fontSize = 100;
+    const fontFamily = node.visual?.labelFont || 'Arial';
     let textColor = '#ffffffff';
 
     if (node.visual?.labelColor)
         textColor = node.visual.labelColor;
 
     try {
-      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
+      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor, fontFamily);
       if (!atlasEntry) continue;
       const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.35;
 
@@ -305,7 +306,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       textColor = edge.style.labelColor;
 
     try {
-      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor);
+      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor, "Arial");
       if (!atlasEntry) continue;
       const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.35;
 
@@ -313,9 +314,20 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
       const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
 
-      // Position at node center
-      const labelX = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.x + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.x) / 2;
-      const labelY = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.y + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.y) / 2;
+      let labelX: number;
+      let labelY: number;
+
+      // Position at center of edge (midpoint of userVertices if present). Use source/target nodes if no userVertices.
+      if (edge.userVertices.length > 0) {
+        const midIndex = Math.floor(edge.userVertices.length / 2);
+        labelX = edge.userVertices[midIndex].x;
+        labelY = edge.userVertices[midIndex].y;
+
+      }
+      else {
+      labelX = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.x + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.x) / 2;
+      labelY = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.y + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.y) / 2;
+      }
 
       // FIX: Ensure UV coordinates are properly normalized
       const atlasSize = this.textAtlas.getAtlasSize();

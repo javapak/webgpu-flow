@@ -31,6 +31,7 @@ export const Node: React.FC<NodeProps> = ({
           width: 120,
           height: 80},
           color: '#3b82f6',
+          labelFont: 'Arial',
           shape: "diamond",
           ...visual
         },

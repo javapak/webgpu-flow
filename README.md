@@ -280,8 +280,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Fluent UI Icons**
 - **Vite**
 
-- **Issues**: [GitHub Issues](https://github.com/javapak/webgpu-flow-editor/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/javapak/webgpu-flow-editor/discussions)
+- **Issues**: [GitHub Issues](https://github.com/javapak/webgpu-flow/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/javapak/webgpu-flow/discussions)
 
 
 

@@ -583,7 +583,7 @@ private createIntermediateTexture(width: number, height: number) {
 
       fn sdActor(p: vec2<f32>) -> f32 {
         // Simplified stick figure - head (circle) + body (rectangle) - fixed Y axis
-        let head = sdCircle(p + vec2<f32>(0.0, -0.4), 0.2); // Fixed Y
+        let head = sdCircle(p + vec2<f32>(0.0, 0.4), 0.2); // Fixed Y
         let body = sdRectangle(p + vec2<f32>(0.0, 0.1), vec2<f32>(0.15, 0.4)); // Fixed Y
         return min(head, body);
       }
@@ -617,7 +617,7 @@ private createIntermediateTexture(width: number, height: number) {
           }
           case 4: { // Package - use full bounds
             let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.85, 0.75), 0.1);
-            let tab = sdRectangle(p + vec2<f32>(0.0, -0.85), vec2<f32>(aspectRatio * 0.4, 0.1));
+            let tab = sdRectangle(p + vec2<f32>(0.0, 0.85), vec2<f32>(aspectRatio * 0.4, 0.1));
             distance = min(mainBody, tab);
           }
           case 5: { // Rounded Rectangle - use full bounds
@@ -1430,6 +1430,7 @@ private createIntermediateTexture(width: number, height: number) {
           console.error('Error rendering labels:', error);
         }
       }
+
 
       renderPass.end();
 

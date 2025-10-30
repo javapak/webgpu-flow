@@ -258,7 +258,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor, fontFamily);
       if (!atlasEntry) continue;
-      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.35;
+      const textScale = Math.min(0.7, Math.min(2.0, 1.0 / viewport.zoom)) * 0.25;
 
       
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
@@ -308,7 +308,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     try {
       const atlasEntry = this.textAtlas.addText(label, fontSize, textColor, "Arial");
       if (!atlasEntry) continue;
-      const textScale = Math.min(0.5, Math.min(2.0, 1.0 / viewport.zoom)) * 0.35;
+      const textScale = Math.min(0.7, Math.min(2.0, 1.0 / viewport.zoom)) * 0.25;
 
       
       const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;

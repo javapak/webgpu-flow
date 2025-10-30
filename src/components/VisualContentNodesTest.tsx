@@ -68,22 +68,26 @@ export const VisualContentNodesTest = () => {
         }} 
       />
 
-      <Node 
+ <Node 
         id="some-service" 
         type="test" 
-        position={{ x: 150, y: 100 }} 
-        data={{ label: "Service" }}
+        position={{ x: 0, y: -100 }} 
+        data={{ label: "Actor (User)" }}
         visual={{ 
           labelColor: "#ffffff",
-          color: "#f16363ff", 
-          shape: "roundedRectangle", 
-          size: { width: 150, height: 150 },
+          color: "#f59f0b00", 
+          shape: "none", 
+          size: { width: 50, height: 50 },
+          visualContent: { 
+            type: 'emoji', 
+            content: '👤', 
+            size: { width: 48, height: 48 }
+          }
         }} 
       />
 
-      <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="some-service" userVertices={[{x: -150 , y: -50}]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 2}}/>
+      <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="some-service" userVertices={[]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 2, sourceMarker: 'open-arrow', targetMarker: 'circle'}}/>
 
-      <Edge id='hi' data={{label: 'hosts'}} sourceNodeId="some-server"  targetNodeId="some-service" userVertices={[]} style={{color: [1,1,1,1], labelColor: '#7300ffff', thickness: 2, sourceMarker: 'double-arrow'}} />
     </>
   );
 };

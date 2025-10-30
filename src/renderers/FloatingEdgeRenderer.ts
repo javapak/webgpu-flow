@@ -211,7 +211,7 @@ export class FloatingEdgeRenderer {
     
     // Buffer for markers (more instances needed)
     this.markerBuffer = this.device.createBuffer({
-      size: this.maxEdges * 2 * 48, // 2 markers per edge, 12 floats each
+      size: this.maxEdges * 2 * 56, // 2 markers per edge, 12 floats each
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'edge-marker-buffer'
     });
@@ -381,6 +381,7 @@ export class FloatingEdgeRenderer {
       depthStencil: {
         format: 'depth24plus',
         depthWriteEnabled: true,
+        
         depthCompare: 'less',
       },
       multisample: {count: parseInt(this.sampleCount)}
@@ -447,7 +448,7 @@ export class FloatingEdgeRenderer {
           format: format,
           blend: {
             color: {
-              srcFactor: 'src-alpha',
+              srcFactor: 'src-alpha',        // CHANGED back
               dstFactor: 'one-minus-src-alpha',
             },
             alpha: {
@@ -469,25 +470,23 @@ export class FloatingEdgeRenderer {
     });
   }
   
-  private createMarkerPipeline(format: GPUTextureFormat) {
-    // place markers slightly in front of edges; using a smaller depth so they pass the depth test
-    const markerDepth = Z_LAYERS.EDGES - 0.01;
+private createMarkerPipeline(format: GPUTextureFormat) {
+    const markerDepth = Math.min(Z_LAYERS.NODES, Z_LAYERS.EDGES) + 0.1;
 
     const markerShaderCode = `
       struct Uniforms {
         viewProjection: mat4x4<f32>,
       }
       
-      // Note: storage arrays require explicit padding/alignment to match the host layout.
-      // Host writes 12 floats per marker (position.xy, direction.xy, size, markerType, color.xyzw, pad, pad) => 48 bytes.
       struct MarkerData {
-        position: vec2<f32>,
-        direction: vec2<f32>,
-        size: f32,
-        markerType: f32,
-        color: vec4<f32>,
-        padding: vec2<f32>, 
-      }
+        position: vec2<f32>,      // offset 0-8
+        direction: vec2<f32>,     // offset 8-16
+        size: f32,                // offset 16-20
+        markerType: f32,          // offset 20-24
+        padding1: vec2<f32>,      // offset 24-32 (padding to align next vec4)
+        color: vec4<f32>,         // offset 32-48 (16-byte aligned)
+        padding2: vec2<f32>,      // offset 48-56
+    }
       
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
       @group(0) @binding(1) var<storage, read> markerData: array<MarkerData>;
@@ -538,119 +537,141 @@ export class FloatingEdgeRenderer {
         
         return output;
       }
+    @fragment
+    fn fs_main(
+      @location(0) color: vec4<f32>,
+      @location(1) uv: vec2<f32>,
+      @location(2) markerType: f32,
+      @location(3) direction: vec2<f32>
+    ) -> @location(0) vec4<f32> {
+      let centered = uv - 0.5;
+      var alpha = 0.0;
       
-      @fragment
-      fn fs_main(
-        @location(0) color: vec4<f32>,
-        @location(1) uv: vec2<f32>,
-        @location(2) markerType: f32,
-        @location(3) direction: vec2<f32>
-      ) -> @location(0) vec4<f32> {
-        // Center UV coordinates (-0.5 to 0.5)
-        let centered = uv - 0.5;
-        var alpha = 0.0;
-        
-        let type_int = i32(markerType + 0.5);
-        
-        // Create marker shapes
-        switch(type_int) {
-          case 1: { // arrow - simple triangle pointing right
-            let inTriangle = (centered.x > -0.4) && 
-                            (centered.x < 0.4) && 
-                            (abs(centered.y) < (0.4 - centered.x));
-            alpha = select(0.0, 1.0, inTriangle);
-          }
-          case 2, 12: { // open-arrow / inheritance - hollow triangle
-            let outerTriangle = (centered.x > -0.4) && 
-                               (centered.x < 0.4) && 
-                               (abs(centered.y) < (0.4 - centered.x));
-            let innerTriangle = (centered.x > -0.3) && 
-                               (centered.x < 0.3) && 
-                               (abs(centered.y) < (0.25 - centered.x * 0.7));
-            alpha = select(0.0, 1.0, outerTriangle && !innerTriangle);
-          }
-          case 3: { // filled-arrow
-            let inTriangle = (centered.x > -0.4) && 
-                            (centered.x < 0.4) && 
-                            (abs(centered.y) < (0.4 - centered.x));
-            alpha = select(0.0, 1.0, inTriangle);
-          }
-          case 4: { // diamond (hollow)
-            let diamondDist = abs(centered.x) + abs(centered.y);
-            let outer = diamondDist < 0.45;
-            let inner = diamondDist < 0.3;
-            alpha = select(0.0, 1.0, outer && !inner);
-          }
-          case 5: { // filled-diamond
-            let diamondDist = abs(centered.x) + abs(centered.y);
-            alpha = select(0.0, 1.0, diamondDist < 0.45);
-          }
-          case 6, 11: { // circle / one-optional (hollow circle)
-            let dist = length(centered);
-            let outer = dist < 0.35;
-            let inner = dist < 0.25;
-            alpha = select(0.0, 1.0, outer && !inner);
-          }
-          case 7: { // cross
-            let horizontal = abs(centered.y) < 0.06;
-            let vertical = abs(centered.x) < 0.06;
-            alpha = select(0.0, 1.0, horizontal || vertical);
-          }
-          case 8: { // crow-foot (three lines converging)
-            let line1 = (abs(centered.y - 0.25) < 0.04) && (centered.x > -0.4 && centered.x < 0.2);
-            let line2 = (abs(centered.y) < 0.04) && (centered.x > -0.4 && centered.x < 0.2);
-            let line3 = (abs(centered.y + 0.25) < 0.04) && (centered.x > -0.4 && centered.x < 0.2);
-            alpha = select(0.0, 1.0, line1 || line2 || line3);
-          }
-          case 9: { // crow-foot-optional (with circle)
-            let circleDist = length(centered - vec2<f32>(-0.25, 0.0));
-            let hasCircle = circleDist < 0.12;
-            let line1 = (abs(centered.y - 0.25) < 0.04) && (centered.x > 0.0 && centered.x < 0.4);
-            let line2 = (abs(centered.y) < 0.04) && (centered.x > 0.0 && centered.x < 0.4);
-            let line3 = (abs(centered.y + 0.25) < 0.04) && (centered.x > 0.0 && centered.x < 0.4);
-            alpha = select(0.0, 1.0, hasCircle || line1 || line2 || line3);
-          }
-          case 10, 14: { // one / bar (single vertical line)
-            alpha = select(0.0, 1.0, abs(centered.x + 0.35) < 0.06);
-          }
-          case 13: { // double-arrow (two triangles)
-            let tri1 = (centered.x > -0.2 && centered.x < 0.2) && (abs(centered.y) < (0.3 - abs(centered.x - 0.1)));
-            let tri2 = (centered.x > -0.2 && centered.x < 0.2) && (abs(centered.y) < (0.3 - abs(centered.x + 0.1)));
-            alpha = select(0.0, 1.0, tri1 || tri2);
-          }
-          case 15: { // dot
-            let dist = length(centered);
-            alpha = select(0.0, 1.0, dist < 0.2);
-          }
-          case 16: { // square (hollow)
-            let outer = (abs(centered.x) < 0.35) && (abs(centered.y) < 0.35);
-            let inner = (abs(centered.x) < 0.25) && (abs(centered.y) < 0.25);
-            alpha = select(0.0, 1.0, outer && !inner);
-          }
-          case 17: { // filled-square
-            let inSquare = (abs(centered.x) < 0.35) && (abs(centered.y) < 0.35);
-            alpha = select(0.0, 1.0, inSquare);
-          }
-          default: { // Fallback - show a circle so we know something rendered
-            let dist = length(centered);
-            alpha = select(0.0, 1.0, dist < 0.3);
-          }
+      let type_int = i32(markerType + 0.5);
+      
+      switch(type_int) {
+        case 1, 3: { // arrow / filled-arrow
+          let tipX = 0.4;
+          let baseX = -0.4;
+          let baseHalfHeight = 0.4;
+          let xProgress = (centered.x - baseX) / (tipX - baseX);
+          let allowedHalfHeight = baseHalfHeight * (1.0 - xProgress);
+          let inYBounds = abs(centered.y) <= allowedHalfHeight;
+          let inXBounds = centered.x >= baseX && centered.x <= tipX;
+          alpha = select(0.0, 1.0, inXBounds && inYBounds);
         }
-        
-        // Discard fully transparent pixels
-        if (alpha < 0.01) {
-          discard;
+        case 2, 12: { // open-arrow / inheritance
+          let tipX = 0.4;
+          let baseX = -0.4;
+          let baseHalfHeight = 0.4;
+          
+          // Outer triangle
+          let xProgressOuter = (centered.x - baseX) / (tipX - baseX);
+          let allowedHalfHeightOuter = baseHalfHeight * (1.0 - xProgressOuter);
+          let inYBoundsOuter = abs(centered.y) <= allowedHalfHeightOuter;
+          let inXBoundsOuter = centered.x >= baseX && centered.x <= tipX;
+          let outer = inXBoundsOuter && inYBoundsOuter;
+          
+          // Inner triangle
+          let tipXInner = 0.3;
+          let baseXInner = -0.3;
+          let baseHalfHeightInner = 0.3;
+          let xProgressInner = (centered.x - baseXInner) / (tipXInner - baseXInner);
+          let allowedHalfHeightInner = baseHalfHeightInner * (1.0 - xProgressInner);
+          let inYBoundsInner = abs(centered.y) <= allowedHalfHeightInner;
+          let inXBoundsInner = centered.x >= baseXInner && centered.x <= tipXInner;
+          let inner = inXBoundsInner && inYBoundsInner;
+          
+          alpha = select(0.0, 1.0, outer && !inner);
         }
-        
-        // Return the marker color with calculated alpha
-        return vec4<f32>(color.rgb, alpha * color.a);
+        case 4: { // diamond (hollow)
+          let diamondDist = abs(centered.x) + abs(centered.y);
+          let outer = diamondDist < 0.45;
+          let inner = diamondDist < 0.32;
+          alpha = select(0.0, 1.0, outer && !inner);
+        }
+        case 5: { // filled-diamond
+          let diamondDist = abs(centered.x) + abs(centered.y);
+          alpha = select(0.0, 1.0, diamondDist < 0.45);
+        }
+        case 6, 11: { // circle / one-optional (hollow circle)
+          let dist = length(centered);
+          let outer = dist < 0.4;
+          let inner = dist < 0.28;
+          alpha = select(0.0, 1.0, outer && !inner);
+        }
+        case 7: { // cross
+          let horizontal = abs(centered.y) < 0.06;
+          let vertical = abs(centered.x) < 0.06;
+          alpha = select(0.0, 1.0, horizontal || vertical);
+        }
+        case 8: { // crow-foot (three lines converging)
+          let thickness = 0.04;
+          let line1 = abs(centered.y - 0.25) < thickness && centered.x > -0.4 && centered.x < 0.2;
+          let line2 = abs(centered.y) < thickness && centered.x > -0.4 && centered.x < 0.2;
+          let line3 = abs(centered.y + 0.25) < thickness && centered.x > -0.4 && centered.x < 0.2;
+          alpha = select(0.0, 1.0, line1 || line2 || line3);
+        }
+        case 9: { // crow-foot-optional (with circle)
+          let thickness = 0.04;
+          let circleDist = length(centered - vec2<f32>(-0.25, 0.0));
+          let hasCircle = circleDist < 0.12;
+          let line1 = abs(centered.y - 0.25) < thickness && centered.x > 0.0 && centered.x < 0.4;
+          let line2 = abs(centered.y) < thickness && centered.x > 0.0 && centered.x < 0.4;
+          let line3 = abs(centered.y + 0.25) < thickness && centered.x > 0.0 && centered.x < 0.4;
+          alpha = select(0.0, 1.0, hasCircle || line1 || line2 || line3);
+        }
+        case 10, 14: { // one / bar (single vertical line)
+          alpha = select(0.0, 1.0, abs(centered.x + 0.35) < 0.06 && abs(centered.y) < 0.4);
+        }
+        case 13: { // double-arrow (two triangles back-to-back)
+          // Right-pointing triangle
+          let tipXR = 0.4;
+          let baseXR = 0.0;
+          let xProgressR = (centered.x - baseXR) / (tipXR - baseXR);
+          let allowedHalfHeightR = 0.4 * (1.0 - xProgressR);
+          let inXBoundsR = centered.x >= baseXR && centered.x <= tipXR;
+          let tri1 = inXBoundsR && abs(centered.y) <= allowedHalfHeightR;
+          
+          // Left-pointing triangle
+          let tipXL = -0.4;
+          let baseXL = 0.0;
+          let xProgressL = (baseXL - centered.x) / (baseXL - tipXL);
+          let allowedHalfHeightL = 0.4 * (1.0 - xProgressL);
+          let inXBoundsL = centered.x <= baseXL && centered.x >= tipXL;
+          let tri2 = inXBoundsL && abs(centered.y) <= allowedHalfHeightL;
+          
+          alpha = select(0.0, 1.0, tri1 || tri2);
+        }
+        case 15: { // dot (filled circle)
+          let dist = length(centered);
+          alpha = select(0.0, 1.0, dist < 0.2);
+        }
+        case 16: { // square (hollow)
+          let outer = abs(centered.x) < 0.4 && abs(centered.y) < 0.4;
+          let inner = abs(centered.x) < 0.28 && abs(centered.y) < 0.28;
+          alpha = select(0.0, 1.0, outer && !inner);
+        }
+        case 17: { // filled-square
+          alpha = select(0.0, 1.0, abs(centered.x) < 0.4 && abs(centered.y) < 0.4);
+        }
+        default: { // fallback: filled circle
+          let dist = length(centered);
+          alpha = select(0.0, 1.0, dist < 0.35);
+        }
       }
+
+      // Use premultiplied alpha.
+      return vec4<f32>(color.rgb * alpha, alpha);
+    }
+
     `;
     
     const markerShaderModule = this.device.createShaderModule({
       code: markerShaderCode,
       label: 'marker-shader'
     });
+    
     this.markerPipeline = this.device.createRenderPipeline({
       label: 'marker-pipeline',
       layout: 'auto',
@@ -665,11 +686,11 @@ export class FloatingEdgeRenderer {
           format: format,
           blend: {
             color: {
-              srcFactor: 'src-alpha',
+              srcFactor: 'one',           // CHANGED
               dstFactor: 'one-minus-src-alpha',
             },
             alpha: {
-              srcFactor: 'one',
+              srcFactor: 'one',           // CHANGED
               dstFactor: 'one-minus-src-alpha',
             }
           }
@@ -677,12 +698,12 @@ export class FloatingEdgeRenderer {
       },
       primitive: {
         topology: 'triangle-list',
+        cullMode: 'none',  // ADDED - don't cull any faces
       },
       depthStencil: {
         format: 'depth24plus',
-        // Do not write depth for markers so they don't occlude other items; keep a normal depth test to respect scene order.
-        depthWriteEnabled: false,
-        depthCompare: 'less',
+        depthWriteEnabled: false,     
+        depthCompare: 'always',         
       },
       multisample: {count: parseInt(this.sampleCount)}
     });
@@ -879,8 +900,8 @@ export class FloatingEdgeRenderer {
     const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
     const targetNode = nodes.find(n => n.id === edge.targetNodeId);
     
-    // default marker size in world units (choose a reasonable default so markers are visible but not huge)
-    const markerSize = 12;
+    // default marker size in world units (7 for now)
+    const markerSize = 7;
     
     // Source marker
     if (edge.style.sourceMarker && edge.style.sourceMarker !== 'none') {
@@ -908,13 +929,13 @@ export class FloatingEdgeRenderer {
           { x: -normalized.x, y: -normalized.y }
         );
         
-        markers.push({
-          position: [sourceEdge.x, sourceEdge.y],
-          direction: [normalized.x, normalized.y],
-          size: markerSize,
-          markerType: this.getMarkerTypeValue(edge.style.sourceMarker),
-          color: edge.style.color
-        });
+markers.push({
+  position: [sourceEdge.x, sourceEdge.y],
+  direction: [normalized.x, normalized.y],
+  size: markerSize,
+  markerType: this.getMarkerTypeValue(edge.style.sourceMarker),
+  color: [1.0, 0.0, 0.0, 1.0]  // RED for source marker
+});
       }
     }
     
@@ -944,13 +965,13 @@ export class FloatingEdgeRenderer {
           { x: -normalized.x, y: -normalized.y }
         );
         
-        markers.push({
-          position: [targetEdge.x, targetEdge.y],
-          direction: [normalized.x, normalized.y],
-          size: markerSize,
-          markerType: this.getMarkerTypeValue(edge.style.targetMarker),
-          color: edge.style.color
-        });
+markers.push({
+  position: [targetEdge.x, targetEdge.y],
+  direction: [normalized.x, normalized.y],
+  size: markerSize,
+  markerType: this.getMarkerTypeValue(edge.style.targetMarker),
+  color: [0.0, 0.0, 1.0, 1.0]  // BLUE for target marker
+});
       }
     }
     console.log('Generated markers:', markers);
@@ -1054,27 +1075,38 @@ export class FloatingEdgeRenderer {
     
     // Draw markers
     if (allMarkers.length > 0) {
-      const flatMarkerData = new Float32Array(allMarkers.length * 12);
+    const flatMarkerData = new Float32Array(allMarkers.length * 14); // Changed from 12 to 14!
       allMarkers.forEach((marker, i) => {
-        const offset = i * 12;
-        flatMarkerData[offset + 0] = marker.position[0];
-        flatMarkerData[offset + 1] = marker.position[1];
-        flatMarkerData[offset + 2] = marker.direction[0];
-        flatMarkerData[offset + 3] = marker.direction[1];
-        flatMarkerData[offset + 4] = marker.size;
-        flatMarkerData[offset + 5] = marker.markerType;
-        flatMarkerData[offset + 6] = marker.color[0];
-        flatMarkerData[offset + 7] = marker.color[1];
-        flatMarkerData[offset + 8] = marker.color[2];
-        flatMarkerData[offset + 9] = marker.color[3];
-        flatMarkerData[offset + 10] = 0; // padding
-        flatMarkerData[offset + 11] = 0; // padding
+      const offset = i * 14; // Changed from 12 to 14
+      flatMarkerData[offset + 0] = marker.position[0];
+      flatMarkerData[offset + 1] = marker.position[1];
+      flatMarkerData[offset + 2] = marker.direction[0];
+      flatMarkerData[offset + 3] = marker.direction[1];
+      flatMarkerData[offset + 4] = marker.size;
+      flatMarkerData[offset + 5] = marker.markerType;
+      flatMarkerData[offset + 6] = 0; // padding1
+      flatMarkerData[offset + 7] = 0; // padding1
+      flatMarkerData[offset + 8] = marker.color[0];   // color now at offset 8
+      flatMarkerData[offset + 9] = marker.color[1];
+      flatMarkerData[offset + 10] = marker.color[2];
+      flatMarkerData[offset + 11] = marker.color[3];
+      flatMarkerData[offset + 12] = 0; // padding2
+      flatMarkerData[offset + 13] = 0; // padding2
       });
-      
       this.device.queue.writeBuffer(this.markerBuffer, 0, flatMarkerData);
       
       renderPass.setPipeline(this.markerPipeline);
       renderPass.setBindGroup(0, this.markerBindGroup);
+      console.log('About to draw:', {
+  vertices: 6,
+  instanceCount: allMarkers.length,
+  bufferLength: flatMarkerData.length,
+  expectedLength: allMarkers.length * 14
+});
+
+renderPass.setPipeline(this.markerPipeline);
+renderPass.setBindGroup(0, this.markerBindGroup);
+renderPass.draw(6, allMarkers.length);
       renderPass.draw(6, allMarkers.length);
       console.log('Rendered markers count:', allMarkers.length);
     }

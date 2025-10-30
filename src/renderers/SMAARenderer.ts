@@ -20,9 +20,6 @@ export class SMAARenderer {
   }
 
   private createSamplers() {
-
-
-    // Linear sampler for texture sampling
     this.linearSampler = this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
@@ -32,7 +29,6 @@ export class SMAARenderer {
   }
 
   private createPipelines(format: GPUTextureFormat) {
-    // Shared vertex shader for fullscreen quad
     const vertexShader = `
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
@@ -58,16 +54,15 @@ export class SMAARenderer {
       }
     `;
 
-    // Pass 1: Edge Detection
+    // IMPROVED: Better edge detection with lower threshold
     const edgeDetectionShader = `
       ${vertexShader}
 
       @group(0) @binding(0) var inputTexture: texture_2d<f32>;
       @group(0) @binding(1) var inputSampler: sampler;
 
-      // Luma conversion constants
       const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
-      const EDGE_THRESHOLD = 0.5;
+      const EDGE_THRESHOLD = 0.15;  // Slightly higher to reduce noise
 
       fn rgb2luma(color: vec3<f32>) -> f32 {
         return dot(color, LUMA);
@@ -78,7 +73,7 @@ export class SMAARenderer {
         let textureDims = textureDimensions(inputTexture);
         let rcpFrame = vec2<f32>(1.0 / f32(textureDims.x), 1.0 / f32(textureDims.y));
         
-        // Sample center and neighbors
+        // Sample all neighbors first (uniform control flow)
         let colorM = textureSample(inputTexture, inputSampler, input.uv).rgb;
         let colorN = textureSample(inputTexture, inputSampler, input.uv + vec2<f32>(0.0, -1.0) * rcpFrame).rgb;
         let colorS = textureSample(inputTexture, inputSampler, input.uv + vec2<f32>(0.0, 1.0) * rcpFrame).rgb;
@@ -98,25 +93,25 @@ export class SMAARenderer {
         let deltaTop = abs(lumaM - lumaN);
         let deltaBottom = abs(lumaM - lumaS);
         
-        // Find edge orientation
         let maxDeltaHorz = max(deltaLeft, deltaRight);
         let maxDeltaVert = max(deltaTop, deltaBottom);
         
-        // Output edges: R = left/right edge, G = top/bottom edge
+        // Store edge strength with smooth falloff
         var edges = vec2<f32>(0.0, 0.0);
         
         if (maxDeltaHorz >= EDGE_THRESHOLD) {
-          edges.x = 1.0;
+          // Smooth transition instead of hard cutoff
+          edges.x = smoothstep(EDGE_THRESHOLD, EDGE_THRESHOLD * 2.0, maxDeltaHorz);
         }
         if (maxDeltaVert >= EDGE_THRESHOLD) {
-          edges.y = 1.0;
+          edges.y = smoothstep(EDGE_THRESHOLD, EDGE_THRESHOLD * 2.0, maxDeltaVert);
         }
         
         return vec4<f32>(edges, 0.0, 1.0);
       }
     `;
 
-    // Pass 2: Blending Weight Calculation (Simplified)
+    // IMPROVED: Better weight calculation based on edge strength
     const blendingWeightShader = `
       ${vertexShader}
 
@@ -128,31 +123,48 @@ export class SMAARenderer {
         let textureDims = textureDimensions(edgesTexture);
         let rcpFrame = vec2<f32>(1.0 / f32(textureDims.x), 1.0 / f32(textureDims.y));
         
-        // Sample ALL textures BEFORE any branching
+        // Sample ALL textures first (uniform control flow)
         let edges = textureSample(edgesTexture, edgesSampler, input.uv).rg;
         let edgeN = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(0.0, -1.0) * rcpFrame).r;
         let edgeS = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(0.0, 1.0) * rcpFrame).r;
         let edgeW = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(-1.0, 0.0) * rcpFrame).g;
         let edgeE = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(1.0, 0.0) * rcpFrame).g;
         
-        // Calculate weights without branching - use multiplication to conditionally apply
+        // Sample second-level neighbors for better pattern detection
+        let edgeN2 = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(0.0, -2.0) * rcpFrame).r;
+        let edgeS2 = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(0.0, 2.0) * rcpFrame).r;
+        let edgeW2 = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(-2.0, 0.0) * rcpFrame).g;
+        let edgeE2 = textureSample(edgesTexture, edgesSampler, input.uv + vec2<f32>(2.0, 0.0) * rcpFrame).g;
+        
         var weights = vec4<f32>(0.0);
         
-        // Horizontal edge - blend vertically
-        let hasHorzEdge = f32(edges.x > 0.0);
-        weights.x = edgeN * 0.45 * hasHorzEdge;
-        weights.y = edgeS * 0.45 * hasHorzEdge;
+        // Horizontal edge - blend vertically with stronger weights
+        if (edges.x > 0.05) {
+          // Smooth edge continuation factor
+          let continuesN = smoothstep(0.0, 0.3, edgeN) + smoothstep(0.0, 0.3, edgeN2) * 0.3;
+          let continuesS = smoothstep(0.0, 0.3, edgeS) + smoothstep(0.0, 0.3, edgeS2) * 0.3;
+          
+          let blendStrength = edges.x * 0.25;
+          
+          weights.x = blendStrength * (0.5 + continuesN * 0.3);
+          weights.y = blendStrength * (0.5 + continuesS * 0.3);
+        }
         
-        // Vertical edge - blend horizontally
-        let hasVertEdge = f32(edges.y > 0.0);
-        weights.z = edgeW * 0.45 * hasVertEdge;
-        weights.w = edgeE * 0.45 * hasVertEdge;
+        // Vertical edge
+        if (edges.y > 0.05) {
+          let continuesW = smoothstep(0.0, 0.3, edgeW) + smoothstep(0.0, 0.3, edgeW2) * 0.3;
+          let continuesE = smoothstep(0.0, 0.3, edgeE) + smoothstep(0.0, 0.3, edgeE2) * 0.3;
+          
+          let blendStrength = edges.y * 0.25;
+          
+          weights.z = blendStrength * (0.5 + continuesW * 0.3);
+          weights.w = blendStrength * (0.5 + continuesE * 0.3);
+        }
         
         return weights;
       }
     `;
 
-    // Pass 3: Neighborhood Blending
     const neighborhoodBlendShader = `
       ${vertexShader}
 
@@ -166,27 +178,38 @@ export class SMAARenderer {
         let textureDims = textureDimensions(colorTexture);
         let rcpFrame = vec2<f32>(1.0 / f32(textureDims.x), 1.0 / f32(textureDims.y));
         
-        // Sample ALL textures BEFORE any branching (uniform control flow requirement)
+        // Sample ALL textures first (uniform control flow)
         let color = textureSample(colorTexture, colorSampler, input.uv);
         let weights = textureSample(blendTexture, blendSampler, input.uv);
+        
+        // Sample neighbors with slight sub-pixel offset for smoother blending
         let colorN = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(0.0, -1.0) * rcpFrame);
         let colorS = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(0.0, 1.0) * rcpFrame);
         let colorW = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(-1.0, 0.0) * rcpFrame);
         let colorE = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(1.0, 0.0) * rcpFrame);
         
+        // Also sample diagonals for better smoothness
+        let colorNW = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(-1.0, -1.0) * rcpFrame);
+        let colorNE = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(1.0, -1.0) * rcpFrame);
+        let colorSW = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(-1.0, 1.0) * rcpFrame);
+        let colorSE = textureSample(colorTexture, colorSampler, input.uv + vec2<f32>(1.0, 1.0) * rcpFrame);
+        
         // Calculate total weight
         let totalWeight = dot(weights, vec4<f32>(1.0));
         
-        // Blend with neighbors using calculated weights
-        // Use mix to avoid branching - if totalWeight is 0, this returns color unchanged
-        var blendedColor = color;
-        blendedColor = mix(blendedColor, colorN, weights.x);
-        blendedColor = mix(blendedColor, colorS, weights.y);
-        blendedColor = mix(blendedColor, colorW, weights.z);
-        blendedColor = mix(blendedColor, colorE, weights.w);
+        // Main directional blend
+        var blendedColor = color * (1.0 - totalWeight);
+        blendedColor += colorN * weights.x;
+        blendedColor += colorS * weights.y;
+        blendedColor += colorW * weights.z;
+        blendedColor += colorE * weights.w;
         
-        // Blend between original and processed based on total weight
-        return mix(color, blendedColor, min(totalWeight, 1.0));
+        // Add subtle diagonal contribution for smoother transitions
+        let diagonalWeight = totalWeight * 0.15;
+        blendedColor += (colorNW + colorNE + colorSW + colorSE) * (diagonalWeight * 0.25);
+        blendedColor *= (1.0 / (1.0 + diagonalWeight));
+        
+        return blendedColor;
       }
     `;
 
@@ -208,6 +231,7 @@ export class SMAARenderer {
 
     // Create pipelines
     this.edgeDetectionPipeline = this.device.createRenderPipeline({
+      label: 'smaa-edge-detection-pipeline',
       layout: 'auto',
       vertex: {
         module: edgeDetectionModule,
@@ -216,12 +240,13 @@ export class SMAARenderer {
       fragment: {
         module: edgeDetectionModule,
         entryPoint: 'fs_main',
-        targets: [{ format: 'rg8unorm' }] // 2-channel for edges
+        targets: [{ format: 'rg8unorm' }]
       },
       primitive: { topology: 'triangle-list' }
     });
 
     this.blendingWeightPipeline = this.device.createRenderPipeline({
+      label: 'smaa-blending-weight-pipeline',
       layout: 'auto',
       vertex: {
         module: blendingWeightModule,
@@ -236,6 +261,7 @@ export class SMAARenderer {
     });
 
     this.neighborhoodBlendPipeline = this.device.createRenderPipeline({
+      label: 'smaa-neighborhood-blend-pipeline',
       layout: 'auto',
       vertex: {
         module: neighborhoodBlendModule,
@@ -251,7 +277,6 @@ export class SMAARenderer {
   }
 
   private createIntermediateTextures(width: number, height: number) {
-    // Edges texture (2-channel)
     if (this.edgesTexture) {
       this.edgesTexture.destroy();
     }
@@ -262,7 +287,6 @@ export class SMAARenderer {
       label: 'smaa-edges-texture'
     });
 
-    // Blend weights texture
     if (this.blendTexture) {
       this.blendTexture.destroy();
     }
@@ -282,7 +306,6 @@ export class SMAARenderer {
     const width = sourceTexture.width;
     const height = sourceTexture.height;
 
-    // Create/recreate intermediate textures if size changed
     if (!this.edgesTexture || 
         this.edgesTexture.width !== width || 
         this.edgesTexture.height !== height) {

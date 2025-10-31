@@ -519,16 +519,16 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         let marker = markerData[instanceIndex];
         let localPos = positions[vertexIndex];
         
-        // Rotate to align with direction
-        //let angle = atan2(marker.direction.y, marker.direction.x);
-        //let cosA = cos(angle);
-        //let sinA = sin(angle);
-        //let rotated = vec2<f32>(
-         // localPos.x * cosA - localPos.y * sinA,
-         // localPos.x * sinA + localPos.y * cosA
-        //);
+        //Rotate to align with direction
+        let angle = atan2(marker.direction.y, marker.direction.x);
+        let cosA = cos(angle);
+        let sinA = sin(angle);
+        let rotated = vec2<f32>(
+          localPos.x * cosA - localPos.y * sinA,
+          localPos.x * sinA + localPos.y * cosA
+        );
         
-        let worldPos = marker.position + localPos * marker.size;
+        let worldPos = marker.position + rotated * marker.size;
         
         var output: VertexOutput;
         output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${markerDepth}, 1.0);

@@ -82,7 +82,7 @@ export const VisualContentNodesTest = () => {
         }} 
       />
 
-      <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="targetTest" userVertices={[]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 3, sourceMarker: 'square', targetMarker: 'square'}}/>
+      <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="targetTest" userVertices={[]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 3, sourceMarker: 'filled-arrow', targetMarker: 'filled-arrow'}}/>
 
     </>
   );

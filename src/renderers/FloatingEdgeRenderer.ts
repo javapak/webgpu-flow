@@ -211,7 +211,7 @@ export class FloatingEdgeRenderer {
     
     // Buffer for markers (more instances needed)
     this.markerBuffer = this.device.createBuffer({
-      size: this.maxEdges * 2 * 56, // 2 markers per edge, 12 floats each
+      size: this.maxEdges * 2 * 64, // 2 markers per edge, 12 floats each
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'edge-marker-buffer'
     });
@@ -471,7 +471,7 @@ export class FloatingEdgeRenderer {
   }
   
 private createMarkerPipeline(format: GPUTextureFormat) {
-    const markerDepth = Math.min(Z_LAYERS.NODES, Z_LAYERS.EDGES) + 0.1;
+    const markerDepth = Math.max(Z_LAYERS.NODES, Z_LAYERS.EDGES) + 0.1;
 
     const markerShaderCode = `
       struct Uniforms {
@@ -486,6 +486,8 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         padding1: vec2<f32>,      // offset 24-32 (padding to align next vec4)
         color: vec4<f32>,         // offset 32-48 (16-byte aligned)
         padding2: vec2<f32>,      // offset 48-56
+        padding3: vec2<f32>,      // offset 56-64 -> make total struct size 64 bytes (16 floats)
+
     }
       
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -518,15 +520,15 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         let localPos = positions[vertexIndex];
         
         // Rotate to align with direction
-        let angle = atan2(marker.direction.y, marker.direction.x);
-        let cosA = cos(angle);
-        let sinA = sin(angle);
-        let rotated = vec2<f32>(
-          localPos.x * cosA - localPos.y * sinA,
-          localPos.x * sinA + localPos.y * cosA
-        );
+        //let angle = atan2(marker.direction.y, marker.direction.x);
+        //let cosA = cos(angle);
+        //let sinA = sin(angle);
+        //let rotated = vec2<f32>(
+         // localPos.x * cosA - localPos.y * sinA,
+         // localPos.x * sinA + localPos.y * cosA
+        //);
         
-        let worldPos = marker.position + rotated * marker.size;
+        let worldPos = marker.position + localPos * marker.size;
         
         var output: VertexOutput;
         output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${markerDepth}, 1.0);
@@ -702,8 +704,8 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       },
       depthStencil: {
         format: 'depth24plus',
-        depthWriteEnabled: false,     
-        depthCompare: 'always',         
+        depthWriteEnabled: true,     
+        depthCompare: 'less',         
       },
       multisample: {count: parseInt(this.sampleCount)}
     });
@@ -900,7 +902,6 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
     const targetNode = nodes.find(n => n.id === edge.targetNodeId);
     
-    // default marker size in world units (7 for now)
     const markerSize = 7;
     
     // Source marker
@@ -914,28 +915,29 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         y: sourceNode!.data.position.y - firstVertex!.y
       };
       
-      const length = Math.sqrt(direction!.x ** 2 + direction.y ** 2);
+      const length = Math.sqrt(direction.x ** 2 + direction.y ** 2);
       if (length > 0) {
         const normalized = {
           x: direction.x / length,
           y: direction.y / length
         };
         
-        // Position marker at source node edge
+        // Source marker points AWAY from the node
         const sourceEdge = this.connectionCalculator.calculateNodeEdgePoint(
           sourceNode!.data.position,
           sourceNode!.visual!.size,
           sourceNode!.visual!.shape as string,
-          { x: -normalized.x, y: -normalized.y }
+          { x: -normalized.x, y: -normalized.y } // Point outward from source
         );
         
-markers.push({
-  position: [sourceEdge.x, sourceEdge.y],
-  direction: [normalized.x, normalized.y],
-  size: markerSize,
-  markerType: this.getMarkerTypeValue(edge.style.sourceMarker),
-  color: [1.0, 0.0, 0.0, 1.0]  // RED for source marker
-});
+        
+        markers.push({
+          position: [sourceEdge.x, sourceEdge.y],
+          direction: [normalized.x, normalized.y], // Direction AWAY from source
+          size: markerSize,
+          markerType: this.getMarkerTypeValue(edge.style.sourceMarker),
+          color: edge.style.color
+        });
       }
     }
     
@@ -957,23 +959,23 @@ markers.push({
           y: direction.y / length
         };
         
-        // Position marker at target node edge
         const targetEdge = this.connectionCalculator.calculateNodeEdgePoint(
           targetNode!.data.position,
           targetNode!.visual!.size,
           targetNode!.visual!.shape as string,
-          { x: -normalized.x, y: -normalized.y }
+          { x: -normalized.x, y: -normalized.y } 
         );
         
-markers.push({
-  position: [targetEdge.x, targetEdge.y],
-  direction: [normalized.x, normalized.y],
-  size: markerSize,
-  markerType: this.getMarkerTypeValue(edge.style.targetMarker),
-  color: [0.0, 0.0, 1.0, 1.0]  // BLUE for target marker
-});
+        markers.push({
+          position: [targetEdge.x, targetEdge.y],
+          direction: [normalized.x, normalized.y],
+          size: markerSize,
+          markerType: this.getMarkerTypeValue(edge.style.targetMarker),
+          color: edge.style.color
+        });
       }
     }
+    
     console.log('Generated markers:', markers);
     
     return markers;
@@ -1077,37 +1079,35 @@ markers.push({
     if (allMarkers.length > 0) {
     const flatMarkerData = new Float32Array(allMarkers.length * 14); // Changed from 12 to 14!
       allMarkers.forEach((marker, i) => {
-      const offset = i * 14; // Changed from 12 to 14
-      flatMarkerData[offset + 0] = marker.position[0];
-      flatMarkerData[offset + 1] = marker.position[1];
-      flatMarkerData[offset + 2] = marker.direction[0];
-      flatMarkerData[offset + 3] = marker.direction[1];
-      flatMarkerData[offset + 4] = marker.size;
-      flatMarkerData[offset + 5] = marker.markerType;
-      flatMarkerData[offset + 6] = 0; // padding1
-      flatMarkerData[offset + 7] = 0; // padding1
-      flatMarkerData[offset + 8] = marker.color[0];   // color now at offset 8
-      flatMarkerData[offset + 9] = marker.color[1];
-      flatMarkerData[offset + 10] = marker.color[2];
-      flatMarkerData[offset + 11] = marker.color[3];
-      flatMarkerData[offset + 12] = 0; // padding2
-      flatMarkerData[offset + 13] = 0; // padding2
+        const offset = i * 16; // Changed from 12 to 14
+        flatMarkerData[offset + 0] = marker.position[0];
+        flatMarkerData[offset + 1] = marker.position[1];
+        flatMarkerData[offset + 2] = marker.direction[0];
+        flatMarkerData[offset + 3] = marker.direction[1];
+        flatMarkerData[offset + 4] = marker.size;
+        flatMarkerData[offset + 5] = marker.markerType;
+        flatMarkerData[offset + 6] = 0; // padding1
+        flatMarkerData[offset + 7] = 0; // padding1
+        flatMarkerData[offset + 8] = marker.color[0];   // color now at offset 8
+        flatMarkerData[offset + 9] = marker.color[1];
+        flatMarkerData[offset + 10] = marker.color[2];
+        flatMarkerData[offset + 11] = marker.color[3];
+        flatMarkerData[offset + 12] = 0; // padding2
+        flatMarkerData[offset + 13] = 0; // padding2
+        flatMarkerData[offset + 14] = 0; // padding3
+        flatMarkerData[offset + 15] = 0; // padding3
       });
       this.device.queue.writeBuffer(this.markerBuffer, 0, flatMarkerData);
       
       renderPass.setPipeline(this.markerPipeline);
       renderPass.setBindGroup(0, this.markerBindGroup);
       console.log('About to draw:', {
-  vertices: 6,
-  instanceCount: allMarkers.length,
-  bufferLength: flatMarkerData.length,
-  expectedLength: allMarkers.length * 14
-});
-
-renderPass.setPipeline(this.markerPipeline);
-renderPass.setBindGroup(0, this.markerBindGroup);
-renderPass.draw(6, allMarkers.length);
-      renderPass.draw(6, allMarkers.length);
+      vertices: 6,
+      instanceCount: allMarkers.length,
+      bufferLength: flatMarkerData.length,
+      expectedLength: allMarkers.length * 14
+    });
+    renderPass.draw(6, allMarkers.length);
       console.log('Rendered markers count:', allMarkers.length);
     }
     

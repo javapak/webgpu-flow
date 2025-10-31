@@ -24,10 +24,6 @@ export const VisualContentNodesTest = () => {
         }} 
       />
       
-      
-
-
-
 
       <Node 
         id="some-server" 
@@ -69,7 +65,7 @@ export const VisualContentNodesTest = () => {
       />
 
  <Node 
-        id="some-service" 
+        id="targetTest" 
         type="test" 
         position={{ x: 0, y: -100 }} 
         data={{ label: "Actor (User)" }}
@@ -86,7 +82,7 @@ export const VisualContentNodesTest = () => {
         }} 
       />
 
-      <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="some-service" userVertices={[]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 2, sourceMarker: 'open-arrow', targetMarker: 'circle'}}/>
+      <Edge id='bye' data={{label: 'queries'}} sourceNodeId="some-actor" targetNodeId="targetTest" userVertices={[]} style={{color: [0,0,0,1], labelColor: '#ffffff', thickness: 3, sourceMarker: 'square', targetMarker: 'square'}}/>
 
     </>
   );

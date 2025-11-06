@@ -723,8 +723,8 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   
   // screenPoint comes in screen/CSS coordinates
   // With CSS transform, rect size reflects the transformed size
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
+  const scaleX = (canvas.width / rect.width) * 0.5;
+  const scaleY = (canvas.height / rect.height) * 0.5;
   
   // Scale to canvas coordinates
   const canvasX = screenPoint.x * scaleX;

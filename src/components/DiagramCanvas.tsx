@@ -630,8 +630,8 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const screenY = e.clientY - rect.top;
     
     // Convert screen to canvas coordinates
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
+    const scaleX = (canvasRef.current.width / rect.width) * 0.5;
+    const scaleY = (canvasRef.current.height / rect.height) * 0.5;
     const canvasX = screenX * scaleX;
     const canvasY = screenY * scaleY;
     
@@ -752,7 +752,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
     return Math.max(nodeInfo.depth, ...nodeInfo.children.map((child: any) => getMaxDepth(child)));
   };
-
+  
   return (
     <>
     <div style={{ overflow: 'hidden', width: `${width}px`, height: `${height}px` }} >
@@ -764,7 +764,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
           width: `${width}px`,
           height: `${height}px`,
           cursor: currentCursor,
-          transform: `scale(${internalResolutionRef.current.width / width}, ${internalResolutionRef.current.height / height})`,
+          transform: `scale(${(internalResolutionRef.current.width / width) * 0.5}, ${(internalResolutionRef.current.height / height) * 0.5})`,
           touchAction: isMobile ? 'none' : 'auto',
           userSelect: 'none',
           backgroundColor: selectedNodeType ? '#f0f8ff' : 'transparent'

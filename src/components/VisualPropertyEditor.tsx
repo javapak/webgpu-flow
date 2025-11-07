@@ -62,7 +62,7 @@ export default function VisualPropertyEditor() {
     return (
     <>
     {interaction.selectedNodes.length > 0 && (
-        <div style={{margin: 50, height: '100%'}} className='is-over-viewport-unselectable'>
+        <div style={{margin: 100}} className='is-over-viewport-unselectable'>
             <h3>Visual properties:</h3>
             
             {interaction.selectedNodes[0].data.label && (<div><div><FontPicker onChange={onChangeFont} value={interaction.selectedNodes[0].visual!.labelFont as DiagramFont}/></div><div><ColorInput title='Label text color' label='Text color' pb={10} w={150} fixOnBlur={false}  value={textHexValue} defaultValue='#ffffff' 

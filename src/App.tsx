@@ -15,6 +15,7 @@ const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 };
 
+
 const getOptimalCanvasSize = () => {
   const isMobile = isMobileDevice();
   if (isMobile) {
@@ -25,7 +26,7 @@ const getOptimalCanvasSize = () => {
   } else {
     return {
       width: window.innerWidth - 500,
-      height: window.innerHeight - 300
+      height: window.innerHeight - 30
     };
   }
 };

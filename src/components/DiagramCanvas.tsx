@@ -199,12 +199,22 @@ useEffect(() => {
 
   const getCanvasTouchPos = useCallback((touch: Touch) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
+    if (!rect || !canvasRef.current) return { x: 0, y: 0 };
+
+
+    const visualX = touch.clientX - rect.left;
+    const visualY = touch.clientY - rect.top;
+
+
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
     
     return {
-      x: touch.clientX - rect.left,
-      y: touch.clientY - rect.top,
+      x: visualX * scaleX,
+      y: visualY * scaleY
     };
+
+
   }, []);
 
   const performHitTest = useCallback((canvasPos: { x: number; y: number }) => {

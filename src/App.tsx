@@ -9,6 +9,7 @@ import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
+import PropertyEditorPanel from './components/PropertyEditorPanel';
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -203,7 +204,6 @@ export const DiagramDemo: React.FC = () => {
             </div>
           )}
 
-          <div style={{position: 'absolute',  placeSelf: 'top',  top: 150, zIndex: '100', height: '100%', overflow: 'hidden' }}><VisualPropertyEditor/></div>
 
           <div style={{position: 'fixed', paddingTop: 200, paddingRight: 50, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
       
@@ -288,6 +288,7 @@ export const DiagramDemo: React.FC = () => {
               
         </div>)}
       </div>
+      <PropertyEditorPanel />
     </div>
   );
 };

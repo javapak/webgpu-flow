@@ -25,12 +25,21 @@ a:hover {
 }
 
 div.SettingsContentContainer > * {
-  margin: 5%;
+  margin: 50px;
+}
+
+div.PropertyEditorContainer {
+  padding: 50px;
+  border-width: 0px 0px 0px 2px;
+  border-color: #1d1d1d;
+  border-style: groove;
+  
 }
 
 body {
   margin: 0;
   display: flex;
+  flex-direction: row !important;
   overflow: hidden;
   place-items: center;
   background-color: #313131ff !important;

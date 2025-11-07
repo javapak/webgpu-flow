@@ -630,8 +630,8 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const screenY = e.clientY - rect.top;
     
     // Convert screen to canvas coordinates
-    const scaleX = (canvasRef.current.width / rect.width) * 0.5;
-    const scaleY = (canvasRef.current.height / rect.height) * 0.5;
+    const scaleX = (canvasRef.current.width / rect.width) * 0.7;
+    const scaleY = (canvasRef.current.height / rect.height) * 0.7;
     const canvasX = screenX * scaleX;
     const canvasY = screenY * scaleY;
     
@@ -764,7 +764,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
           width: `${width}px`,
           height: `${height}px`,
           cursor: currentCursor,
-          transform: `scale(${(internalResolutionRef.current.width / width) * 0.5}, ${(internalResolutionRef.current.height / height) * 0.5})`,
+          transform: `scale(${(internalResolutionRef.current.width / width) * 0.7}, ${(internalResolutionRef.current.height / height) * 0.7})`,
           touchAction: isMobile ? 'none' : 'auto',
           userSelect: 'none',
           backgroundColor: selectedNodeType ? '#f0f8ff' : 'transparent'

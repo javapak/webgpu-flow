@@ -26,7 +26,7 @@ const getOptimalCanvasSize = () => {
   } else {
     return {
       width: window.innerWidth - 500,
-      height: window.innerHeight - 30
+      height: window.innerHeight - 300
     };
   }
 };

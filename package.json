@@ -13,6 +13,8 @@
     "@fluentui/react-icons": "^2.0.311",
     "@mantine/core": "^8.3.2",
     "@mantine/hooks": "^8.3.2",
+    "allotment": "^1.20.4",
+    "ecore-ts": "^0.17.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typegpu": "^0.7.1",

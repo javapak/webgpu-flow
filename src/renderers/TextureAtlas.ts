@@ -16,7 +16,7 @@ export class TextureAtlas {
   private entries: Map<string, TextureAtlasEntry> = new Map();
   
   // Atlas configuration
-  private readonly ATLAS_SIZE = 4096; 
+  private readonly ATLAS_SIZE = 8192; 
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;

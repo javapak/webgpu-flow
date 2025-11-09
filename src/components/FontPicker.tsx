@@ -9,6 +9,7 @@ interface FontPickerProps {
 export function FontPicker({ value, onChange }: FontPickerProps) {
   return (
     <NativeSelect
+      w={150}
       dir=""
       title='Select Font'
       label='Font'

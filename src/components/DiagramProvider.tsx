@@ -23,7 +23,6 @@ export interface EdgeDrawingState {
 
 
 export interface DiagramContextValue extends DiagramState {
-  
   addNode: (node: DiagramNode) => void;
   addEdge: (edge: DiagramEdge) => void;
   removeNode: (nodeId: string) => void;
@@ -42,6 +41,8 @@ export interface DiagramContextValue extends DiagramState {
   hitTestWithHandles: (screenPoint: Point) => { nodes: DiagramNode[]; resizeHandle: ResizeHandle };
   mode: InteractionMode;
   drawingState: EdgeDrawingState;
+  focusedOnInput: boolean;
+  setFocusedOnInput: (val: boolean) => void;
   toggleMode: () => void;
   exitDrawMode: () => void;
   startDrawing: (nodeId: string) => void;
@@ -699,6 +700,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const [smaaEnabled, setSMAAEnabledState] = useState(false);
   const [sampleCount, setSampleCount] = useState('1');
   const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
+  const [focusedOnInput, setFocusedOnInput] = useState(false);
   const [drawingState, setDrawingState] = useState<EdgeDrawingState>({
     isDrawing: false,
     sourceNodeId: null,
@@ -1212,42 +1214,44 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'e' || e.key === 'E') {
-        toggleMode();
-      }
-      else if (e.key === 'Backspace' || e.key === 'Delete') {
-        if (mode === InteractionMode.DRAW_EDGE) {
-          cancelDrawing();
+      if (!focusedOnInput) {
+        if (e.key === 'e' || e.key === 'E') {
+          toggleMode();
         }
-        else if (state.interaction.selectedEdges.length > 0) {
-          if (state.interaction.selectedVertex) {
-            removeEdgeVertex(
-              state.interaction.selectedVertex.edgeId, 
-              state.interaction.selectedVertex.vertexIndex
-            );
-            clearVertexSelection();
-            clearEdgeSelection();
-            return;
+        else if (e.key === 'Backspace' || e.key === 'Delete') {
+          if (mode === InteractionMode.DRAW_EDGE) {
+            cancelDrawing();
           }
-          state.interaction.selectedEdges.forEach(edge => {
-            removeEdge(edge.id);
-          });
-        }
-        
-        else if (state.interaction.selectedNodes.length > 0) {
-          state.interaction.selectedNodes.forEach(node => {
-            removeNode(node.id);
-          });
-        }
+          else if (state.interaction.selectedEdges.length > 0) {
+            if (state.interaction.selectedVertex) {
+              removeEdgeVertex(
+                state.interaction.selectedVertex.edgeId, 
+                state.interaction.selectedVertex.vertexIndex
+              );
+              clearVertexSelection();
+              clearEdgeSelection();
+              return;
+            }
+            state.interaction.selectedEdges.forEach(edge => {
+              removeEdge(edge.id);
+            });
+          }
+          
+          else if (state.interaction.selectedNodes.length > 0) {
+            state.interaction.selectedNodes.forEach(node => {
+              removeNode(node.id);
+            });
+          }
 
-      } else if (e.key === 'Escape') {
-        exitDrawMode();
+        } else if (e.key === 'Escape') {
+          exitDrawMode();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleMode, exitDrawMode, cancelDrawing, state.interaction, removeEdge, removeNode]);
+  }, [toggleMode, exitDrawMode, cancelDrawing, state.interaction, focusedOnInput, removeEdge, removeNode]);
 
 const selectEdge = useCallback((edge: DiagramEdge | null) => {
   dispatch({ type: 'SELECT_EDGE', edge });
@@ -1546,7 +1550,9 @@ useEffect(() => {
     handleSampleCountChange,
     handleSupersamplingChange,
     sampleCount,
-    supersamplingValue
+    supersamplingValue,
+    focusedOnInput,
+    setFocusedOnInput
     
   }), [
     state,
@@ -1560,6 +1566,8 @@ useEffect(() => {
     getVisibleNodes,
     hitTestPoint,
     hitTestWithHandles,
+    focusedOnInput,
+    setFocusedOnInput,
     setViewport,
     screenToWorld,
     worldToScreen,

@@ -80,6 +80,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     completeEdge,
     hitTestEdge,
     addControlPoint,
+    setFocusedOnInput,
+    focusedOnInput,
     endDrag,
     setViewport,
     screenToWorld,
@@ -523,6 +525,10 @@ const handleMouseMove = useCallback((e: React.MouseEvent) => {
 
 const handleMouseDown = useCallback((e: React.MouseEvent) => {
   if (isMobile) return;
+
+  if (focusedOnInput) {
+    setFocusedOnInput(false);
+  }
   
   const canvasPos = getCanvasMousePos(e);
   const worldPos = screenToWorld(canvasPos);
@@ -604,7 +610,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
       onCanvasClick?.(hitResult.worldPos);
     }
   }
-}, [isMobile, getCanvasMousePos, drawingState, startDrawing, addControlPoint, mode, performHitTest, 
+}, [isMobile, getCanvasMousePos, drawingState, startDrawing, focusedOnInput, setFocusedOnInput, addControlPoint, mode, performHitTest, 
     startDrag, selectNode, clearSelection, screenToWorld, onNodeClick, onCanvasClick, 
     interaction. selectedEdges, selectEdge]);
 
@@ -764,8 +770,8 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
   };
   
   return (
-    <>
-    <div style={{ overflow: 'hidden', width: `${width}px`, height: `${height}px` }} >
+    <div style={{width: `${width}px`, height: `${height}px` }} >
+
       <canvas
         ref={canvasRef}
         width={internalResolutionRef.current.width}
@@ -835,9 +841,8 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
         )}
       </div>
 
-      
     </div>
-    </>
+
   );
 };
 

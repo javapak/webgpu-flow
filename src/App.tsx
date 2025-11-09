@@ -1,14 +1,17 @@
 
 import React, { useState, useEffect, useCallback, useRef} from 'react';
 import { DiagramCanvas } from './index';
-import { NodePalette, type NodeType } from './components/NodePalette';
+import { type NodeType } from './components/NodePalette';
+import "allotment/dist/style.css";
 import '@mantine/core/styles.css'
 import './App.css';
 import { VisualContentNodesTest } from './components/VisualContentNodesTest';
-import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
+import { ActionIcon, Center, Checkbox, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
 import PropertyEditorPanel from './components/PropertyEditorPanel';
+import { Allotment } from 'allotment';
+import "allotment/dist/style.css";
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -33,7 +36,6 @@ const getOptimalCanvasSize = () => {
 
 export const DiagramDemo: React.FC = () => {
   const [isMobile, setIsMobile] = useState(isMobileDevice());
-  const [paletteVisible, setPaletteVisible] = useState(!isMobileDevice());
   const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
@@ -82,21 +84,12 @@ export const DiagramDemo: React.FC = () => {
       setIsMobile(mobile);
       setCanvasSize(getOptimalCanvasSize());
       
-      // Auto-hide palette on mobile when resizing
-      if (mobile && window.innerWidth < 768) {
-        setPaletteVisible(false);
-      }
     };
     handleResize(); // Initial check
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  const handleNodeDragStart = (nodeType: NodeType, event: React.DragEvent) => {
-    console.log('Started dragging node type:', nodeType.name, event);
-  };
-
 
   const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
     console.log(`Dropped ${nodeType.name} at position:`, position);
@@ -111,112 +104,19 @@ export const DiagramDemo: React.FC = () => {
      setSettingsOpen(!settingsOpen);
   }, [settingsOpen, setSettingsOpen])
 
-
-  const togglePalette = () => {
-    setPaletteVisible(!paletteVisible);
-  };
-  
-
   return (
-    
-      <div style={{ 
-        backgroundColor: '#313131ff',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        overflow: 'hidden'
-      }}>
-        {/* Mobile Header */}
-        {isMobile && (
-          <div style={{
-            padding: '12px 16px',
-            backgroundColor: '#404040ff',
-            borderBottom: '1px solid #555',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexShrink: 0
-          }}>
-            <h2 style={{ 
-              margin: 0, 
-              color: '#ffffff', 
-              fontSize: '18px',
-              fontWeight: 'bold'
-            }}>
-              WebGPU Flow Editor
-            </h2>
-            <button
-              onClick={togglePalette}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: paletteVisible ? '#0066cc' : '#777',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                minHeight: '44px',
-                minWidth: '44px',
-                touchAction: 'manipulation'
-              }}
-            >
-              {paletteVisible ? 'Hide' : 'Show'} Palette
-            </button>
-          </div>
-        )}
+    <div style={{ width: '100vw', height: '100vh'}}>
+      <Allotment defaultSizes={[80, 20]}>
 
-        {/* Node Palette - Now with mobile support */}
-        {paletteVisible && (
-          <div style={{ 
-            flex: isMobile ? 'none' : '0 0 auto',
-            width: isMobile ? '100%' : 'auto',
-            maxHeight: isMobile ? '40vh' : 'none',
-            overflowY: isMobile ? 'auto' : 'visible',
-            backgroundColor: isMobile ? '#383838ff' : 'transparent',
-            borderBottom: isMobile ? '1px solid #555' : 'none'
-          }}>
-            <NodePalette 
-              onNodeDragStart={handleNodeDragStart}
-              isMobile={isMobile}
-            />
-          </div>
-        )}
-        
         {/* Main Canvas Area */}
-        <div style={{ 
-          flex: '1',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 0,
-          position: 'relative'
-        }}>
-          
-          {/* Desktop Header */}
-          {!isMobile && (
-            <div style={{ marginBottom: '16px', padding: '20px 20px 0' }}>
-              <h2 style={{ margin: '0 0 8px 0', color: '#ffffffff' }}>
-                WORK IN PROGRESS WEBGPU FLOW DIAGRAM EDITOR
-              </h2>
-              <p style={{ margin: '0', color: '#ffffffff', fontSize: '14px' }}>
-                - shape, resizing interactions, and label support are work in progress
-              </p>
-            </div>
-          )}
-
-
-          <div style={{position: 'fixed', paddingTop: 200, paddingRight: 50, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
-      
+        <div style={{display: 'relative', height: '100vh'}}>      
 
           {/* Canvas Container */}
-          <div style={{ 
-            flex: '1',
-            padding: isMobile ? '8px' : '16px',
-            backgroundColor: 'inherit',
-            position: 'relative',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}>
+
+          <Center style={{position: 'relative'}} h='100vh'>
+            <div style={{top: '-215px', left: `${window.innerWidth-515}px`, display: 'block', position: 'relative', zIndex: 10}}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
+
+
 
             <DiagramCanvas 
               width={canvasSize.width}
@@ -228,7 +128,7 @@ export const DiagramDemo: React.FC = () => {
             />
 
             <VisualContentNodesTest />
-          </div>
+          </Center>
 
           {/* Mobile Instructions */}
           {isMobile && (
@@ -261,7 +161,7 @@ export const DiagramDemo: React.FC = () => {
               backgroundColor: '#222',
               zIndex: 200,
               boxShadow: '0 0 16px #000a',
-              padding: 24,
+              padding: 10,
               overflowY: 'auto'
             }}>
               <div className="SettingsContentContainer">
@@ -287,7 +187,10 @@ export const DiagramDemo: React.FC = () => {
               
         </div>)}
       </div>
+      <div>
       <PropertyEditorPanel />
+      </div>
+    </Allotment>
     </div>
   );
 };

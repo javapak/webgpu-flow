@@ -25,9 +25,15 @@ export class LabelRenderer {
     this.sampleCount = sampleCount;
   }
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
+    try {
     await this.setupLabelRenderPipeline();
+    }
+    catch (e) {
+      return false;
+    }
     console.log('LabelRenderer initialized successfully');
+    return true;
   }
 
   private async setupLabelRenderPipeline() {
@@ -248,7 +254,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
 
   for (const node of nodesWithLabels) {
     const label = node.data.label!.trim();
-    const fontSize = 100;
+    const fontSize = 90;
     const fontFamily = node.visual?.labelFont || 'Arial';
     let textColor = '#ffffffff';
 
@@ -300,7 +306,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     for (const edge of edgesWithLabels) {
     console.log('edge label is being noticed OwO');
     const label = edge.data?.label!.trim();
-    const fontSize = 100;
+    const fontSize = 70;
     let textColor = '#ffffffff';
     if (edge.style.labelColor)
       textColor = edge.style.labelColor;

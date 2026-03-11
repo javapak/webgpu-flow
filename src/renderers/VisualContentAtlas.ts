@@ -20,7 +20,7 @@ export class VisualContentAtlas {
   private imageCache: Map<string, HTMLImageElement> = new Map();
   
   // Atlas configuration
-  private readonly ATLAS_SIZE = 2048; 
+  private readonly ATLAS_SIZE = 8192; // Max
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;

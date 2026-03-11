@@ -1,4 +1,9 @@
-import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef, useState } from "react";
+// NOTE TO-DO: DISABLED CULLING METHODS DUE TO BUGGY EDGES. NEED TO COME BACK TO FIX. 
+// (example - node gets culled for being non visible, 
+// but because node gets cullled and may be a source or target node, 
+// the edge also gets culled even if the edge also points to an on-screen node.)
+
+import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef, useState, useLayoutEffect } from "react";
 import { useSpatialIndex } from "../hooks/useSpatialIndex";
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
 import { MouseInteractions, type ResizeHandle } from "../utils/MouseInteractions";
@@ -6,6 +11,7 @@ import type { Viewport, DiagramState, DiagramNode, DiagramEdge, SpatialDiagramHo
 import type { AABB, Point } from "../types/spatial-indexing/types";
 import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
 import { GridSnapping } from '../utils/GridSnapping';
+import {globalRenderer} from '../../../webgpu-flow/src/renderers/gpuInstance'
 
 enum InteractionMode {
   SELECT = 'select',
@@ -689,7 +695,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   // State and refs
   const [state, dispatch] = useReducer(diagramReducer, initialState);
   const spatial: SpatialDiagramHook = useSpatialIndex(initialBounds);
-  const rendererRef = useRef<WebGPURenderer | null>(null);
+  const rendererRef = useRef<WebGPURenderer | null>(globalRenderer);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef(state); // Keep current state in ref
   const [supersamplingValue, setSuperSamplingValue] = useState('Disabled');
@@ -786,78 +792,105 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     };
     
     const visible = spatial.getVisibleNodes(viewportBounds);
-    return visible;
+    return state.nodes;
   }, [spatial, state.viewport, state.nodes.length, canvasRef]);
   
+useLayoutEffect(() => {
+   if (canvasRef.current && rendererRef.current?.initialized && rendererRef.current.getDeviceRef()) {
+        rendererRef.current.attachCanvas(canvasRef.current);
 
-
-  // Simplified render scheduling
- const scheduleRender = useCallback(() => {
-    if (rendererRef.current?.initialized && canvasRef.current) {
-      // Use requestAnimationFrame to ensure we render with the LATEST state
-      requestAnimationFrame(() => {
-        if (!rendererRef.current?.initialized || !canvasRef.current) return;
-        
-        // Get fresh state values directly from ref
-        const currentState = stateRef.current;
-        const canvas = canvasRef.current;
-        
-        // Calculate visible nodes using CANVAS dimensions, not viewport dimensions
-        // This is critical for proper zoom rendering!
-        const halfWidth = canvas.width / (2 * currentState.viewport.zoom);
-        const halfHeight = canvas.height / (2 * currentState.viewport.zoom);
-        
-        const viewportBounds: AABB = {
-          minX: currentState.viewport.x - halfWidth,
-          minY: currentState.viewport.y - halfHeight,
-          maxX: currentState.viewport.x + halfWidth,
-          maxY: currentState.viewport.y + halfHeight,
-        };
-        
-        const visibleNodes = spatial.getVisibleNodes(viewportBounds);
-        const visibleEdges = currentState.edges.filter((edge) => 
-          visibleNodes.find((node) => node.id === edge.sourceNodeId || node.id === edge.targetNodeId));
+  
+  const currentState = stateRef.current;
+  rendererRef.current.render(
+      state.nodes, // for now we render it all.
+      currentState.edges,
+      currentState.viewport,
+      { width: canvasRef.current.width, height: canvasRef.current.height }
       
-        const canvasSize = {
-          width: canvas.width,
-          height: canvas.height,
-        };
-        
-        try {
-          rendererRef.current!.render(
-            visibleNodes, 
-            visibleEdges, 
-            currentState.viewport, 
-            canvasSize, 
-            currentState.interaction.selectedNodes, 
-            currentState.interaction.selectedEdges, 
-            drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined
-          );
-        } catch (error) {
-          console.error('Render error:', error);
-        }
-      });
-    }
-  }, [spatial, drawingState]); // Depend on spatial and drawingState
+    );
+  }}, [spatial]);
 
-  // Initialize renderer
-  const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {
-    canvasRef.current = canvas;
-    
-    if (!rendererRef.current) {
-      rendererRef.current = new WebGPURenderer();
+
+
+
+const performSyncRender = useCallback(() => {
+  const renderer = rendererRef.current;
+  const canvas = canvasRef.current;
+  const currentState = stateRef.current;
+
+  if (!renderer?.initialized || !canvas) return;
+
+  try {
+    renderer.render(
+      spatial.getVisibleNodes({
+        minX: currentState.viewport.x - canvas.width / (2 * currentState.viewport.zoom),
+        minY: currentState.viewport.y - canvas.height / (2 * currentState.viewport.zoom),
+        maxX: currentState.viewport.x + canvas.width / (2 * currentState.viewport.zoom),
+        maxY: currentState.viewport.y + canvas.height / (2 * currentState.viewport.zoom),
+      }),
+      currentState.edges,
+      currentState.viewport,
+      { width: canvas.width, height: canvas.height },
+    );
+  } catch (e) {
+    console.error("Initial render failed", e);
+  }
+}, [spatial]);
+
+const scheduleRender = useCallback(() => {
+  const renderer = rendererRef.current;
+  const canvas = canvasRef.current;
+  const currentState = stateRef.current;
+
+  //Guard check BEFORE scheduling
+  if (!renderer?.initialized || !canvas) return;
+  if (renderer.isBusy || renderer.isResizing) return; // guard before ANY work
+
+
+
+  const { viewport, edges, interaction } = currentState;
+  const { width, height } = canvas;
+  
+  const halfWidth = width / (2 * viewport.zoom);
+  const halfHeight = height / (2 * viewport.zoom);
+  
+  const viewportBounds = {
+    minX: viewport.x - halfWidth,
+    minY: viewport.y - halfHeight,
+    maxX: viewport.x + halfWidth,
+    maxY: viewport.y + halfHeight,
+  };
+
+  const visibleNodes = spatial.getVisibleNodes(viewportBounds);
+  
+  // Optimization: Use a Set for O(1) node lookup during edge filtering
+  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+  const visibleEdges = edges.filter(edge => 
+    visibleNodeIds.has(edge.sourceNodeId) || visibleNodeIds.has(edge.targetNodeId)
+  );
+
+  // 3. Schedule the actual GPU submission
+  const handle = requestAnimationFrame(() => {
+    // Re-verify references inside the async block
+    if (!rendererRef.current?.initialized || !canvasRef.current) return;
+
+    try {
+      rendererRef.current.render(
+        state.nodes, 
+        state.edges, 
+        viewport, 
+        { width, height }, 
+        interaction.selectedNodes, 
+        interaction.selectedEdges, 
+        drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined
+      );
+      renderer.rafHandle = handle;
+    } catch (error) {
+      console.error('WebGPU Render Error:', error);
     }
-    
-    const success = await rendererRef.current.initialize(canvas);
-    
-    if (success) {
-      scheduleRender();
-      return true;
-    } else {
-      console.warn('WebGPU initialization failed');
-      return false;
-    }
-  }, [scheduleRender]);
+  });
+}, [spatial, drawingState.isDrawing, drawingState.userVertices.length]);
+
 
   // Enhanced hit testing that also checks for resize handles
   const hitTestPoint = useCallback((screenPoint: Point) => {
@@ -990,9 +1023,9 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   useEffect(() => {
     if (state.interaction.selectedNodes.length > 0)
         
-        (document.getElementById('title-ref') as HTMLTitleElement).textContent = `Selected node: ${state.interaction.selectedNodes[0].id}`;
+        (document.getElementById('title-ref') as HTMLTitleElement).textContent = ` ETFA Explorer | Selected node: ${state.interaction.selectedNodes[0].id}`;
     else {
-      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'WebGPU Flow';
+      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'ETFA Explorer';
     }
   }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 
@@ -1039,6 +1072,25 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   }, [setAltKey]);
 
     // Check supersampling support when canvas size or MSAA changes
+  const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {
+    globalRenderer.onResizeComplete = () => scheduleRender();
+    canvasRef.current = canvas;
+    
+    if (!rendererRef.current) {
+        rendererRef.current = globalRenderer;
+    }
+    
+    const success = globalRenderer.initialized;
+    
+    if (success) {
+        await setViewport({ width: canvas.clientWidth, height: canvas.clientHeight });
+        scheduleRender();
+        return true;
+    } else {
+        console.warn('WebGPU initialization failed');
+        return false;
+    }
+}, [scheduleRender, setViewport]);
 
  
   useEffect(() => {

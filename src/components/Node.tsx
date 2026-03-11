@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { DiagramNode } from '../types';
 import { useDiagram } from './DiagramProvider';
 // Node component
-interface NodeProps {
+export interface NodeProps {
   id: string;
   type: string;
   position?: { x: number; y: number };

@@ -434,7 +434,7 @@ useEffect(() => {
       canvasRef.current.addEventListener('touchstart', 
         handleTouchStart as unknown as (e: TouchEvent) => void, {passive: false});
     }
-    return () =>  canvasRef.current!.removeEventListener('touchstart', handleTouchStart as unknown as (e: TouchEvent) => void);
+    return () =>  canvasRef.current?.removeEventListener('touchstart', handleTouchStart as unknown as (e: TouchEvent) => void);
   }, [handleTouchStart]);
 
   useEffect(() => {
@@ -442,7 +442,7 @@ useEffect(() => {
       canvasRef.current.addEventListener('touchmove', 
         handleTouchMove as unknown as (e: TouchEvent) => void, {passive: false});
     }
-    return () =>  canvasRef.current!.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
+    return () =>  canvasRef.current?.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
   }, [handleTouchMove]);
 
 
@@ -451,7 +451,7 @@ useEffect(() => {
       canvasRef.current.addEventListener('touchend', 
         handleTouchEnd as unknown as (e: TouchEvent) => void, {passive: false});
     }
-    return () =>  canvasRef.current!.removeEventListener('touchend', handleTouchEnd as unknown as (e: TouchEvent) => void);
+    return () =>  canvasRef.current?.removeEventListener('touchend', handleTouchEnd as unknown as (e: TouchEvent) => void);
   }, [handleTouchEnd]);
 
   useEffect(() => {
@@ -459,7 +459,7 @@ useEffect(() => {
       canvasRef.current.addEventListener('touchcancel', 
         handleTouchCancel as unknown as (e: TouchEvent) => void, {passive: false});
     }
-    return () =>  canvasRef.current!.removeEventListener('touchcancel', handleTouchCancel as unknown as (e: TouchEvent) => void);
+    return () =>  canvasRef.current?.removeEventListener('touchcancel', handleTouchCancel as unknown as (e: TouchEvent) => void);
   }, [handleTouchCancel]);
 
   
@@ -770,7 +770,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
   };
   
   return (
-    <div style={{width: `${width}px`, height: `${height}px` }} >
+    <div style={{width: `${width}px`, height: `${height}px`, overflow: 'hidden'}} >
 
       <canvas
         ref={canvasRef}

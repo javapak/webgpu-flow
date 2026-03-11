@@ -32,9 +32,9 @@ interface HandleInstanceData {
 export class WebGPURenderer {
   private root: any = null;
   private context: GPUCanvasContext | null = null;
-  private nodeRenderPipeline: GPURenderPipeline | null = null;
-  private handleRenderPipeline: GPURenderPipeline | null = null;
-  private gridRenderPipeline: GPURenderPipeline | null = null;
+  private static nodeRenderPipeline: GPURenderPipeline | null = null;
+  private static handleRenderPipeline: GPURenderPipeline | null = null;
+  private static gridRenderPipeline: GPURenderPipeline | null = null;
   private nodeBuffer: GPUBuffer | null = null;
   private handleBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer | null = null;
@@ -42,7 +42,7 @@ export class WebGPURenderer {
   private nodeBindGroup: GPUBindGroup | null = null;
   private handleBindGroup: GPUBindGroup | null = null;
   private gridBindGroup: GPUBindGroup | null = null;
-  private device: GPUDevice | null = null;
+  private static device: GPUDevice | null = null;
   public initialized = false;
   private canvas: HTMLCanvasElement | null = null;
   private labelRenderer: LabelRenderer | null = null;
@@ -63,6 +63,10 @@ export class WebGPURenderer {
   private smaaEnabled: boolean = false;
   private intermediateTexture: GPUTexture | null = null; 
   private intermediateTexture2: GPUTexture | null = null;
+  private _isBusy: boolean = false;
+  private _rafHandle: number | null = null;
+  onResizeComplete: (() => void) | null = null;
+
 
 
 
@@ -80,6 +84,10 @@ export class WebGPURenderer {
     return this._supersamplingManager;
   }
 
+  getDeviceRef() {
+    return WebGPURenderer.device;
+  }
+
   get isResizing() {
     return this._isResizing;
   }
@@ -92,19 +100,64 @@ export class WebGPURenderer {
     return (this._isResizing || this._isReconfiguring || this._renderInProgress);
   }
 
-  async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
+  set isBusy(val: boolean) {
+    this._isBusy = val;
+  }
+
+  set rafHandle(val: number) {
+    this._rafHandle = val;
+  }
+  
+
+  attachCanvas(canvas: HTMLCanvasElement) {
+  this.canvas = canvas;
+  this.context = canvas.getContext('webgpu');
+  
+  this.context?.configure({
+    device: WebGPURenderer.device!,
+    format: navigator.gpu.getPreferredCanvasFormat(),
+    alphaMode: 'premultiplied',
+  });
+  this.recreateSizeDependentTextures(canvas.width, canvas.height);
+
+}
+
+private recreateSizeDependentTextures(width: number, height: number) {
+  const sampleCountNum = parseInt(this.sampleCount);
+  
+  // Recreate depth texture
+  this._depthTexture?.destroy();
+  this._depthTexture = WebGPURenderer.device!.createTexture({
+    size: [width, height],
+    format: 'depth24plus',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    sampleCount: sampleCountNum
+  });
+
+  // Recreate MSAA texture if needed
+  if (sampleCountNum > 1) {
+    this.multisampledTexture?.destroy();
+    this.multisampledTexture = WebGPURenderer.device!.createTexture({
+      size: [width, height],
+      format: navigator.gpu.getPreferredCanvasFormat(),
+      sampleCount: sampleCountNum,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+  }
+}
+
+
+  async initialize(): Promise<boolean> {
     try {
       if (!navigator.gpu) {
         console.warn('WebGPU not supported in this browser');
         return false;
       }
-
-      this.canvas = canvas;
       
       // Initialize TypeGPU
       try {
         this.root = await tgpu.init();
-        this.device = this.root.device;
+        WebGPURenderer.device = this.root.device;
       } catch (error) {
         console.error('❌ Failed to initialize TypeGPU:', error);
         return false;
@@ -112,7 +165,7 @@ export class WebGPURenderer {
       
       // Check MSAA support
       try {
-        this._gpuCapibilitiesRef = new GPUCapabilities(this.device!);
+        this._gpuCapibilitiesRef = new GPUCapabilities(WebGPURenderer.device!);
         const msaaSupport = await this._gpuCapibilitiesRef.checkMSAASupport();
         
         // Ensure we start with a supported sample count
@@ -125,25 +178,6 @@ export class WebGPURenderer {
         this.sampleCount = '1'; // Fallback to no MSAA
       }
       
-      // Get WebGPU context
-      this.context = canvas.getContext('webgpu') as GPUCanvasContext;
-      if (!this.context) {
-        console.error('❌ Failed to get WebGPU context');
-        return false;
-      }
-
-      // Configure canvas
-      const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-      try {
-        this.context.configure({
-          device: this.device!,
-          format: canvasFormat,
-          alphaMode: 'premultiplied',
-        });
-      } catch (error) {
-        console.error('❌ Failed to configure canvas:', error);
-        return false;
-      }
 
       // Setup render pipelines
       try {
@@ -158,7 +192,7 @@ export class WebGPURenderer {
 
       // Initialize label renderer
       try {
-        this.labelRenderer = new LabelRenderer(this.device!, this.uniformBuffer!, this.sampleCount);
+        this.labelRenderer = new LabelRenderer(WebGPURenderer.device!, this.uniformBuffer!, this.sampleCount);
         await this.labelRenderer.initialize();
         console.log('✅ Label renderer initialized');
       } catch (error) {
@@ -166,21 +200,13 @@ export class WebGPURenderer {
         // Non-fatal - continue without labels
       }
 
-      // Initialize edge renderer
-      try {
-        this.edgeRenderer = new FloatingEdgeRenderer(this.device!, canvasFormat, 20, 1000, this.sampleCount);
-        console.log('✅ Edge renderer initialized');
-      } catch (error) {
-        console.error('❌ Failed to initialize edge renderer:', error);
-        // Non-fatal - continue without edges
-      }
 
       // Initialize visual renderer
       try {
-        this.visualRenderer = new VisualContentRenderer(this.device!, this.uniformBuffer!, this.sampleCount);
+        this.visualRenderer = new VisualContentRenderer(WebGPURenderer.device!, this.uniformBuffer!, this.sampleCount);
         await this.visualRenderer.initialize();
         
-        const edgeDetector = new ShaderBasedEdgeDetector(this.device!);
+        const edgeDetector = new ShaderBasedEdgeDetector(WebGPURenderer.device!);
         this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
         console.log('✅ Visual renderer initialized');
       } catch (error) {
@@ -189,7 +215,7 @@ export class WebGPURenderer {
       }
 
       try {
-        this._supersamplingManager = new SupersamplingManager(this.device!, this.sampleCount);
+        this._supersamplingManager = new SupersamplingManager(WebGPURenderer.device!, this.sampleCount);
       }
       catch (error) {
         console.log('SupersamplingManager init failed...');
@@ -201,24 +227,8 @@ export class WebGPURenderer {
         const sampleCountNum = parseInt(this.sampleCount);
         console.error(`Creating initial depth texture with sample count ${this.sampleCount}`);
         
-        this._depthTexture = this.device!.createTexture({
-          label: 'initial-depth-texture',
-          size: [this.canvas.width, this.canvas.height],
-          format: 'depth24plus',
-          usage: GPUTextureUsage.RENDER_ATTACHMENT,
-          sampleCount: sampleCountNum
-        });
 
-        if (sampleCountNum > 1) {
-          console.log(`🎨 Creating initial multisampled texture with sample count ${this.sampleCount}`);
-          this.multisampledTexture = this.device!.createTexture({
-            label: 'initial-multisampled-texture',
-            size: [this.canvas.width, this.canvas.height],
-            format: canvasFormat,
-            sampleCount: sampleCountNum,
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-          });
-        }
+
 
         
         console.log('Depth textures created');
@@ -229,7 +239,7 @@ export class WebGPURenderer {
 
       try {
         const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-        this.fxaaRenderer = new FXAARenderer(this.device!, canvasFormat);
+        this.fxaaRenderer = new FXAARenderer(WebGPURenderer.device!, canvasFormat);
       }
       catch (e) {
         console.error('Failed to create FXAA renderer:', e);
@@ -237,7 +247,7 @@ export class WebGPURenderer {
 
       try {
         const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-        this.smaaRenderer = new SMAARenderer(this.device!, canvasFormat);
+        this.smaaRenderer = new SMAARenderer(WebGPURenderer.device!, canvasFormat);
       } catch (e) { 
         console.error('Failed to create SMAA renderer:', e);
       }
@@ -307,14 +317,30 @@ private createIntermediateTexture(width: number, height: number) {
     label: 'intermediate-texture-for-aa'
   };
 
-  this.intermediateTexture = this.device!.createTexture(textureDescriptor);
+  this.intermediateTexture = WebGPURenderer.device!.createTexture(textureDescriptor);
   
   // Second texture for ping-pong when both SMAA and FXAA are enabled
-  this.intermediateTexture2 = this.device!.createTexture({
+  this.intermediateTexture2 = WebGPURenderer.device!.createTexture({
     ...textureDescriptor,
     label: 'intermediate-texture-2-for-aa'
   });
 }
+
+  async initializeLabelRenderer() {
+    return await this.labelRenderer?.initialize();
+  }
+
+  async initializeFloatingEdgeRenderer() {
+    this.edgeRenderer = new FloatingEdgeRenderer(
+          WebGPURenderer.device!,
+          navigator.gpu.getPreferredCanvasFormat(),
+          20,
+          1000,
+          this.sampleCount)
+  }
+
+
+
 
   setFXAAEnabled(enabled: boolean) {
     this.fxaaEnabled = enabled;
@@ -347,7 +373,7 @@ private createIntermediateTexture(width: number, height: number) {
     await new Promise(resolve => requestAnimationFrame(resolve));
     await new Promise(resolve => requestAnimationFrame(resolve));
     
-    if (this.canvas && this.device) {
+    if (this.canvas && WebGPURenderer.device) {
       const sampleCountNum = parseInt(count);
       
       try {
@@ -367,7 +393,7 @@ private createIntermediateTexture(width: number, height: number) {
         }
         
         // Wait again after destroying renderers
-        await this.device.queue.onSubmittedWorkDone();
+        await WebGPURenderer.device?.queue.onSubmittedWorkDone();
         console.log('Renderers destroyed');
         
         // Destroy textures
@@ -388,7 +414,7 @@ private createIntermediateTexture(width: number, height: number) {
         this.sampleCount = count;
         
         // Create new textures
-        this._depthTexture = this.device.createTexture({
+        this._depthTexture = WebGPURenderer.device!.createTexture({
           label: `depth-texture-msaa-${count}`,
           size: [this.canvas.width, this.canvas.height],
           format: 'depth24plus',
@@ -396,8 +422,9 @@ private createIntermediateTexture(width: number, height: number) {
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
         
+        
         if (sampleCountNum > 1) {
-          this.multisampledTexture = this.device.createTexture({
+          this.multisampledTexture = WebGPURenderer.device!.createTexture({
             label: `multisampled-color-${count}`,
             size: [this.canvas.width, this.canvas.height],
             format: navigator.gpu.getPreferredCanvasFormat(),
@@ -412,17 +439,17 @@ private createIntermediateTexture(width: number, height: number) {
         
 
         // Recreate renderers
-        this.labelRenderer = new LabelRenderer(this.device, this.uniformBuffer!, count);
+        this.labelRenderer = new LabelRenderer(WebGPURenderer.device, this.uniformBuffer!, count);
         await this.labelRenderer.initialize();
         
-        this.visualRenderer = new VisualContentRenderer(this.device, this.uniformBuffer!, count);
+        this.visualRenderer = new VisualContentRenderer(WebGPURenderer.device, this.uniformBuffer!, count);
         await this.visualRenderer.initialize();
         
-        const edgeDetector = new ShaderBasedEdgeDetector(this.device);
+        const edgeDetector = new ShaderBasedEdgeDetector(WebGPURenderer.device);
         this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
         
         this.edgeRenderer = new FloatingEdgeRenderer(
-          this.device,
+          WebGPURenderer.device,
           navigator.gpu.getPreferredCanvasFormat(),
           20,
           1000,
@@ -452,26 +479,26 @@ private createIntermediateTexture(width: number, height: number) {
   }
 
   private async setupRenderPipelines() {
-    if (!this.device) throw new Error('Device not initialized');
+    if (!WebGPURenderer.device) throw new Error('Device not initialized');
 
     // Create buffers
-    this.uniformBuffer = this.device.createBuffer({
+    this.uniformBuffer = WebGPURenderer.device.createBuffer({
       size: 80, // mat4x4 (64 bytes) + vec4 (16 bytes)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     // Grid uniform buffer now includes canvas size
-    this.gridUniformBuffer = this.device.createBuffer({
+    this.gridUniformBuffer = WebGPURenderer.device.createBuffer({
       size: 96, // mat4x4 (64 bytes) + vec4 viewport (16 bytes) + vec4 canvas size (16 bytes)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.nodeBuffer = this.device.createBuffer({
+    this.nodeBuffer = WebGPURenderer.device.createBuffer({
       size: 1000 * 64, // Support up to 1000 nodes (16 floats * 4 bytes each = 64 bytes per node)
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    this.handleBuffer = this.device.createBuffer({
+    this.handleBuffer = WebGPURenderer.device.createBuffer({
       size: 8 * 32, // Up to 8 handles per selected node (8 floats * 4 bytes each)
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
@@ -845,12 +872,12 @@ private createIntermediateTexture(width: number, height: number) {
       }
     `;
 
-    const nodeShaderModule = this.device.createShaderModule({ code: nodeShaderCode });
-    const handleShaderModule = this.device.createShaderModule({ code: handleShaderCode });
-    const gridShaderModule = this.device.createShaderModule({ code: gridShaderCode });
+    const nodeShaderModule = WebGPURenderer.device.createShaderModule({ code: nodeShaderCode });
+    const handleShaderModule = WebGPURenderer.device.createShaderModule({ code: handleShaderCode });
+    const gridShaderModule = WebGPURenderer.device.createShaderModule({ code: gridShaderCode });
 
     // Create bind group layouts
-    const bindGroupLayout = this.device.createBindGroupLayout({
+    const bindGroupLayout = WebGPURenderer.device.createBindGroupLayout({
       entries: [
         {
           binding: 0,
@@ -866,7 +893,7 @@ private createIntermediateTexture(width: number, height: number) {
     });
 
     // Grid bind group layout needs to match the new uniform structure
-    const gridBindGroupLayout = this.device.createBindGroupLayout({
+    const gridBindGroupLayout = WebGPURenderer.device.createBindGroupLayout({
       entries: [
         {
           binding: 0,
@@ -878,7 +905,7 @@ private createIntermediateTexture(width: number, height: number) {
     });
 
     // Create bind groups
-    this.nodeBindGroup = this.device.createBindGroup({
+    this.nodeBindGroup = WebGPURenderer.device.createBindGroup({
       layout: bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.uniformBuffer } },
@@ -886,7 +913,7 @@ private createIntermediateTexture(width: number, height: number) {
       ]
     });
 
-    this.handleBindGroup = this.device.createBindGroup({
+    this.handleBindGroup = WebGPURenderer.device.createBindGroup({
       layout: bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.uniformBuffer } },
@@ -894,7 +921,7 @@ private createIntermediateTexture(width: number, height: number) {
       ]
     });
 
-    this.gridBindGroup = this.device.createBindGroup({
+    this.gridBindGroup = WebGPURenderer.device.createBindGroup({
       layout: gridBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.gridUniformBuffer } }
@@ -902,15 +929,15 @@ private createIntermediateTexture(width: number, height: number) {
     });
 
     // Create render pipelines
-    const pipelineLayout = this.device.createPipelineLayout({
+    const pipelineLayout = WebGPURenderer.device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout]
     });
 
-    const gridPipelineLayout = this.device.createPipelineLayout({
+    const gridPipelineLayout = WebGPURenderer.device.createPipelineLayout({
       bindGroupLayouts: [gridBindGroupLayout]
     });
 
-    this.nodeRenderPipeline = this.device.createRenderPipeline({
+    WebGPURenderer.nodeRenderPipeline = WebGPURenderer.device.createRenderPipeline({
       label: 'node-render-pipeline',
       layout: pipelineLayout,
       vertex: {
@@ -945,7 +972,7 @@ private createIntermediateTexture(width: number, height: number) {
       multisample: {count: parseInt(this.sampleCount)}
     });
 
-    this.handleRenderPipeline = this.device.createRenderPipeline({
+    WebGPURenderer.handleRenderPipeline = WebGPURenderer.device.createRenderPipeline({
       label: 'handle-render-pipeline',
       layout: pipelineLayout,
       vertex: {
@@ -981,7 +1008,7 @@ private createIntermediateTexture(width: number, height: number) {
 
     });
 
-    this.gridRenderPipeline = this.device.createRenderPipeline({
+    WebGPURenderer.gridRenderPipeline = WebGPURenderer.device.createRenderPipeline({
       label: 'grid-render-pipeline',
       layout: gridPipelineLayout,
       vertex: {
@@ -1019,7 +1046,7 @@ private createIntermediateTexture(width: number, height: number) {
   }
   
    async updateDepthTextureOnSizeChange(canvasSize: { width: number; height: number }) {
-    if (!this.device || !this.canvas) {
+    if (!WebGPURenderer.device || !this.canvas) {
       console.log('⚠️ No device or canvas');
       return;
     }
@@ -1041,10 +1068,15 @@ private createIntermediateTexture(width: number, height: number) {
     
     
     // Set ONLY the resize flag - don't block rendering completely
+    if (this._rafHandle) {
+        cancelAnimationFrame(this._rafHandle);
+        this._rafHandle = null;
+    }
     this._isResizing = true;
+
+    await WebGPURenderer.device.queue.onSubmittedWorkDone();
     
     try {
-      // Simple approach: just wait for current GPU work
       
       const sampleCountNum = parseInt(this.sampleCount);
       
@@ -1063,7 +1095,7 @@ private createIntermediateTexture(width: number, height: number) {
       this.canvas.height = canvasSize.height;
       
       // Recreate textures immediately
-      this._depthTexture = this.device.createTexture({
+      this._depthTexture = WebGPURenderer.device.createTexture({
         label: `depth-${canvasSize.width}x${canvasSize.height}`,
         size: { width: canvasSize.width, height: canvasSize.height },
         sampleCount: sampleCountNum,
@@ -1072,7 +1104,7 @@ private createIntermediateTexture(width: number, height: number) {
       });
       
       if (sampleCountNum > 1) {
-        this.multisampledTexture = this.device.createTexture({
+        this.multisampledTexture = WebGPURenderer.device.createTexture({
           label: `msaa-${canvasSize.width}x${canvasSize.height}`,
           size: { width: canvasSize.width, height: canvasSize.height },
           format: navigator.gpu.getPreferredCanvasFormat(),
@@ -1091,7 +1123,7 @@ private createIntermediateTexture(width: number, height: number) {
         if (this.canvas.width === 0) this.canvas.width = canvasSize.width || 800;
         if (this.canvas.height === 0) this.canvas.height = canvasSize.height || 600;
         
-        this._depthTexture = this.device.createTexture({
+        this._depthTexture = WebGPURenderer.device.createTexture({
           label: 'recovery-depth',
           size: { width: this.canvas.width, height: this.canvas.height },
           sampleCount: 1,
@@ -1109,6 +1141,7 @@ private createIntermediateTexture(width: number, height: number) {
       }
     } finally {
       this._isResizing = false;
+      this.onResizeComplete?.();
     }
   }
 
@@ -1121,7 +1154,7 @@ private createIntermediateTexture(width: number, height: number) {
     selectedEdges: DiagramEdge[] = [],
     previewEdge?: EdgeDrawingState | null
   ): Promise<void> {
-    if (!this.initialized || !this.device || !this.context || !this.nodeRenderPipeline) {
+    if (!this.initialized || !WebGPURenderer.device || !this.context || !WebGPURenderer.nodeRenderPipeline) {
       console.warn('WebGPU renderer not properly initialized');
       return;
     }
@@ -1210,7 +1243,7 @@ private createIntermediateTexture(width: number, height: number) {
       const viewProjectionMatrix = this.createViewProjectionMatrix(viewport, canvasSize);
 
       // Update uniform buffers
-      this.device.queue.writeBuffer(
+      WebGPURenderer.device.queue.writeBuffer(
         this.uniformBuffer!,
         0,
         new Float32Array([
@@ -1219,7 +1252,7 @@ private createIntermediateTexture(width: number, height: number) {
         ])
       );
 
-      this.device.queue.writeBuffer(
+      WebGPURenderer.device.queue.writeBuffer(
         this.gridUniformBuffer!,
         0,
         new Float32Array([
@@ -1259,7 +1292,7 @@ private createIntermediateTexture(width: number, height: number) {
       }).filter(Boolean) as NodeInstanceData[];
 
       // Create command encoder
-      const commandEncoder = this.device.createCommandEncoder();
+      const commandEncoder = WebGPURenderer.device.createCommandEncoder();
 
       // Setup color attachment
       let colorAttachment: GPURenderPassColorAttachment = {
@@ -1294,13 +1327,13 @@ private createIntermediateTexture(width: number, height: number) {
         const requiredNodeSize = nodeData.length * 64;
         if (requiredNodeSize > this.nodeBuffer!.size) {
           this.nodeBuffer!.destroy();
-          this.nodeBuffer = this.device.createBuffer({
+          this.nodeBuffer = WebGPURenderer.device.createBuffer({
             size: requiredNodeSize * 2,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
           });
           
-          this.nodeBindGroup = this.device.createBindGroup({
-            layout: this.nodeRenderPipeline.getBindGroupLayout(0),
+          this.nodeBindGroup = WebGPURenderer.device.createBindGroup({
+            layout: WebGPURenderer.nodeRenderPipeline.getBindGroupLayout(0),
             entries: [
               { binding: 0, resource: { buffer: this.uniformBuffer! } },
               { binding: 1, resource: { buffer: this.nodeBuffer } }
@@ -1329,10 +1362,10 @@ private createIntermediateTexture(width: number, height: number) {
           flatNodeData[offset + 15] = 0;
         });
 
-        this.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
+        WebGPURenderer.device.queue.writeBuffer(this.nodeBuffer!, 0, flatNodeData);
 
         // Draw nodes
-        renderPass.setPipeline(this.nodeRenderPipeline);
+        renderPass.setPipeline(WebGPURenderer.nodeRenderPipeline);
         renderPass.setBindGroup(0, this.nodeBindGroup!);
         renderPass.draw(6, nodeData.length);
       }
@@ -1364,17 +1397,17 @@ private createIntermediateTexture(width: number, height: number) {
         });
       }
 
-      if (handleData.length > 0 && this.handleRenderPipeline) {
+      if (handleData.length > 0 && WebGPURenderer.handleRenderPipeline) {
         const requiredHandleSize = handleData.length * 32;
         if (requiredHandleSize > this.handleBuffer!.size) {
           this.handleBuffer!.destroy();
-          this.handleBuffer = this.device.createBuffer({
+          this.handleBuffer = WebGPURenderer.device.createBuffer({
             size: requiredHandleSize * 2,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
           });
           
-          this.handleBindGroup = this.device.createBindGroup({
-            layout: this.handleRenderPipeline!.getBindGroupLayout(0),
+          this.handleBindGroup = WebGPURenderer.device.createBindGroup({
+            layout: WebGPURenderer.handleRenderPipeline!.getBindGroupLayout(0),
             entries: [
               { binding: 0, resource: { buffer: this.uniformBuffer! } },
               { binding: 1, resource: { buffer: this.handleBuffer } }
@@ -1395,9 +1428,9 @@ private createIntermediateTexture(width: number, height: number) {
           flatHandleData[offset + 7] = handle.color[3];
         });
 
-        this.device.queue.writeBuffer(this.handleBuffer!, 0, flatHandleData);
+        WebGPURenderer.device.queue.writeBuffer(this.handleBuffer!, 0, flatHandleData);
         
-        renderPass.setPipeline(this.handleRenderPipeline);
+        renderPass.setPipeline(WebGPURenderer.handleRenderPipeline);
         renderPass.setBindGroup(0, this.handleBindGroup!);
         renderPass.draw(6, handleData.length);
       }
@@ -1448,7 +1481,7 @@ private createIntermediateTexture(width: number, height: number) {
       }
 
 
-      this.device.queue.submit([commandEncoder.finish()]);
+      WebGPURenderer.device.queue.submit([commandEncoder.finish()]);
 
     } catch (error) {
       console.error('Render error:', error);
@@ -1473,7 +1506,7 @@ private createIntermediateTexture(width: number, height: number) {
 
   // Helper method to render grid with proper vertex calculation
   private renderGrid(renderPass: GPURenderPassEncoder, viewport: Viewport, canvasSize: { width: number; height: number }) {
-    if (!this.gridRenderPipeline) return;
+    if (!WebGPURenderer.gridRenderPipeline) return;
 
     // Calculate grid vertices dynamically based on current viewport and canvas size
     const gridSize = 50.0;
@@ -1505,7 +1538,7 @@ private createIntermediateTexture(width: number, height: number) {
     });
 
     if (totalVertices > 0) {
-      renderPass.setPipeline(this.gridRenderPipeline);
+      renderPass.setPipeline(WebGPURenderer.gridRenderPipeline);
       renderPass.setBindGroup(0, this.gridBindGroup!);
       renderPass.draw(totalVertices, 1);
       console.log('Grid rendered with', totalVertices, 'vertices');
@@ -1620,13 +1653,13 @@ private createIntermediateTexture(width: number, height: number) {
 
       this.root = null;
       this.context = null;
-      this.nodeRenderPipeline = null;
-      this.handleRenderPipeline = null;
-      this.gridRenderPipeline = null;
+      WebGPURenderer.nodeRenderPipeline = null;
+      WebGPURenderer.handleRenderPipeline = null;
+      WebGPURenderer.gridRenderPipeline = null;
       this.nodeBindGroup = null;
       this.handleBindGroup = null;
       this.gridBindGroup = null;
-      this.device = null;
+      WebGPURenderer.device = null;
       this.initialized = false;
       this.canvas = null;
 
@@ -1750,3 +1783,4 @@ export const SHAPE_TYPES = {
   actor: 9,
   none: 10
 } as const;
+

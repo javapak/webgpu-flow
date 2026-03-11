@@ -11,7 +11,7 @@ import type { Viewport, DiagramState, DiagramNode, DiagramEdge, SpatialDiagramHo
 import type { AABB, Point } from "../types/spatial-indexing/types";
 import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
 import { GridSnapping } from '../utils/GridSnapping';
-import {globalRenderer} from '../../../webgpu-flow/src/renderers/gpuInstance'
+import globalRenderer from '../../../webgpu-flow/src/renderers/gpuInstance'
 
 enum InteractionMode {
   SELECT = 'select',

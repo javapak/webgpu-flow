@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { useDiagram } from './DiagramProvider';
+import { InteractionMode, useDiagram } from './DiagramProvider';
 import { MouseInteractions } from '../utils/MouseInteractions';
 import type { DiagramNode } from '../types';
 
@@ -467,7 +467,7 @@ useEffect(() => {
 
 
   useEffect(() => {
-    if (mode === 'draw_edge')
+    if (mode === InteractionMode.DRAW_EDGE)
       setCurrentCursor('crosshair');
     else 
       setCurrentCursor('grabbing');
@@ -480,7 +480,7 @@ useEffect(() => {
     const canvasPos = getCanvasMousePos(e);
     const worldPos = screenToWorld(canvasPos);
 
-    if (mode === 'draw_edge' && drawingState.isDrawing) {
+    if (mode === InteractionMode.DRAW_EDGE && drawingState.isDrawing) {
         if (drawingState.userVertices.length === 0) {
             addControlPoint(worldPos, false);
         } else {
@@ -509,7 +509,7 @@ useEffect(() => {
         }
     }
     
-    if (newCursor !== currentCursor && mode !== 'draw_edge') {
+    if (newCursor !== currentCursor && mode !== InteractionMode.DRAW_EDGE) {
         setCurrentCursor(newCursor);
     }
 
@@ -529,7 +529,7 @@ const handleMouseDown = useCallback((e: WheelEvent) => {
   const worldPos = screenToWorld(canvasPos);
   const hitResult = performHitTest(canvasPos);
 
-  if (mode === 'draw_edge') {
+  if (mode === InteractionMode.DRAW_EDGE) {
     
     if (hitResult.nodes.length > 0 && !drawingState.isDrawing) {
       console.log('drawing started....');
@@ -554,7 +554,7 @@ const handleMouseDown = useCallback((e: WheelEvent) => {
 
 
 
-  if (!drawingState.isDrawing && mode !== 'draw_edge') {
+  if (!drawingState.isDrawing && mode !== InteractionMode.DRAW_EDGE) {
 
     if (interaction.selectedEdges.length > 0 && hitResult.selectedEdge?.id && hitResult.isEdgeVertex) {
 

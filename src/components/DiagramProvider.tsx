@@ -13,10 +13,10 @@ import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
 import { GridSnapping } from '../utils/GridSnapping';
 import globalRenderer from '../../../webgpu-flow/src/renderers/gpuInstance'
 
-enum InteractionMode {
-  SELECT = 'select',
-  DRAW_EDGE = 'draw_edge'
-}
+export const InteractionMode = {
+  SELECT: 0,
+  DRAW_EDGE: 1
+} as const
 
 
 
@@ -47,7 +47,7 @@ export interface DiagramContextValue extends DiagramState {
   getVisibleNodes: () => DiagramNode[];
   hitTestPoint: (screenPoint: Point) => DiagramNode[];
   hitTestWithHandles: (screenPoint: Point) => { nodes: DiagramNode[]; resizeHandle: ResizeHandle };
-  mode: InteractionMode;
+  mode: number;
   drawingState: EdgeDrawingState;
   focusedOnInput: boolean;
   setFocusedOnInput: (val: boolean) => void;
@@ -419,7 +419,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const [fxaaEnabled, setFXAAEnabledState] = useState(false);
   const [smaaEnabled, setSMAAEnabledState] = useState(false);
   const [sampleCount, setSampleCount] = useState('1');
-  const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
+  const [mode, setMode] = useState<number>(InteractionMode.SELECT);
   const [focusedOnInput, setFocusedOnInput] = useState(false);
   const [drawingState, setDrawingState] = useState<EdgeDrawingState>({
     isDrawing: false,

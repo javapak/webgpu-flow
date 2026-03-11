@@ -780,18 +780,18 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     if (!canvasRef.current) return [];
     
     // Calculate viewport bounds in world coordinates using canvas dimensions
-    const canvas = canvasRef.current;
-    const halfWidth = canvas.width / (2 * state.viewport.zoom);
-    const halfHeight = canvas.height / (2 * state.viewport.zoom);
+    // const canvas = canvasRef.current;
+    //const halfWidth = canvas.width / (2 * state.viewport.zoom);
+    //const halfHeight = canvas.height / (2 * state.viewport.zoom);
     
-    const viewportBounds: AABB = {
+    /*const viewportBounds: AABB = {
       minX: state.viewport.x - halfWidth,
       minY: state.viewport.y - halfHeight,
       maxX: state.viewport.x + halfWidth,
       maxY: state.viewport.y + halfHeight,
-    };
+    }; */
     
-    const visible = spatial.getVisibleNodes(viewportBounds);
+    //const visible = spatial.getVisibleNodes(viewportBounds);
     return state.nodes;
   }, [spatial, state.viewport, state.nodes.length, canvasRef]);
   
@@ -813,7 +813,7 @@ useLayoutEffect(() => {
 
 
 
-const performSyncRender = useCallback(() => {
+/*const performSyncRender = useCallback(() => {
   const renderer = rendererRef.current;
   const canvas = canvasRef.current;
   const currentState = stateRef.current;
@@ -835,7 +835,7 @@ const performSyncRender = useCallback(() => {
   } catch (e) {
     console.error("Initial render failed", e);
   }
-}, [spatial]);
+}, [spatial]); */
 
 const scheduleRender = useCallback(() => {
   const renderer = rendererRef.current;
@@ -849,25 +849,26 @@ const scheduleRender = useCallback(() => {
 
 
   const { viewport, edges, interaction } = currentState;
+  console.log(edges);
   const { width, height } = canvas;
   
-  const halfWidth = width / (2 * viewport.zoom);
-  const halfHeight = height / (2 * viewport.zoom);
+  /*const halfWidth = width / (2 * viewport.zoom);
+  const halfHeight = height / (2 * viewport.zoom); */
   
-  const viewportBounds = {
+ /* const viewportBounds = {
     minX: viewport.x - halfWidth,
     minY: viewport.y - halfHeight,
     maxX: viewport.x + halfWidth,
     maxY: viewport.y + halfHeight,
-  };
+  }; */
 
-  const visibleNodes = spatial.getVisibleNodes(viewportBounds);
+  //const visibleNodes = spatial.getVisibleNodes(viewportBounds);
   
   // Optimization: Use a Set for O(1) node lookup during edge filtering
-  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
-  const visibleEdges = edges.filter(edge => 
-    visibleNodeIds.has(edge.sourceNodeId) || visibleNodeIds.has(edge.targetNodeId)
-  );
+  //const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+  //const visibleEdges = edges.filter(edge => 
+   // visibleNodeIds.has(edge.sourceNodeId) || visibleNodeIds.has(edge.targetNodeId)
+  //);
 
   // 3. Schedule the actual GPU submission
   const handle = requestAnimationFrame(() => {

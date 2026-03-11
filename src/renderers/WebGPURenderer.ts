@@ -71,6 +71,8 @@ export class WebGPURenderer {
 
 
 
+
+
 // In WebGPURenderer.ts, improve error handling in initialize():
   get isReconfiguring() {
     return this._isReconfiguring;
@@ -224,7 +226,7 @@ private recreateSizeDependentTextures(width: number, height: number) {
 
       // Create depth texture
       try {
-        const sampleCountNum = parseInt(this.sampleCount);
+        //const sampleCountNum = parseInt(this.sampleCount);
         console.error(`Creating initial depth texture with sample count ${this.sampleCount}`);
         
 
@@ -1052,7 +1054,7 @@ private createIntermediateTexture(width: number, height: number) {
     }
     
     // Block all operations during reconfiguration or rendering
-    if (this.isBusy) {
+    if (this._isBusy) {
       console.log('Skipping resize - system busy');
       return;
     }

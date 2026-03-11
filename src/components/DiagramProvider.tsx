@@ -7,7 +7,7 @@ import { useReducer, useEffect, useCallback, useMemo, useContext, createContext,
 import { useSpatialIndex } from "../hooks/useSpatialIndex";
 import { WebGPURenderer } from "../renderers/WebGPURenderer";
 import { MouseInteractions, type ResizeHandle } from "../utils/MouseInteractions";
-import type { Viewport, DiagramState, DiagramNode, DiagramEdge, SpatialDiagramHook } from "../types";
+import type { Viewport, DiagramState, DiagramNode, DiagramEdge, SpatialDiagramHook, InteractionState } from "../types";
 import type { AABB, Point } from "../types/spatial-indexing/types";
 import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
 import { GridSnapping } from '../utils/GridSnapping';
@@ -30,6 +30,8 @@ export interface EdgeDrawingState {
 
 export interface DiagramContextValue extends DiagramState {
   addNode: (node: DiagramNode) => void;
+  interactionRef: React.RefObject<InteractionState>
+  viewportRef: React.RefObject<Viewport>
   addEdge: (edge: DiagramEdge) => void;
   removeNode: (nodeId: string) => void;
   supportedSupersamplingFactors:number[];
@@ -119,6 +121,10 @@ type DiagramAction =
   | { type: 'CLEAR_VERTEX_SELECTION' };
 
 
+
+
+
+
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
   
   switch (action.type) {
@@ -163,6 +169,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           ),
         },
       };
+
 
     case 'SELECT_EDGE_VERTEX':
       return {
@@ -313,319 +320,26 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
           },
         },
       };
-
-    case 'UPDATE_DRAG':
-      console.log('Dispatching UPDATE_DRAG:', 'vert index: ', state.interaction.dragState.vertexIndex, state.interaction.dragState.dragType);
-      if (!state.interaction.dragState.isDragging) return state;
-      
-      const deltaX = action.currentPos.x - (state.interaction.dragState.lastPos?.x || 0);
-      const deltaY = action.currentPos.y - (state.interaction.dragState.lastPos?.y || 0);
-
-      if (state.interaction.dragState.dragType === 'viewport') {
-        // Convert screen delta to world delta for viewport panning
-        const worldDeltaX = deltaX / state.viewport.zoom;
-        const worldDeltaY = deltaY / state.viewport.zoom;
-        
-        return {
-          ...state,
-          viewport: {
-            ...state.viewport,
-            x: state.viewport.x - worldDeltaX,
-            y: state.viewport.y - worldDeltaY,
-          },
-          interaction: {
-            ...state.interaction,
-            dragState: {
-              ...state.interaction.dragState,
-              lastPos: action.currentPos,
-            },
-          },
-        };
-    } else if (
-      state.interaction.dragState.dragType === 'node' &&
-      state.interaction.selectedNodes.length > 0
-    ) {
-      const selectedNode = state.interaction.selectedNodes[0];
-      const totalDeltaX = deltaX / state.viewport.zoom;
-      const totalDeltaY = deltaY / state.viewport.zoom;
-
-      const newPosition = {
-        x: selectedNode.data.position.x + totalDeltaX,
-        y: selectedNode.data.position.y + totalDeltaY
-      };
-
-
-      
-      const updatedNode = {
-        ...selectedNode,
-        data: {
-          ...selectedNode.data,
-          position: newPosition,
-        },
-      };
-
-      return {
-        ...state,
-        nodes: state.nodes.map(node =>
-          node.id === selectedNode.id ? updatedNode : node
-        ),
-        interaction: {
-          ...state.interaction,
-          selectedNodes: [updatedNode],
-          dragState: {
-            ...state.interaction.dragState,
-            lastPos: action.currentPos,
-          },
-        },
-      };
-      } else if (
-        state.interaction.dragState.dragType === 'resize' &&
-        state.interaction.selectedNodes.length > 0 &&
-        state.interaction.dragState.resizeHandle &&
-        state.interaction.dragState.originalSize &&
-        state.interaction.dragState.originalPosition
-      ) {
-        // Handle resize logic
-        const selectedNode = state.interaction.selectedNodes[0];
-        const { resizeHandle, originalSize, originalPosition } = state.interaction.dragState;
-        
-        const totalDeltaX = (action.currentPos.x - state.interaction.dragState.startPos!.x) / state.viewport.zoom;
-        const totalDeltaY = (action.currentPos.y - state.interaction.dragState.startPos!.y) / state.viewport.zoom;
-
-        let newDimensions = MouseInteractions.calculateResize(
-          resizeHandle,
-          totalDeltaX,
-          totalDeltaY,
-          originalSize.width,
-          originalSize.height,
-          originalPosition.x,
-          originalPosition.y,
-          40, // minWidth
-          30, // minHeight
-          false
-        );
-
-        // Apply grid snapping if Alt is not pressed
-        const shouldSnap = !state.interaction.altKeyPressed;
-        if (shouldSnap) {
-          newDimensions = GridSnapping.snapResize(
-            newDimensions,
-            state.gridSnapping.gridSize,
-            40,
-            30
-          );
-        }
-        
-        const updatedNode = {
-          ...selectedNode,
-          data: {
-            ...selectedNode.data,
-            position: {
-              x: newDimensions.x,
-              y: newDimensions.y,
-            },
-            size: {
-              width: newDimensions.width,
-              height: newDimensions.height,
-            },
-          },
-          visual: {
-            ...selectedNode.visual,
-            selected: true,
-            size: {
-              width: newDimensions.width,
-              height: newDimensions.height,
-            }
-          }
-        };
-
-        return {
-          ...state,
-          nodes: state.nodes.map(node =>
-            node.id === selectedNode.id ? updatedNode : node
-          ),
-          interaction: {
-            ...state.interaction,
-            selectedNodes: [updatedNode],
-            dragState: {
-              ...state.interaction.dragState,
-              lastPos: action.currentPos,
-            },
-          },
-        };
-      }
-
-  // Handle edge vertex dragging
-  else if (
-    state.interaction.dragState.dragType === 'edge-vertex' &&
-    state.interaction.dragState.edgeId &&
-    state.interaction.dragState.vertexIndex !== undefined  // This is correct
-  ) {
-    console.log('🟣 Handling edge-vertex drag - ENTERED THIS BRANCH');
-    const edgeId = state.interaction.dragState.edgeId;
-    const vertexIndex = state.interaction.dragState.vertexIndex;
-    const edge = state.edges.find(e => e.id === edgeId);
     
-    console.log('🔵 UPDATE_DRAG for edge vertex:', {
-      edgeId,
-      vertexIndex,
-      vertexIndexType: typeof vertexIndex,
-      edgeFound: !!edge,
-      currentPos: action.currentPos,
-      lastPos: state.interaction.dragState.lastPos,
-      deltaX,
-      deltaY,
-      zoom: state.viewport.zoom
-    });
-    
-    if (!edge) {
-      console.error('❌ Edge not found:', edgeId);
-      return state;
-    }
-    
-    if (vertexIndex >= edge.userVertices.length) {
-      console.error('❌ Vertex index out of bounds:', vertexIndex, 'max:', edge.userVertices.length - 1);
-      return state;
-    }
-    
-    console.log('🔵 Current vertex position:', edge.userVertices[vertexIndex]);
-    
-    // Convert screen delta to world delta
-    const worldDeltaX = deltaX / state.viewport.zoom;
-    const worldDeltaY = deltaY / state.viewport.zoom;
-    
-    console.log('🔵 World delta:', { worldDeltaX, worldDeltaY });
-    
-    // Update the vertex position
-    const updatedVertices = [...edge.userVertices];
-    const newVertexPos = {
-      x: edge.userVertices[vertexIndex].x + worldDeltaX,
-      y: edge.userVertices[vertexIndex].y + worldDeltaY,
-    };
-    
-    console.log('🔵 New vertex position:', newVertexPos);
-    updatedVertices[vertexIndex] = newVertexPos;
-    
-    const updatedEdge = {
-      ...edge,
-      userVertices: updatedVertices,
-    };
-    
-    console.log('🔵 Updated edge:', updatedEdge);
-    console.log('🔵 All vertices after update:', updatedVertices);
-    
-    const newState = {
-      ...state,
-      edges: state.edges.map(e => {
-        const isTarget = e.id === edgeId;
-        console.log(`🔵 Mapping edge ${e.id}, isTarget: ${isTarget}`);
-        return isTarget ? updatedEdge : e;
-      }),
-      interaction: {
-        ...state.interaction,
-        selectedEdges: [updatedEdge],
-        dragState: {
-          ...state.interaction.dragState,
-          lastPos: action.currentPos,
-        },
-      },
-    };
-    
-    console.log('🔵 New state edges:', newState.edges);
-    console.log('🔵 Updated edge in new state:', newState.edges.find(e => e.id === edgeId));
-    
-    return newState;
-  }
-  return state;
-
-  case 'END_DRAG':
-  const shouldSnap = !state.interaction.altKeyPressed;
-  
-  if (shouldSnap && 
-      state.interaction.dragState.dragType === 'node' &&
-      state.interaction.selectedNodes.length > 0) {
-    const selectedNode = state.interaction.selectedNodes[0];
-    const snappedPosition = GridSnapping.snapPointToGrid(
-      selectedNode.data.position,
-      state.gridSnapping.gridSize
-    );
-    
-    const snappedNode = {
-      ...selectedNode,
-      data: {
-        ...selectedNode.data,
-        position: snappedPosition,
-      },
-    };
-    
+    case 'END_DRAG':
     return {
-      ...state,
-      nodes: state.nodes.map(node =>
-        node.id === selectedNode.id ? snappedNode : node
-      ),
-      interaction: {
-        ...state.interaction,
-        selectedNodes: [snappedNode],
-        dragState: {
-          isDragging: false,
-          dragType: null,
-          startPos: null,
-          lastPos: null,
-          resizeHandle: undefined,
-          originalSize: undefined,
-          originalPosition: undefined,
-          edgeId: undefined,
-          vertexIndex: undefined,
-          originalVertexPosition: undefined,
-        },
-      },
-    };
-  }  else if (
-    state.interaction.dragState.dragType === 'edge-vertex' &&
-    state.interaction.dragState.edgeId &&
-    state.interaction.dragState.vertexIndex !== undefined  && shouldSnap // This is correct
-  ) {
-    const edgeId = state.interaction.dragState.edgeId;
-    const vertexIndex = state.interaction.dragState.vertexIndex;
-    const edge = state.edges.find(e => e.id === edgeId);
-    if (!edge) return state;
-    if (vertexIndex >= edge.userVertices.length) return state;
-   
-      const currentVertexPos = edge.userVertices[vertexIndex];
-      const snappedVertexPos = GridSnapping.snapPointToGrid(
-        currentVertexPos,
-        state.gridSnapping.gridSize
-      );
-      const updatedVertices = [...edge.userVertices];
-      updatedVertices[vertexIndex] = snappedVertexPos;
-      const updatedEdge = {
-        ...edge,
-        userVertices: updatedVertices,
-      };
-      return {  
         ...state,
-        edges: state.edges.map(e =>
-          e.id === edgeId ? updatedEdge : e
-        ),
         interaction: {
-          ...state.interaction,
-          selectedEdges: [updatedEdge],
-          dragState: {
-            isDragging: false,
-            dragType: null,
-            startPos: null,
-            lastPos: null,
-            resizeHandle: undefined,
-            originalSize: undefined,
-            originalPosition: undefined,
-            edgeId: undefined,
-            vertexIndex: undefined,
-            originalVertexPosition: undefined,
-          },
+            ...state.interaction,
+            dragState: {
+                isDragging: false,
+                dragType: null,
+                startPos: null,
+                lastPos: null,
+                resizeHandle: undefined,
+                originalSize: undefined,
+                originalPosition: undefined,
+                edgeId: undefined,
+                vertexIndex: undefined,
+                originalVertexPosition: undefined,
+            },
         },
-      };
-    }
-     
+    };
   
     return {
       ...state,
@@ -713,40 +427,71 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
     userVertices: []
   });
 
+  const interactionRef = useRef<InteractionState>({altKeyPressed: false, selectedVertex: null, dragState: {isDragging: false, dragType: 'viewport', lastPos: null, startPos: null }, mode: 'select', selectedEdges: [], selectedNodes: []})
+
+
+const viewportRef = useRef({
+    x: 0, y: 0, zoom: 1,
+    width: 800, height: 600,
+});
+
+const drawingStateRef = useRef<EdgeDrawingState>({isDrawing: false, sourceNodeId: null, userVertices: []});
+
   // Update state ref whenever state changes
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
+  useEffect(() => {
+    viewportRef.current = state.viewport;
+}, [state.viewport]);
 
-  const screenToWorld = useCallback((screenPoint: Point): Point => {
-  const currentState = stateRef.current;
-  
-  if (!canvasRef.current) {
-    return { x: 0, y: 0 };
-  }
-  
-  const canvas = canvasRef.current;
-  const rect = canvas.getBoundingClientRect();
-  
-  // screenPoint comes in screen/CSS coordinates
-  // With CSS transform, rect size reflects the transformed size
-  const scaleX = (canvas.width / rect.width) * 0.7;
-  const scaleY = (canvas.height / rect.height) * 0.7;
-  
-  // Scale to canvas coordinates
-  const canvasX = screenPoint.x * scaleX;
-  const canvasY = screenPoint.y * scaleY;
-  
-  // Convert to world coordinates using canvas center
-  const canvasCenterX = canvas.width / 2;  // 960 for 1920px width
-  const canvasCenterY = canvas.height / 2; // 540 for 1080px height
-  
-  const worldX = (canvasX - canvasCenterX) / currentState.viewport.zoom + currentState.viewport.x;
-  const worldY = (canvasY - canvasCenterY) / currentState.viewport.zoom + currentState.viewport.y;
-  
-  return { x: worldX, y: worldY };
-  }, [stateRef, canvasRef]);
+
+const updateDrag = useCallback((screenPoint: Point) => {
+    const drag = interactionRef.current;
+    if (!drag.dragState.isDragging || !drag.dragState.lastPos) return;
+
+    const deltaX = screenPoint.x - drag.dragState.lastPos.x;
+    const deltaY = screenPoint.y - drag.dragState.lastPos.y;
+    drag.dragState.lastPos = screenPoint; // mutate in place
+
+    if (drag.dragState.dragType === 'viewport') {
+        const zoom = viewportRef.current.zoom;
+        viewportRef.current.x += -deltaX / zoom;
+        viewportRef.current.y += -deltaY / zoom;
+        scheduleRender();
+
+    } else if (drag.dragState.dragType === 'node') {
+        const selectedNode = stateRef.current.interaction.selectedNodes[0];
+        if (!selectedNode) return;
+        const zoom = viewportRef.current.zoom;
+        selectedNode.data.position.x += deltaX / zoom;
+        selectedNode.data.position.y += deltaY / zoom;
+        scheduleRender();
+    }
+}, []);
+
+const screenToWorld = useCallback((screenPoint: Point): Point => {
+    if (!canvasRef.current) return { x: 0, y: 0 };
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const vp = viewportRef.current; 
+    
+    const scaleX = (canvas.width / rect.width) * 0.7;
+    const scaleY = (canvas.height / rect.height) * 0.7;
+    
+    const canvasX = screenPoint.x * scaleX;
+    const canvasY = screenPoint.y * scaleY;
+    
+    const canvasCenterX = canvas.width / 2;
+    const canvasCenterY = canvas.height / 2;
+    
+    const worldX = (canvasX - canvasCenterX) / vp.zoom + vp.x;
+    const worldY = (canvasY - canvasCenterY) / vp.zoom + vp.y;
+    
+    return { x: worldX, y: worldY };
+}, []); 
 
   const worldToScreen = useCallback((worldPoint: Point): Point => {
     const currentState = stateRef.current;
@@ -838,60 +583,33 @@ useLayoutEffect(() => {
 }, [spatial]); */
 
 const scheduleRender = useCallback(() => {
-  const renderer = rendererRef.current;
-  const canvas = canvasRef.current;
-  const currentState = stateRef.current;
+    const renderer = rendererRef.current;
+    const canvas = canvasRef.current;
+    if (!renderer?.initialized || !canvas || renderer.isBusy || renderer.isResizing) return;
 
-  //Guard check BEFORE scheduling
-  if (!renderer?.initialized || !canvas) return;
-  if (renderer.isBusy || renderer.isResizing) return; // guard before ANY work
-
-
-
-  const { viewport, edges, interaction } = currentState;
-  console.log(edges);
-  const { width, height } = canvas;
-  
-  /*const halfWidth = width / (2 * viewport.zoom);
-  const halfHeight = height / (2 * viewport.zoom); */
-  
- /* const viewportBounds = {
-    minX: viewport.x - halfWidth,
-    minY: viewport.y - halfHeight,
-    maxX: viewport.x + halfWidth,
-    maxY: viewport.y + halfHeight,
-  }; */
-
-  //const visibleNodes = spatial.getVisibleNodes(viewportBounds);
-  
-  // Optimization: Use a Set for O(1) node lookup during edge filtering
-  //const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
-  //const visibleEdges = edges.filter(edge => 
-   // visibleNodeIds.has(edge.sourceNodeId) || visibleNodeIds.has(edge.targetNodeId)
-  //);
-
-  // 3. Schedule the actual GPU submission
-  const handle = requestAnimationFrame(() => {
-    // Re-verify references inside the async block
-    if (!rendererRef.current?.initialized || !canvasRef.current) return;
-
-    try {
-      rendererRef.current.render(
-        state.nodes, 
-        state.edges, 
-        viewport, 
-        { width, height }, 
-        interaction.selectedNodes, 
-        interaction.selectedEdges, 
-        drawingState.isDrawing && drawingState.userVertices.length > 0 ? drawingState : undefined
-      );
-      renderer.rafHandle = handle;
-    } catch (error) {
-      console.error('WebGPU Render Error:', error);
+    if (renderer.rafHandle) {
+        cancelAnimationFrame(renderer.rafHandle);
     }
-  });
-}, [spatial, drawingState.isDrawing, drawingState.userVertices.length]);
 
+    renderer.rafHandle = requestAnimationFrame(() => {
+      console.log('yo im mothafuckin raf');
+        const s = stateRef.current;
+        const vp = viewportRef.current;
+        try {
+            renderer.render(
+                s.nodes,
+                s.edges,
+                vp,                     
+                { width: canvas.width, height: canvas.height },
+                s.interaction.selectedNodes,
+                s.interaction.selectedEdges,
+                drawingStateRef.current 
+            );
+        } catch (e) {
+            console.error('WebGPU Render Error:', e);
+        }
+    });
+}, []);
 
   // Enhanced hit testing that also checks for resize handles
   const hitTestPoint = useCallback((screenPoint: Point) => {
@@ -980,31 +698,85 @@ const scheduleRender = useCallback(() => {
     dispatch({ type: 'CLEAR_SELECTION' });
   }, []);
 
-  const startDrag = useCallback((
-    type: 'node' | 'viewport' | 'resize' | 'edge-vertex', 
-    screenPoint: Point, 
-    resizeHandle?: ResizeHandle, 
-    edgeID?: string, 
+const startDrag = useCallback((
+    type: 'node' | 'viewport' | 'resize' | 'edge-vertex',
+    screenPoint: Point,
+    resizeHandle?: ResizeHandle,
+    edgeID?: string,
     edgeVertexIndex?: number
-  ) => {
-    dispatch({ 
-      type: 'START_DRAG', 
-      dragType: type, 
-      startPos: screenPoint, 
-      resizeHandle, 
-      edgeId: edgeID, 
-      vertexIndex: edgeVertexIndex
-    });
-  }, []);
+) => {
+    const selectedNode = stateRef.current.interaction.selectedNodes[0];
 
-  const updateDrag = useCallback((screenPoint: Point, isSnapped?: boolean) => {
-    dispatch({ type: 'UPDATE_DRAG', currentPos: screenPoint, isSnapped});
-  }, []);
+    let originalSize, originalPosition, originalVertexPosition;
 
-  const endDrag = useCallback(() => {
-    dispatch({ type: 'END_DRAG' });
-  }, []);
+    if (type === 'resize' && selectedNode) {
+        originalSize = selectedNode.data.size 
+            ? { ...selectedNode.data.size } 
+            : { width: 100, height: 60 };
+        originalPosition = selectedNode.data.position 
+            ? { ...selectedNode.data.position } 
+            : { x: 0, y: 0 };
+    }
 
+    if (type === 'edge-vertex' && edgeID && edgeVertexIndex !== undefined) {
+        const edge = stateRef.current.edges.find(e => e.id === edgeID);
+        if (edge?.userVertices[edgeVertexIndex]) {
+            originalVertexPosition = { ...edge.userVertices[edgeVertexIndex] };
+        }
+    }
+
+    interactionRef.current = {
+        selectedEdges: interactionRef.current.selectedEdges,
+        selectedNodes: interactionRef.current.selectedNodes,
+        selectedVertex: interactionRef.current.selectedVertex,
+        altKeyPressed: interactionRef.current.altKeyPressed,
+        mode: interactionRef.current.mode,
+        dragState: {
+            isDragging: true,
+            dragType: type,
+            startPos: screenPoint,
+            lastPos: screenPoint,
+            resizeHandle,
+            edgeId: edgeID,
+            vertexIndex: edgeVertexIndex,
+            originalSize,
+            originalPosition,
+            originalVertexPosition,
+        }
+    };
+}, []);
+const endDrag = useCallback(() => {
+    const drag = interactionRef.current;
+    drag.dragState.isDragging = false;
+
+    if (drag.dragState.dragType === 'viewport') {
+        // Flush viewport ref back into reducer so rest of app sees it
+        dispatch({ 
+            type: 'SET_VIEWPORT', 
+            viewport: { ...viewportRef.current } 
+        });
+
+    } else if (drag.dragState.dragType === 'node') {
+        const selectedNode = stateRef.current.interaction.selectedNodes[0];
+        if (!selectedNode) return;
+
+        // Apply grid snapping on release
+        const snapped = !stateRef.current.interaction.altKeyPressed
+            ? GridSnapping.snapPointToGrid(
+                selectedNode.data.position,
+                stateRef.current.gridSnapping.gridSize
+              )
+            : selectedNode.data.position;
+
+        selectedNode.data.position = snapped;
+
+        // Flush back to reducer
+        dispatch({ type: 'UPDATE_NODE', node: { ...selectedNode } });
+        dispatch({ type: 'END_DRAG' });
+    } else {
+        dispatch({ type: 'END_DRAG' });
+    }
+}, []);
   // Renderer methods
   const getRenderer = useCallback(() => rendererRef.current, []);
   
@@ -1038,7 +810,7 @@ const scheduleRender = useCallback(() => {
   // Schedule render when state changes
   useEffect(() => {
     scheduleRender();
-  }, [scheduleRender, state.viewport, state.nodes, canvasRef.current?.width, canvasRef.current?.height, state.edges, state.interaction]);
+  }, [state.viewport, state.nodes, state.edges]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1544,6 +1316,8 @@ useEffect(() => {
   // Context value
   const contextValue: DiagramContextValue = useMemo(() => ({
     ...state,
+    interactionRef,
+    viewportRef,
     fxaaEnabled,
     setFXAAEnabled,
     smaaEnabled,

@@ -62,9 +62,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
   const {
     viewport,
+    viewportRef,
     interaction,
     addNode,
-    
+    interactionRef,
     hitTestWithHandles,
     selectNode,
     selectEdge,
@@ -181,7 +182,7 @@ useEffect(() => {
     }
   }, [showDebugInfo, getSpatialDebugInfo]);
   
-  const getCanvasMousePos = useCallback((e: React.MouseEvent) => {
+  const getCanvasMousePos = useCallback((e: WheelEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect || !canvasRef.current) return { x: 0, y: 0 };
   
@@ -472,58 +473,52 @@ useEffect(() => {
       setCurrentCursor('grabbing');
   }, [mode]);
 
-const handleMouseMove = useCallback((e: React.MouseEvent) => {
-  if (isMobile) return;
-  
-  const canvasPos = getCanvasMousePos(e);
-  const hitResult = performHitTest(canvasPos);
-  const worldPos = screenToWorld(canvasPos);
 
-  
+    const handleMouseMove = useCallback((e: WheelEvent) => {
+    if (isMobile) return;
+    
+    const canvasPos = getCanvasMousePos(e);
+    const worldPos = screenToWorld(canvasPos);
 
-  if (mode === 'draw_edge' && drawingState.isDrawing) {
-    // Always keep one vertex as the preview vert that follows the cursor
-    if (drawingState.userVertices.length === 0) {
-      // First vertex added as preview
-      addControlPoint(worldPos, false);
+    if (mode === 'draw_edge' && drawingState.isDrawing) {
+        if (drawingState.userVertices.length === 0) {
+            addControlPoint(worldPos, false);
+        } else {
+            addControlPoint(worldPos, true);
+        }
+        return;
+    }
+    
+    let newCursor = 'grab';
+    
+    if (interactionRef.current.dragState.isDragging) { e
+        if (interactionRef.current.dragState.dragType === 'resize') {
+            newCursor = MouseInteractions.getCursorForHandle(interactionRef.current.dragState.resizeHandle || 'none');
+        } else if (interactionRef.current.dragState.dragType === 'edge-vertex' || interactionRef.current.dragState.dragType === 'node') {
+            newCursor = 'move';
+        } else {
+            newCursor = 'grabbing';
+        }
+        updateDrag(canvasPos); // this now mutates refs and calls scheduleRenderFromRef
     } else {
-      // Update the last vertex to follow cursor
-      addControlPoint(worldPos, true);
+        const hitResult = performHitTest(canvasPos);
+        if (hitResult.resizeHandle !== 'none') {
+            newCursor = MouseInteractions.getCursorForHandle(hitResult.resizeHandle);
+        } else if (hitResult.nodes.length > 0 || hitResult.selectedEdge) {
+            newCursor = 'pointer';
+        }
     }
-    return;
-  }
-  
-  let newCursor = 'grab';
-  
-  if (interaction.dragState.isDragging) {
-    if (interaction.dragState.dragType === 'resize') {
-      newCursor = MouseInteractions.getCursorForHandle(interaction.dragState.resizeHandle || 'none');
-    } else if (interaction.dragState.dragType === 'edge-vertex' || interaction.dragState.dragType === 'node') {
-      newCursor = 'move'; 
-    }
-     else {
-      newCursor = 'grabbing';
-    }
-    updateDrag(canvasPos);
-
-
-  } else {
-    if (hitResult.resizeHandle !== 'none') {
-      newCursor = MouseInteractions.getCursorForHandle(hitResult.resizeHandle);
-    } else if (hitResult.nodes.length > 0 || hitResult.selectedEdge) {
-      newCursor = 'pointer';
+    
+    if (newCursor !== currentCursor && mode !== 'draw_edge') {
+        setCurrentCursor(newCursor);
     }
 
-  }
-  
-  if (newCursor !== currentCursor && mode !== 'draw_edge') {
-    setCurrentCursor(newCursor);
-  }
+}, [isMobile, drawingState.userVertices, drawingState.isDrawing, getCanvasMousePos, 
+    performHitTest, updateDrag, screenToWorld, mode, currentCursor, addControlPoint]);
 
-}, [isMobile, drawingState.userVertices, drawingState.isDrawing, getCanvasMousePos, performHitTest, interaction.dragState, 
-    updateDrag, screenToWorld, mode, currentCursor, addControlPoint]);
 
-const handleMouseDown = useCallback((e: React.MouseEvent) => {
+
+const handleMouseDown = useCallback((e: WheelEvent) => {
   if (isMobile) return;
 
   if (focusedOnInput) {
@@ -618,61 +613,38 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isMobile) return; // Skip on mobile
 
     
-    if (interaction.dragState.isDragging) {
+    if (interactionRef.current.dragState.isDragging) {
       endDrag();
     }
-  }, [isMobile, interaction.dragState.isDragging, endDrag]);
+  }, [isMobile, endDrag]);
 
 
   const handleMouseLeave = useCallback(() => {
     if (isMobile) return; // Skip on mobile
     
     if (interaction.dragState.isDragging) {
+      interactionRef.current.dragState.isDragging = false;
       endDrag();
     }
   }, [isMobile, interaction.dragState.isDragging, endDrag]);
 
 
   // Wheel zoom (desktop only)
-  const handleWheel = useCallback((e: WheelEvent) => {
+const handleWheel = useCallback((e: WheelEvent) => {
     if (isMobile) return;
-
     e.preventDefault();
-    
-    if (!canvasRef.current) return;
-    
-    const rect = canvasRef.current.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    
-    // Convert screen to canvas coordinates
-    const scaleX = (canvasRef.current.width / rect.width) * 0.7;
-    const scaleY = (canvasRef.current.height / rect.height) * 0.7;
-    const canvasX = screenX * scaleX;
-    const canvasY = screenY * scaleY;
-    
-    // Get world position at mouse before zoom
-    const worldBeforeZoom = screenToWorld({ x: screenX, y: screenY });
-    
-    // Calculate new zoom
+
+    const canvasPos = getCanvasMousePos(e);
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.3, Math.min(5, viewport.zoom * zoomFactor));
-    
-    // Calculate new viewport position to keep mouse point stationary
-    // Formula: worldPos = (canvasPos - canvasCenter) / zoom + viewportPos
-    // Solving for viewportPos: viewportPos = worldPos - (canvasPos - canvasCenter) / zoom
-    const canvasCenterX = canvasRef.current.width / 2;
-    const canvasCenterY = canvasRef.current.height / 2;
-    
-    const newViewportX = worldBeforeZoom.x - (canvasX - canvasCenterX) / newZoom;
-    const newViewportY = worldBeforeZoom.y - (canvasY - canvasCenterY) / newZoom;
-    
-    setViewport({
-      zoom: newZoom,
-      x: newViewportX,
-      y: newViewportY,
-    });
-  }, [isMobile, screenToWorld, canvasRef, viewport.zoom, setViewport]);
+    const newZoom = Math.max(0.1, Math.min(10, viewportRef.current.zoom * zoomFactor));
+
+    const worldPos = screenToWorld(canvasPos);
+    viewportRef.current.zoom = newZoom;
+    viewportRef.current.x = worldPos.x - (worldPos.x - viewportRef.current.x) * (newZoom / viewportRef.current.zoom);
+    viewportRef.current.y = worldPos.y - (worldPos.y - viewportRef.current.y) * (newZoom / viewportRef.current.zoom);
+
+    renderFrame(); 
+}, [isMobile, screenToWorld]);
 
   useEffect(() => {
     if (canvasRef.current && !isMobile) {
@@ -682,6 +654,7 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
           canvasRef.current.removeEventListener('wheel', handleWheel);
         }
       };
+    
     }
   }, [handleWheel, isMobile]);
 
@@ -787,8 +760,8 @@ const handleMouseDown = useCallback((e: React.MouseEvent) => {
         }}
 
         // Mouse events (desktop)
-        onPointerDown={!isMobile ? handleMouseDown : undefined}
-        onPointerMove={!isMobile ? handleMouseMove : undefined}
+        onPointerDown={!isMobile ? handleMouseDown as any : undefined}
+        onPointerMove={!isMobile ? handleMouseMove as any : undefined}
         onPointerUp={!isMobile ? handleMouseUp : undefined}
         onPointerLeave={!isMobile ? handleMouseLeave : undefined}
         

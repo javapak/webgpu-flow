@@ -796,9 +796,9 @@ const endDrag = useCallback(() => {
   useEffect(() => {
     if (state.interaction.selectedNodes.length > 0)
         
-        (document.getElementById('title-ref') as HTMLTitleElement).textContent = ` ETFA Explorer | Selected node: ${state.interaction.selectedNodes[0].id}`;
+        (document.getElementById('title-ref') as HTMLTitleElement).textContent = ` EFTA Explorer | Selected node: ${state.interaction.selectedNodes[0].id}`;
     else {
-      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'ETFA Explorer';
+      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'EFTA Explorer';
     }
   }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 

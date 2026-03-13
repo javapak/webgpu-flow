@@ -585,6 +585,7 @@ useLayoutEffect(() => {
 const scheduleRender = useCallback(() => {
     const renderer = rendererRef.current;
     const canvas = canvasRef.current;
+    const device = renderer?.getDeviceRef();
     if (!renderer?.initialized || !canvas || renderer.isBusy || renderer.isResizing) return;
 
     if (renderer.rafHandle) {
@@ -592,6 +593,8 @@ const scheduleRender = useCallback(() => {
     }
 
     renderer.rafHandle = requestAnimationFrame(() => {
+      device?.pushErrorScope('validation');
+      device?.pushErrorScope('out-of-memory');
       console.log('yo im mothafuckin raf');
         const s = stateRef.current;
         const vp = viewportRef.current;

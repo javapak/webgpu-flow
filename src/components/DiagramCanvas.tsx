@@ -23,6 +23,7 @@ const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 };
 
+
 export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   width,
   height,
@@ -42,7 +43,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const initializationAttempted = useRef(false);
 
   const isMobile = isMobileDevice();
-
   
   // Mobile touch state - simplified and more stable
   const [touchState, setTouchState] = useState<{
@@ -343,6 +343,7 @@ useEffect(() => {
     
     if (interaction.dragState.isDragging) {
       updateDrag(canvasPos);
+
     }
     
   } else if (touches.length === 2 && touchState.isPinching) {
@@ -434,25 +435,27 @@ useEffect(() => {
     if (isMobile && canvasRef.current){
       canvasRef.current.addEventListener('touchstart', 
         handleTouchStart as unknown as (e: TouchEvent) => void, {passive: false});
+        return () =>  canvasRef.current?.removeEventListener('touchstart', handleTouchStart as unknown as (e: TouchEvent) => void);
+
     }
-    return () =>  canvasRef.current?.removeEventListener('touchstart', handleTouchStart as unknown as (e: TouchEvent) => void);
   }, [handleTouchStart]);
 
   useEffect(() => {
-    if (isMobile && canvasRef.current){
+    if (isMobile && canvasRef.current && canvasRef.current !== null){
       canvasRef.current.addEventListener('touchmove', 
-        handleTouchMove as unknown as (e: TouchEvent) => void, {passive: false});
+      handleTouchMove as unknown as (e: TouchEvent) => void, {passive: false});
+      return () =>  canvasRef.current?.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
+
     }
-    return () =>  canvasRef.current?.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
   }, [handleTouchMove]);
 
 
   useEffect(() => {
     if (isMobile && canvasRef.current){
       canvasRef.current.addEventListener('touchend', 
-        handleTouchEnd as unknown as (e: TouchEvent) => void, {passive: false});
+      handleTouchEnd as unknown as (e: TouchEvent) => void, {passive: false});
+      return () =>  canvasRef.current?.removeEventListener('touchend', handleTouchEnd as unknown as (e: TouchEvent) => void);
     }
-    return () =>  canvasRef.current?.removeEventListener('touchend', handleTouchEnd as unknown as (e: TouchEvent) => void);
   }, [handleTouchEnd]);
 
   useEffect(() => {

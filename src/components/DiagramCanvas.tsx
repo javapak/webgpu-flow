@@ -341,7 +341,7 @@ useEffect(() => {
     const touch = touches[0];
     const canvasPos = getCanvasTouchPos(touch as Touch);
     
-    if (interaction.dragState.isDragging) {
+    if (interactionRef.current.dragState.isDragging) {
       updateDrag(canvasPos);
 
     }
@@ -384,7 +384,7 @@ useEffect(() => {
       }
     }
   }
-}, [touchState, getCanvasTouchPos, interaction.dragState.isDragging, 
+}, [touchState, getCanvasTouchPos,
     updateDrag, viewport.zoom, setViewport]);
 
 
@@ -642,9 +642,10 @@ const handleWheel = useCallback((e: WheelEvent) => {
     const newZoom = Math.max(0.1, Math.min(10, viewportRef.current.zoom * zoomFactor));
 
     const worldPos = screenToWorld(canvasPos);
+    const oldZoom = viewportRef.current.zoom;
     viewportRef.current.zoom = newZoom;
-    viewportRef.current.x = worldPos.x - (worldPos.x - viewportRef.current.x) * (newZoom / viewportRef.current.zoom);
-    viewportRef.current.y = worldPos.y - (worldPos.y - viewportRef.current.y) * (newZoom / viewportRef.current.zoom);
+    viewportRef.current.x = worldPos.x - (worldPos.x - viewportRef.current.x) * (newZoom / oldZoom);
+    viewportRef.current.y = worldPos.y - (worldPos.y - viewportRef.current.y) * (newZoom / oldZoom);
 
     renderFrame(); 
 }, [isMobile, screenToWorld]);

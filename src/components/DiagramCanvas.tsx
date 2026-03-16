@@ -747,7 +747,7 @@ const handleWheel = useCallback((e: WheelEvent) => {
   };
   
   return (
-    <div style={{width: `${width}px`, height: `${height}px`, overflow: 'hidden'}} >
+    <div style={{width: `${width}px`, height: `${height}px`, justifySelf: 'center' }} >
 
       <canvas
         ref={canvasRef}

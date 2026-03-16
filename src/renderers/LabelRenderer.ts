@@ -306,8 +306,9 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     for (const edge of edgesWithLabels) {
     console.log('edge label is being noticed OwO');
     const label = edge.data?.label!.trim();
-    const fontSize = 70;
-    let textColor = '#ffffffff';
+    const fontSize = 75;
+
+    let textColor = '#ffffff';
     if (edge.style.labelColor)
       textColor = edge.style.labelColor;
 

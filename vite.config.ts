@@ -3,8 +3,10 @@ import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: {
-    // Force Vite to pre-bundle the base package into a clean ES Module
-    include: ['elkjs'], 
+  resolve: {
+    alias: {
+      // Intercepts ANY import trying to access elk.bundled.js and redirects it
+      'elkjs/lib/elk.bundled.js': 'elkjs/lib/elk.worker.js',
+    },
   },
 })

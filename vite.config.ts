@@ -3,10 +3,10 @@ import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      // Intercepts ANY import trying to access elk.bundled.js and redirects it
-      'elkjs/lib/elk.bundled.js': 'elkjs/lib/elk-worker.js',
+  build: {
+    rollupOptions: {
+      // Tells Vite/Rollup that 'web-worker' is external and shouldn't be bundled
+      external: ['web-worker'],
     },
   },
-})
+});

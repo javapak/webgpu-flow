@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react-swc'
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['elkjs'],
+    exclude: ['elkjs/lib/elk.bundled.js']
   },
   build: {
     commonjsOptions: {

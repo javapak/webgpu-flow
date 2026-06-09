@@ -1,7 +1,12 @@
-import ELK from 'elkjs/lib/elk.bundled';
+import ELK from 'elkjs';
 import  { type ElkExtendedEdge } from 'elkjs/lib/elk.bundled';
 
-const elk = new ELK();
+const elk = new ELK({
+  workerFactory: () => new Worker(
+    new URL('elkjs/lib/elk-worker.min.js', import.meta.url),
+    { type: 'module' }
+  )
+});
 const GRID = 50;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 

@@ -4,17 +4,10 @@ import { Edge } from '../components/Edge';
 import { type NodeType } from '../components/NodePalette';
 import { useEffect, useRef, useState } from 'react';
 import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
-import { applyElkLayout } from '../utils/FlowLayoutHelpers';
 
 const raw = await import('../assets/efta_webgpu_flow.json');
 
-const { nodes, edges } = await applyElkLayout(raw.nodes, raw.edges, {
-    'elk.direction': 'RIGHT',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '400',
-    'elk.spacing.nodeNode': '150',
-
-});
-
+const { nodes, edges } =  { nodes: raw.nodes, edges: raw.edges };
 const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 };

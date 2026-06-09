@@ -12,6 +12,7 @@ import { useDiagram } from './components/DiagramProvider';
 import PropertyEditorPanel from './components/PropertyEditorPanel';
 import { Allotment } from 'allotment';
 import "allotment/dist/style.css";
+import ERFlow from './components/ERFlow';
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -115,19 +116,7 @@ export const DiagramDemo: React.FC = () => {
 
           <Center style={{position: 'relative'}} h='100vh'>
             <div style={{top: '-215px', left: `${window.innerWidth-515}px`, display: 'block', position: 'relative', zIndex: 10}}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
-
-
-
-            <DiagramCanvas 
-              width={canvasSize.width}
-              height={canvasSize.height}
-              setSupportedSampleCount={setSupportedSampleCount}
-              onNodeDropped={handleNodeDropped}
-              internalResolutionRef={internalResolutionRef}
-              showDebugInfo
-            />
-
-            <VisualContentNodesTest />
+            <ERFlow/>
           </Center>
 
           {/* Mobile Instructions */}

@@ -15,6 +15,7 @@
     "@mantine/hooks": "^8.3.2",
     "allotment": "^1.20.4",
     "ecore-ts": "^0.17.8",
+    "elkjs": "^0.11.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typegpu": "^0.7.1",

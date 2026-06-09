@@ -1,5 +1,4 @@
-import { type ElkExtendedEdge } from 'elkjs';
-import ELK from 'elkjs/lib/elk.bundled.js';
+import ELK, { type ElkExtendedEdge } from 'elkjs/lib/elk.bundled.js';
 
 const elk = new ELK();
 const GRID = 50;

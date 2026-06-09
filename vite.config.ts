@@ -9,7 +9,7 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    exclude: ['elkjs/lib/elk.bundled.js'],
+    exclude: ['elkjs/lib/elk.bundled.js', 'web-worker'],
     include: ['elkjs'],
   }
 });

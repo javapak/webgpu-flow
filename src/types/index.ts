@@ -58,7 +58,7 @@ export interface DiagramNode {
     labelFont?: DiagramFont;
     color?: string;
     shape?: string;
-    visualContent?: {type: 'svg' | 'image' | 'emoji', content: string, size: {width: number, height: number}, colorizable?: boolean}
+    visualContent?: {type: string, content: string, size: {width: number, height: number}, colorizable?: boolean}
     selected?: boolean;
     cacheKey?: string; // For caching rendered visuals
     [key: string]: any;

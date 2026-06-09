@@ -1,11 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef} from 'react';
-import { DiagramCanvas } from './index';
-import { type NodeType } from './components/NodePalette';
 import "allotment/dist/style.css";
 import '@mantine/core/styles.css'
 import './App.css';
-import { VisualContentNodesTest } from './components/VisualContentNodesTest';
 import { ActionIcon, Center, Checkbox, NativeSelect } from '@mantine/core';
 import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
@@ -20,26 +17,12 @@ const isMobileDevice = () => {
 };
 
 
-const getOptimalCanvasSize = () => {
-  const isMobile = isMobileDevice();
-  if (isMobile) {
-    return {
-      width: Math.max(300, window.innerWidth - 40),
-      height: Math.max(400, window.innerHeight - 200)
-    };
-  } else {
-    return {
-      width: window.innerWidth - 500,
-      height: window.innerHeight - 300
-    };
-  }
-};
 
 export const DiagramDemo: React.FC = () => {
   const [isMobile, setIsMobile] = useState(isMobileDevice());
-  const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
+  //const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
+  //const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
   const internalResolutionRef = useRef({ width: 1920, height: 1080 });
   const [internalResolution, setInternalResolution] = useState({ 
     width: 1920, 
@@ -52,7 +35,7 @@ export const DiagramDemo: React.FC = () => {
     setInternalResolution(newRes);            
   };
 
-  const {handleSampleCountChange, fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled, sampleCount} = useDiagram();
+  const { fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled } = useDiagram();
   
 
 
@@ -83,7 +66,7 @@ export const DiagramDemo: React.FC = () => {
     const handleResize = () => {
       const mobile = isMobileDevice();
       setIsMobile(mobile);
-      setCanvasSize(getOptimalCanvasSize());
+      //setCanvasSize(getOptimalCanvasSize());
       
     };
     handleResize(); // Initial check
@@ -92,14 +75,14 @@ export const DiagramDemo: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
+  /*const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
     console.log(`Dropped ${nodeType.name} at position:`, position);
     
     // Provide haptic feedback on mobile
     if (isMobile && navigator.vibrate) {
       navigator.vibrate(100);
     }
-  };
+  }; */
 
   const handleOpenSettingsMenu = useCallback(() => {
      setSettingsOpen(!settingsOpen);
@@ -163,9 +146,7 @@ export const DiagramDemo: React.FC = () => {
               changeResolution({width: widthHeight[0], height: widthHeight[1]});
               console.log('internal resolution selected', e.currentTarget.value)
             }} />
-       
-            {supportedSampleCount && supportedSampleCount.length > 0 && <NativeSelect label='MSAA' onChange={(e) => {handleSampleCountChange(e.currentTarget.value); console.log('sample count selected', e.currentTarget.value)}} value={sampleCount} data={supportedSampleCount}/>}
-      
+             
             
             <div style={{display: 'block'}}><Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/></div>
             <div style={{display: 'block'}}><Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/></div>

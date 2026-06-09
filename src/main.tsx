@@ -4,6 +4,7 @@ import {DiagramDemo} from './App.tsx'
 import { MantineProvider } from '@mantine/core'
 import { DiagramProvider } from './components/DiagramProvider.tsx';
 
+window.console.log = () => {};
 
 createRoot(document.getElementById('root')!).render(
         <MantineProvider defaultColorScheme='dark'>

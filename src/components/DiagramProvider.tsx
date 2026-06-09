@@ -799,9 +799,9 @@ const endDrag = useCallback(() => {
   useEffect(() => {
     if (state.interaction.selectedNodes.length > 0)
         
-        (document.getElementById('title-ref') as HTMLTitleElement).textContent = ` EFTA Explorer | Selected node: ${state.interaction.selectedNodes[0].id}`;
+        (document.getElementById('title-ref') as HTMLTitleElement).textContent = ` WebGPU Flow | Selected node: ${state.interaction.selectedNodes[0].id}`;
     else {
-      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'EFTA Explorer';
+      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'WebGPU Flow';
     }
   }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 

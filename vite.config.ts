@@ -6,7 +6,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Intercepts ANY import trying to access elk.bundled.js and redirects it
-      'elkjs/lib/elk.bundled.js': 'elkjs/lib/elk.worker.js',
+      'elkjs/lib/elk.bundled.js': 'elkjs/lib/elk-worker.js',
     },
   },
 })

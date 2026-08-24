@@ -31,6 +31,10 @@
           "y": 992.4
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1656.2,
+        "y": 992.4
       }
     },
     {
@@ -64,6 +68,10 @@
           "y": 1028.1
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1580.9,
+        "y": 1028.1
       }
     },
     {
@@ -97,6 +105,10 @@
           "y": 944.2
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1628.9,
+        "y": 944.2
       }
     },
     {
@@ -130,6 +142,10 @@
           "y": 1047.4
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1667.6,
+        "y": 1047.4
       }
     },
     {
@@ -163,6 +179,10 @@
           "y": 979.2
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1543.9,
+        "y": 979.2
       }
     },
     {
@@ -196,6 +216,10 @@
           "y": 955.4
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1685.8,
+        "y": 955.4
       }
     },
     {
@@ -229,6 +253,10 @@
           "y": 1082.1
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1589.1,
+        "y": 1082.1
       }
     },
     {
@@ -262,6 +290,10 @@
           "y": 915.4
         },
         "dependsOn": []
+      },
+      "position": {
+        "x": 1578.1,
+        "y": 915.4
       }
     },
     {
@@ -299,6 +331,10 @@
           "util:nanoid",
           "runtime:gc-core"
         ]
+      },
+      "position": {
+        "x": 1467.9,
+        "y": 1439.8
       }
     },
     {
@@ -336,6 +372,10 @@
           "runtime:bun",
           "util:ramda"
         ]
+      },
+      "position": {
+        "x": 1407.9,
+        "y": 1463.0
       }
     },
     {
@@ -372,6 +412,10 @@
           "util:lodash",
           "util:date-fns"
         ]
+      },
+      "position": {
+        "x": 1448.4,
+        "y": 1382.9
       }
     },
     {
@@ -409,6 +453,10 @@
           "runtime:bun",
           "runtime:libuv"
         ]
+      },
+      "position": {
+        "x": 1477.2,
+        "y": 1486.9
       }
     },
     {
@@ -445,6 +493,10 @@
           "runtime:gc-core",
           "util:axios"
         ]
+      },
+      "position": {
+        "x": 1370.9,
+        "y": 1422.5
       }
     },
     {
@@ -481,6 +533,10 @@
           "runtime:event-loop",
           "runtime:bun"
         ]
+      },
+      "position": {
+        "x": 1502.2,
+        "y": 1387.3
       }
     },
     {
@@ -519,6 +575,10 @@
           "util:dotenv",
           "util:immer"
         ]
+      },
+      "position": {
+        "x": 1420.6,
+        "y": 1526.9
       }
     },
     {
@@ -557,6 +617,10 @@
           "util:zod",
           "util:axios"
         ]
+      },
+      "position": {
+        "x": 1399.0,
+        "y": 1356.7
       }
     },
     {
@@ -592,6 +656,10 @@
         "dependsOn": [
           "util:chalk"
         ]
+      },
+      "position": {
+        "x": 1534.8,
+        "y": 1481.0
       }
     },
     {
@@ -630,6 +698,10 @@
           "util:uuid",
           "util:ramda"
         ]
+      },
+      "position": {
+        "x": 1337.1,
+        "y": 1480.3
       }
     },
     {
@@ -668,6 +740,10 @@
           "state:mobx",
           "util:uuid"
         ]
+      },
+      "position": {
+        "x": 1039.3,
+        "y": 1621.9
       }
     },
     {
@@ -704,6 +780,10 @@
           "util:zod",
           "framework:astro"
         ]
+      },
+      "position": {
+        "x": 970.3,
+        "y": 1653.7
       }
     },
     {
@@ -741,6 +821,10 @@
           "util:zod",
           "framework:react"
         ]
+      },
+      "position": {
+        "x": 1008.4,
+        "y": 1554.1
       }
     },
     {
@@ -779,6 +863,10 @@
           "state:recoil",
           "util:date-fns"
         ]
+      },
+      "position": {
+        "x": 1037.0,
+        "y": 1670.6
       }
     },
     {
@@ -815,6 +903,10 @@
           "state:mobx",
           "util:axios"
         ]
+      },
+      "position": {
+        "x": 918.4,
+        "y": 1602.5
       }
     },
     {
@@ -851,6 +943,10 @@
           "util:dotenv",
           "util:nanoid"
         ]
+      },
+      "position": {
+        "x": 1063.9,
+        "y": 1571.7
       }
     },
     {
@@ -886,6 +982,10 @@
         "dependsOn": [
           "state:valtio"
         ]
+      },
+      "position": {
+        "x": 978.8,
+        "y": 1704.7
       }
     },
     {
@@ -924,6 +1024,10 @@
           "framework:react",
           "framework:svelte"
         ]
+      },
+      "position": {
+        "x": 953.6,
+        "y": 1530.0
       }
     },
     {
@@ -962,6 +1066,10 @@
           "util:axios",
           "framework:preact"
         ]
+      },
+      "position": {
+        "x": 1092.1,
+        "y": 1662.0
       }
     },
     {
@@ -997,6 +1105,10 @@
         "dependsOn": [
           "framework:remix"
         ]
+      },
+      "position": {
+        "x": 903.0,
+        "y": 1662.8
       }
     },
     {
@@ -1035,6 +1147,10 @@
           "util:axios",
           "state:jotai"
         ]
+      },
+      "position": {
+        "x": 1042.5,
+        "y": 1521.5
       }
     },
     {
@@ -1073,6 +1189,10 @@
           "state:mobx",
           "util:uuid"
         ]
+      },
+      "position": {
+        "x": 1029.9,
+        "y": 1730.5
       }
     },
     {
@@ -1110,6 +1230,10 @@
           "util:zod",
           "framework:react"
         ]
+      },
+      "position": {
+        "x": 603.4,
+        "y": 1440.6
       }
     },
     {
@@ -1145,6 +1269,10 @@
         "dependsOn": [
           "util:ramda"
         ]
+      },
+      "position": {
+        "x": 527.0,
+        "y": 1473.8
       }
     },
     {
@@ -1181,6 +1309,10 @@
           "util:chalk",
           "framework:svelte"
         ]
+      },
+      "position": {
+        "x": 572.2,
+        "y": 1384.2
       }
     },
     {
@@ -1216,6 +1348,10 @@
         "dependsOn": [
           "framework:react"
         ]
+      },
+      "position": {
+        "x": 598.6,
+        "y": 1484.9
       }
     },
     {
@@ -1252,6 +1388,10 @@
           "framework:qwik",
           "framework:react"
         ]
+      },
+      "position": {
+        "x": 483.8,
+        "y": 1421.4
       }
     },
     {
@@ -1288,6 +1428,10 @@
           "framework:astro",
           "framework:angular"
         ]
+      },
+      "position": {
+        "x": 627.2,
+        "y": 1400.8
       }
     },
     {
@@ -1326,6 +1470,10 @@
           "util:clsx",
           "framework:qwik"
         ]
+      },
+      "position": {
+        "x": 544.3,
+        "y": 1522.3
       }
     },
     {
@@ -1364,6 +1512,10 @@
           "framework:preact",
           "util:dotenv"
         ]
+      },
+      "position": {
+        "x": 519.8,
+        "y": 1351.4
       }
     },
     {
@@ -1399,6 +1551,10 @@
         "dependsOn": [
           "util:zod"
         ]
+      },
+      "position": {
+        "x": 420.6,
+        "y": 999.3
       }
     },
     {
@@ -1436,6 +1592,10 @@
           "runtime:event-loop",
           "util:lodash"
         ]
+      },
+      "position": {
+        "x": 340.8,
+        "y": 1028.4
       }
     },
     {
@@ -1473,6 +1633,10 @@
           "runtime:node",
           "runtime:gc-core"
         ]
+      },
+      "position": {
+        "x": 386.1,
+        "y": 937.5
       }
     },
     {
@@ -1509,6 +1673,10 @@
           "util:date-fns",
           "runtime:event-loop"
         ]
+      },
+      "position": {
+        "x": 422.7,
+        "y": 1060.3
       }
     },
     {
@@ -1545,6 +1713,10 @@
           "util:uuid",
           "util:dotenv"
         ]
+      },
+      "position": {
+        "x": 303.5,
+        "y": 982.3
       }
     },
     {
@@ -1580,6 +1752,10 @@
         "dependsOn": [
           "runtime:event-loop"
         ]
+      },
+      "position": {
+        "x": 458.2,
+        "y": 955.5
       }
     },
     {
@@ -1615,6 +1791,10 @@
         "dependsOn": [
           "util:commander"
         ]
+      },
+      "position": {
+        "x": 350.1,
+        "y": 1079.6
       }
     },
     {
@@ -1653,6 +1833,10 @@
           "runtime:libuv",
           "util:chalk"
         ]
+      },
+      "position": {
+        "x": 329.4,
+        "y": 916.7
       }
     },
     {
@@ -1688,6 +1872,10 @@
         "dependsOn": [
           "runtime:deno"
         ]
+      },
+      "position": {
+        "x": 480.5,
+        "y": 1033.7
       }
     },
     {
@@ -1726,6 +1914,10 @@
           "build:tsc",
           "util:ramda"
         ]
+      },
+      "position": {
+        "x": 588.6,
+        "y": 559.7
       }
     },
     {
@@ -1764,6 +1956,10 @@
           "util:uuid",
           "framework:preact"
         ]
+      },
+      "position": {
+        "x": 534.1,
+        "y": 594.5
       }
     },
     {
@@ -1801,6 +1997,10 @@
           "build:esbuild",
           "build:parcel"
         ]
+      },
+      "position": {
+        "x": 574.3,
+        "y": 508.7
       }
     },
     {
@@ -1839,6 +2039,10 @@
           "build:swc",
           "build:vite"
         ]
+      },
+      "position": {
+        "x": 595.2,
+        "y": 619.1
       }
     },
     {
@@ -1876,6 +2080,10 @@
           "build:babel",
           "framework:astro"
         ]
+      },
+      "position": {
+        "x": 489.6,
+        "y": 548.9
       }
     },
     {
@@ -1911,6 +2119,10 @@
         "dependsOn": [
           "framework:remix"
         ]
+      },
+      "position": {
+        "x": 628.1,
+        "y": 519.1
       }
     },
     {
@@ -1949,6 +2161,10 @@
           "util:axios",
           "util:clsx"
         ]
+      },
+      "position": {
+        "x": 532.0,
+        "y": 647.4
       }
     },
     {
@@ -1987,6 +2203,10 @@
           "util:zod",
           "build:babel"
         ]
+      },
+      "position": {
+        "x": 516.5,
+        "y": 483.5
       }
     },
     {
@@ -2024,6 +2244,10 @@
           "runtime:v8",
           "runtime:deno"
         ]
+      },
+      "position": {
+        "x": 1040.0,
+        "y": 376.2
       }
     },
     {
@@ -2061,6 +2285,10 @@
           "runtime:bun",
           "runtime:event-loop"
         ]
+      },
+      "position": {
+        "x": 964.6,
+        "y": 407.3
       }
     },
     {
@@ -2098,6 +2326,10 @@
           "runtime:libuv",
           "runtime:deno"
         ]
+      },
+      "position": {
+        "x": 1011.8,
+        "y": 327.3
       }
     },
     {
@@ -2133,6 +2365,10 @@
         "dependsOn": [
           "runtime:v8"
         ]
+      },
+      "position": {
+        "x": 1038.1,
+        "y": 436.2
       }
     },
     {
@@ -2171,6 +2407,10 @@
           "runtime:deno",
           "runtime:v8"
         ]
+      },
+      "position": {
+        "x": 926.9,
+        "y": 361.2
       }
     },
     {
@@ -2209,6 +2449,10 @@
           "runtime:node",
           "runtime:wasm-runtime"
         ]
+      },
+      "position": {
+        "x": 1074.5,
+        "y": 335.9
       }
     },
     {
@@ -2246,6 +2490,10 @@
           "runtime:gc-core",
           "runtime:wasm-runtime"
         ]
+      },
+      "position": {
+        "x": 981.1,
+        "y": 467.4
       }
     },
     {
@@ -2282,6 +2530,10 @@
           "runtime:libuv",
           "runtime:wasm-runtime"
         ]
+      },
+      "position": {
+        "x": 947.7,
+        "y": 291.8
       }
     },
     {
@@ -2319,6 +2571,10 @@
           "runtime:libuv",
           "runtime:event-loop"
         ]
+      },
+      "position": {
+        "x": 1088.1,
+        "y": 421.9
       }
     },
     {
@@ -2356,6 +2612,10 @@
           "runtime:wasm-runtime",
           "runtime:libuv"
         ]
+      },
+      "position": {
+        "x": 906.7,
+        "y": 426.3
       }
     },
     {
@@ -2393,6 +2653,10 @@
           "runtime:gc-core",
           "runtime:v8"
         ]
+      },
+      "position": {
+        "x": 1044.7,
+        "y": 270.8
       }
     },
     {
@@ -2430,6 +2694,10 @@
           "runtime:bun",
           "runtime:deno"
         ]
+      },
+      "position": {
+        "x": 1041.3,
+        "y": 499.5
       }
     },
     {
@@ -2465,6 +2733,10 @@
         "dependsOn": [
           "util:immer"
         ]
+      },
+      "position": {
+        "x": 1465.8,
+        "y": 561.4
       }
     },
     {
@@ -2502,6 +2774,10 @@
           "runtime:wasm-runtime",
           "util:zod"
         ]
+      },
+      "position": {
+        "x": 1396.1,
+        "y": 598.2
       }
     },
     {
@@ -2538,6 +2814,10 @@
           "util:immer",
           "runtime:v8"
         ]
+      },
+      "position": {
+        "x": 1447.8,
+        "y": 497.0
       }
     },
     {
@@ -2575,6 +2855,10 @@
           "runtime:libuv",
           "util:dotenv"
         ]
+      },
+      "position": {
+        "x": 1479.4,
+        "y": 616.4
       }
     },
     {
@@ -2610,6 +2894,10 @@
         "dependsOn": [
           "util:immer"
         ]
+      },
+      "position": {
+        "x": 1359.8,
+        "y": 554.3
       }
     },
     {
@@ -2647,6 +2935,10 @@
           "util:commander",
           "util:zod"
         ]
+      },
+      "position": {
+        "x": 1507.4,
+        "y": 512.3
       }
     },
     {
@@ -2684,6 +2976,10 @@
           "runtime:wasm-runtime",
           "util:axios"
         ]
+      },
+      "position": {
+        "x": 1415.7,
+        "y": 652.1
       }
     },
     {
@@ -2721,6 +3017,10 @@
           "runtime:gc-core",
           "runtime:wasm-runtime"
         ]
+      },
+      "position": {
+        "x": 1389.3,
+        "y": 473.2
       }
     },
     {
@@ -2758,6 +3058,10 @@
           "runtime:v8",
           "util:uuid"
         ]
+      },
+      "position": {
+        "x": 1542.1,
+        "y": 599.0
       }
     },
     {
@@ -2793,1119 +3097,1863 @@
         "dependsOn": [
           "runtime:event-loop"
         ]
+      },
+      "position": {
+        "x": 1338.0,
+        "y": 602.9
       }
     }
   ],
   "edges": [
     {
       "id": "e0",
-      "source": "framework:react",
-      "target": "util:clsx",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:react",
+      "targetNodeId": "util:clsx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e1",
-      "source": "framework:react",
-      "target": "util:nanoid",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:react",
+      "targetNodeId": "util:nanoid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e2",
-      "source": "framework:react",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:react",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e3",
-      "source": "framework:vue",
-      "target": "util:immer",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:vue",
+      "targetNodeId": "util:immer",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e4",
-      "source": "framework:vue",
-      "target": "runtime:bun",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:vue",
+      "targetNodeId": "runtime:bun",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e5",
-      "source": "framework:vue",
-      "target": "util:ramda",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:vue",
+      "targetNodeId": "util:ramda",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e6",
-      "source": "framework:svelte",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:svelte",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e7",
-      "source": "framework:svelte",
-      "target": "util:date-fns",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:svelte",
+      "targetNodeId": "util:date-fns",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e8",
-      "source": "framework:solid",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:solid",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e9",
-      "source": "framework:solid",
-      "target": "runtime:bun",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:solid",
+      "targetNodeId": "runtime:bun",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e10",
-      "source": "framework:solid",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:solid",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e11",
-      "source": "framework:angular",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:angular",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e12",
-      "source": "framework:angular",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:angular",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e13",
-      "source": "framework:preact",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:preact",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e14",
-      "source": "framework:preact",
-      "target": "runtime:bun",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:preact",
+      "targetNodeId": "runtime:bun",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e15",
-      "source": "framework:qwik",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:qwik",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e16",
-      "source": "framework:qwik",
-      "target": "util:date-fns",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:qwik",
+      "targetNodeId": "util:date-fns",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e17",
-      "source": "framework:qwik",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:qwik",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e18",
-      "source": "framework:qwik",
-      "target": "util:immer",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:qwik",
+      "targetNodeId": "util:immer",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e19",
-      "source": "framework:astro",
-      "target": "runtime:deno",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:astro",
+      "targetNodeId": "runtime:deno",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e20",
-      "source": "framework:astro",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:astro",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e21",
-      "source": "framework:astro",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:astro",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e22",
-      "source": "framework:astro",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:astro",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e23",
-      "source": "framework:remix",
-      "target": "util:chalk",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:remix",
+      "targetNodeId": "util:chalk",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e24",
-      "source": "framework:nextjs",
-      "target": "util:nanoid",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:nextjs",
+      "targetNodeId": "util:nanoid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e25",
-      "source": "framework:nextjs",
-      "target": "runtime:node",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:nextjs",
+      "targetNodeId": "runtime:node",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e26",
-      "source": "framework:nextjs",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:nextjs",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e27",
-      "source": "framework:nextjs",
-      "target": "util:ramda",
-      "type": "dependsOn"
+      "sourceNodeId": "framework:nextjs",
+      "targetNodeId": "util:ramda",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e28",
-      "source": "ui:button-kit",
-      "target": "state:signals",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:button-kit",
+      "targetNodeId": "state:signals",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e29",
-      "source": "ui:button-kit",
-      "target": "state:xstate",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:button-kit",
+      "targetNodeId": "state:xstate",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e30",
-      "source": "ui:button-kit",
-      "target": "state:mobx",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:button-kit",
+      "targetNodeId": "state:mobx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e31",
-      "source": "ui:button-kit",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:button-kit",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e32",
-      "source": "ui:modal-system",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:modal-system",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e33",
-      "source": "ui:modal-system",
-      "target": "framework:astro",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:modal-system",
+      "targetNodeId": "framework:astro",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e34",
-      "source": "ui:table-grid",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:table-grid",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e35",
-      "source": "ui:table-grid",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:table-grid",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e36",
-      "source": "ui:table-grid",
-      "target": "framework:react",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:table-grid",
+      "targetNodeId": "framework:react",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e37",
-      "source": "ui:chart-lib",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:chart-lib",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e38",
-      "source": "ui:chart-lib",
-      "target": "util:commander",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:chart-lib",
+      "targetNodeId": "util:commander",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e39",
-      "source": "ui:chart-lib",
-      "target": "state:recoil",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:chart-lib",
+      "targetNodeId": "state:recoil",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e40",
-      "source": "ui:chart-lib",
-      "target": "util:date-fns",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:chart-lib",
+      "targetNodeId": "util:date-fns",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e41",
-      "source": "ui:icon-set",
-      "target": "state:mobx",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:icon-set",
+      "targetNodeId": "state:mobx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e42",
-      "source": "ui:icon-set",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:icon-set",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e43",
-      "source": "ui:form-controls",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:form-controls",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e44",
-      "source": "ui:form-controls",
-      "target": "util:nanoid",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:form-controls",
+      "targetNodeId": "util:nanoid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e45",
-      "source": "ui:layout-flex",
-      "target": "state:valtio",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:layout-flex",
+      "targetNodeId": "state:valtio",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e46",
-      "source": "ui:theme-engine",
-      "target": "util:clsx",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:theme-engine",
+      "targetNodeId": "util:clsx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e47",
-      "source": "ui:theme-engine",
-      "target": "util:commander",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:theme-engine",
+      "targetNodeId": "util:commander",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e48",
-      "source": "ui:theme-engine",
-      "target": "framework:react",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:theme-engine",
+      "targetNodeId": "framework:react",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e49",
-      "source": "ui:theme-engine",
-      "target": "framework:svelte",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:theme-engine",
+      "targetNodeId": "framework:svelte",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e50",
-      "source": "ui:tooltip",
-      "target": "framework:angular",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tooltip",
+      "targetNodeId": "framework:angular",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e51",
-      "source": "ui:tooltip",
-      "target": "state:signals",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tooltip",
+      "targetNodeId": "state:signals",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e52",
-      "source": "ui:tooltip",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tooltip",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e53",
-      "source": "ui:tooltip",
-      "target": "framework:preact",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tooltip",
+      "targetNodeId": "framework:preact",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e54",
-      "source": "ui:drawer",
-      "target": "framework:remix",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:drawer",
+      "targetNodeId": "framework:remix",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e55",
-      "source": "ui:tabs",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tabs",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e56",
-      "source": "ui:tabs",
-      "target": "framework:qwik",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tabs",
+      "targetNodeId": "framework:qwik",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e57",
-      "source": "ui:tabs",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tabs",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e58",
-      "source": "ui:tabs",
-      "target": "state:jotai",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:tabs",
+      "targetNodeId": "state:jotai",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e59",
-      "source": "ui:carousel",
-      "target": "framework:remix",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:carousel",
+      "targetNodeId": "framework:remix",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e60",
-      "source": "ui:carousel",
-      "target": "state:jotai",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:carousel",
+      "targetNodeId": "state:jotai",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e61",
-      "source": "ui:carousel",
-      "target": "state:mobx",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:carousel",
+      "targetNodeId": "state:mobx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e62",
-      "source": "ui:carousel",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "ui:carousel",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e63",
-      "source": "state:redux",
-      "target": "framework:svelte",
-      "type": "dependsOn"
+      "sourceNodeId": "state:redux",
+      "targetNodeId": "framework:svelte",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e64",
-      "source": "state:redux",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "state:redux",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e65",
-      "source": "state:redux",
-      "target": "framework:react",
-      "type": "dependsOn"
+      "sourceNodeId": "state:redux",
+      "targetNodeId": "framework:react",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e66",
-      "source": "state:zustand",
-      "target": "util:ramda",
-      "type": "dependsOn"
+      "sourceNodeId": "state:zustand",
+      "targetNodeId": "util:ramda",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e67",
-      "source": "state:jotai",
-      "target": "util:chalk",
-      "type": "dependsOn"
+      "sourceNodeId": "state:jotai",
+      "targetNodeId": "util:chalk",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e68",
-      "source": "state:jotai",
-      "target": "framework:svelte",
-      "type": "dependsOn"
+      "sourceNodeId": "state:jotai",
+      "targetNodeId": "framework:svelte",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e69",
-      "source": "state:recoil",
-      "target": "framework:react",
-      "type": "dependsOn"
+      "sourceNodeId": "state:recoil",
+      "targetNodeId": "framework:react",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e70",
-      "source": "state:mobx",
-      "target": "framework:qwik",
-      "type": "dependsOn"
+      "sourceNodeId": "state:mobx",
+      "targetNodeId": "framework:qwik",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e71",
-      "source": "state:mobx",
-      "target": "framework:react",
-      "type": "dependsOn"
+      "sourceNodeId": "state:mobx",
+      "targetNodeId": "framework:react",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e72",
-      "source": "state:signals",
-      "target": "framework:astro",
-      "type": "dependsOn"
+      "sourceNodeId": "state:signals",
+      "targetNodeId": "framework:astro",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e73",
-      "source": "state:signals",
-      "target": "framework:angular",
-      "type": "dependsOn"
+      "sourceNodeId": "state:signals",
+      "targetNodeId": "framework:angular",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e74",
-      "source": "state:xstate",
-      "target": "util:commander",
-      "type": "dependsOn"
+      "sourceNodeId": "state:xstate",
+      "targetNodeId": "util:commander",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e75",
-      "source": "state:xstate",
-      "target": "framework:solid",
-      "type": "dependsOn"
+      "sourceNodeId": "state:xstate",
+      "targetNodeId": "framework:solid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e76",
-      "source": "state:xstate",
-      "target": "util:clsx",
-      "type": "dependsOn"
+      "sourceNodeId": "state:xstate",
+      "targetNodeId": "util:clsx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e77",
-      "source": "state:xstate",
-      "target": "framework:qwik",
-      "type": "dependsOn"
+      "sourceNodeId": "state:xstate",
+      "targetNodeId": "framework:qwik",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e78",
-      "source": "state:valtio",
-      "target": "framework:remix",
-      "type": "dependsOn"
+      "sourceNodeId": "state:valtio",
+      "targetNodeId": "framework:remix",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e79",
-      "source": "state:valtio",
-      "target": "util:ramda",
-      "type": "dependsOn"
+      "sourceNodeId": "state:valtio",
+      "targetNodeId": "util:ramda",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e80",
-      "source": "state:valtio",
-      "target": "framework:preact",
-      "type": "dependsOn"
+      "sourceNodeId": "state:valtio",
+      "targetNodeId": "framework:preact",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e81",
-      "source": "state:valtio",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "state:valtio",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e82",
-      "source": "build:webpack",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "build:webpack",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e83",
-      "source": "build:vite",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "build:vite",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e84",
-      "source": "build:vite",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "build:vite",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e85",
-      "source": "build:vite",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "build:vite",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e86",
-      "source": "build:rollup",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "build:rollup",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e87",
-      "source": "build:rollup",
-      "target": "runtime:node",
-      "type": "dependsOn"
+      "sourceNodeId": "build:rollup",
+      "targetNodeId": "runtime:node",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e88",
-      "source": "build:rollup",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "build:rollup",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e89",
-      "source": "build:esbuild",
-      "target": "util:date-fns",
-      "type": "dependsOn"
+      "sourceNodeId": "build:esbuild",
+      "targetNodeId": "util:date-fns",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e90",
-      "source": "build:esbuild",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "build:esbuild",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e91",
-      "source": "build:swc",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "build:swc",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e92",
-      "source": "build:swc",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "build:swc",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e93",
-      "source": "build:babel",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "build:babel",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e94",
-      "source": "build:turbopack",
-      "target": "util:commander",
-      "type": "dependsOn"
+      "sourceNodeId": "build:turbopack",
+      "targetNodeId": "util:commander",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e95",
-      "source": "build:parcel",
-      "target": "util:commander",
-      "type": "dependsOn"
+      "sourceNodeId": "build:parcel",
+      "targetNodeId": "util:commander",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e96",
-      "source": "build:parcel",
-      "target": "util:date-fns",
-      "type": "dependsOn"
+      "sourceNodeId": "build:parcel",
+      "targetNodeId": "util:date-fns",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e97",
-      "source": "build:parcel",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "build:parcel",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e98",
-      "source": "build:parcel",
-      "target": "util:chalk",
-      "type": "dependsOn"
+      "sourceNodeId": "build:parcel",
+      "targetNodeId": "util:chalk",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e99",
-      "source": "build:tsc",
-      "target": "runtime:deno",
-      "type": "dependsOn"
+      "sourceNodeId": "build:tsc",
+      "targetNodeId": "runtime:deno",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e100",
-      "source": "testing:jest",
-      "target": "framework:solid",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:jest",
+      "targetNodeId": "framework:solid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e101",
-      "source": "testing:jest",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:jest",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e102",
-      "source": "testing:jest",
-      "target": "build:tsc",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:jest",
+      "targetNodeId": "build:tsc",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e103",
-      "source": "testing:jest",
-      "target": "util:ramda",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:jest",
+      "targetNodeId": "util:ramda",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e104",
-      "source": "testing:vitest",
-      "target": "build:webpack",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:vitest",
+      "targetNodeId": "build:webpack",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e105",
-      "source": "testing:vitest",
-      "target": "framework:angular",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:vitest",
+      "targetNodeId": "framework:angular",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e106",
-      "source": "testing:vitest",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:vitest",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e107",
-      "source": "testing:vitest",
-      "target": "framework:preact",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:vitest",
+      "targetNodeId": "framework:preact",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e108",
-      "source": "testing:playwright",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:playwright",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e109",
-      "source": "testing:playwright",
-      "target": "build:esbuild",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:playwright",
+      "targetNodeId": "build:esbuild",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e110",
-      "source": "testing:playwright",
-      "target": "build:parcel",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:playwright",
+      "targetNodeId": "build:parcel",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e111",
-      "source": "testing:cypress",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:cypress",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e112",
-      "source": "testing:cypress",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:cypress",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e113",
-      "source": "testing:cypress",
-      "target": "build:swc",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:cypress",
+      "targetNodeId": "build:swc",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e114",
-      "source": "testing:cypress",
-      "target": "build:vite",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:cypress",
+      "targetNodeId": "build:vite",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e115",
-      "source": "testing:testing-lib",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:testing-lib",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e116",
-      "source": "testing:testing-lib",
-      "target": "build:babel",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:testing-lib",
+      "targetNodeId": "build:babel",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e117",
-      "source": "testing:testing-lib",
-      "target": "framework:astro",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:testing-lib",
+      "targetNodeId": "framework:astro",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e118",
-      "source": "testing:msw",
-      "target": "framework:remix",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:msw",
+      "targetNodeId": "framework:remix",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e119",
-      "source": "testing:chai",
-      "target": "framework:astro",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:chai",
+      "targetNodeId": "framework:astro",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e120",
-      "source": "testing:chai",
-      "target": "build:rollup",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:chai",
+      "targetNodeId": "build:rollup",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e121",
-      "source": "testing:chai",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:chai",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e122",
-      "source": "testing:chai",
-      "target": "util:clsx",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:chai",
+      "targetNodeId": "util:clsx",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e123",
-      "source": "testing:sinon",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:sinon",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e124",
-      "source": "testing:sinon",
-      "target": "framework:react",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:sinon",
+      "targetNodeId": "framework:react",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e125",
-      "source": "testing:sinon",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:sinon",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e126",
-      "source": "testing:sinon",
-      "target": "build:babel",
-      "type": "dependsOn"
+      "sourceNodeId": "testing:sinon",
+      "targetNodeId": "build:babel",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e127",
-      "source": "util:lodash",
-      "target": "runtime:bun",
-      "type": "dependsOn"
+      "sourceNodeId": "util:lodash",
+      "targetNodeId": "runtime:bun",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e128",
-      "source": "util:lodash",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "util:lodash",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e129",
-      "source": "util:lodash",
-      "target": "runtime:deno",
-      "type": "dependsOn"
+      "sourceNodeId": "util:lodash",
+      "targetNodeId": "runtime:deno",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e130",
-      "source": "util:ramda",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:ramda",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e131",
-      "source": "util:ramda",
-      "target": "runtime:bun",
-      "type": "dependsOn"
+      "sourceNodeId": "util:ramda",
+      "targetNodeId": "runtime:bun",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e132",
-      "source": "util:ramda",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "util:ramda",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e133",
-      "source": "util:date-fns",
-      "target": "runtime:node",
-      "type": "dependsOn"
+      "sourceNodeId": "util:date-fns",
+      "targetNodeId": "runtime:node",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e134",
-      "source": "util:date-fns",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:date-fns",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e135",
-      "source": "util:date-fns",
-      "target": "runtime:deno",
-      "type": "dependsOn"
+      "sourceNodeId": "util:date-fns",
+      "targetNodeId": "runtime:deno",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e136",
-      "source": "util:uuid",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "util:uuid",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e137",
-      "source": "util:axios",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "util:axios",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e138",
-      "source": "util:axios",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:axios",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e139",
-      "source": "util:axios",
-      "target": "runtime:deno",
-      "type": "dependsOn"
+      "sourceNodeId": "util:axios",
+      "targetNodeId": "runtime:deno",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e140",
-      "source": "util:axios",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "util:axios",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e141",
-      "source": "util:zod",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "util:zod",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e142",
-      "source": "util:zod",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "util:zod",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e143",
-      "source": "util:zod",
-      "target": "runtime:node",
-      "type": "dependsOn"
+      "sourceNodeId": "util:zod",
+      "targetNodeId": "runtime:node",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e144",
-      "source": "util:zod",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "util:zod",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e145",
-      "source": "util:immer",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "util:immer",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e146",
-      "source": "util:immer",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "util:immer",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e147",
-      "source": "util:immer",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "util:immer",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e148",
-      "source": "util:nanoid",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:nanoid",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e149",
-      "source": "util:nanoid",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "util:nanoid",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e150",
-      "source": "util:clsx",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "util:clsx",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e151",
-      "source": "util:clsx",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:clsx",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e152",
-      "source": "util:clsx",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "util:clsx",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e153",
-      "source": "util:dotenv",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "util:dotenv",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e154",
-      "source": "util:dotenv",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "util:dotenv",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e155",
-      "source": "util:dotenv",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:dotenv",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e156",
-      "source": "util:chalk",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "util:chalk",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e157",
-      "source": "util:chalk",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "util:chalk",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e158",
-      "source": "util:chalk",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "util:chalk",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e159",
-      "source": "util:commander",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "util:commander",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e160",
-      "source": "util:commander",
-      "target": "runtime:bun",
-      "type": "dependsOn"
+      "sourceNodeId": "util:commander",
+      "targetNodeId": "runtime:bun",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e161",
-      "source": "util:commander",
-      "target": "runtime:deno",
-      "type": "dependsOn"
+      "sourceNodeId": "util:commander",
+      "targetNodeId": "runtime:deno",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e162",
-      "source": "data:graphql",
-      "target": "util:immer",
-      "type": "dependsOn"
+      "sourceNodeId": "data:graphql",
+      "targetNodeId": "util:immer",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e163",
-      "source": "data:apollo",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "data:apollo",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e164",
-      "source": "data:apollo",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "data:apollo",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e165",
-      "source": "data:apollo",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "data:apollo",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e166",
-      "source": "data:prisma",
-      "target": "util:immer",
-      "type": "dependsOn"
+      "sourceNodeId": "data:prisma",
+      "targetNodeId": "util:immer",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e167",
-      "source": "data:prisma",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "data:prisma",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e168",
-      "source": "data:drizzle",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "data:drizzle",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e169",
-      "source": "data:drizzle",
-      "target": "runtime:libuv",
-      "type": "dependsOn"
+      "sourceNodeId": "data:drizzle",
+      "targetNodeId": "runtime:libuv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e170",
-      "source": "data:drizzle",
-      "target": "util:dotenv",
-      "type": "dependsOn"
+      "sourceNodeId": "data:drizzle",
+      "targetNodeId": "util:dotenv",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e171",
-      "source": "data:postgres-js",
-      "target": "util:immer",
-      "type": "dependsOn"
+      "sourceNodeId": "data:postgres-js",
+      "targetNodeId": "util:immer",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e172",
-      "source": "data:redis-client",
-      "target": "util:nanoid",
-      "type": "dependsOn"
+      "sourceNodeId": "data:redis-client",
+      "targetNodeId": "util:nanoid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e173",
-      "source": "data:redis-client",
-      "target": "util:commander",
-      "type": "dependsOn"
+      "sourceNodeId": "data:redis-client",
+      "targetNodeId": "util:commander",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e174",
-      "source": "data:redis-client",
-      "target": "util:zod",
-      "type": "dependsOn"
+      "sourceNodeId": "data:redis-client",
+      "targetNodeId": "util:zod",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e175",
-      "source": "data:kafka-js",
-      "target": "util:lodash",
-      "type": "dependsOn"
+      "sourceNodeId": "data:kafka-js",
+      "targetNodeId": "util:lodash",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e176",
-      "source": "data:kafka-js",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "data:kafka-js",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e177",
-      "source": "data:kafka-js",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "data:kafka-js",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e178",
-      "source": "data:mongoose",
-      "target": "util:ramda",
-      "type": "dependsOn"
+      "sourceNodeId": "data:mongoose",
+      "targetNodeId": "util:ramda",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e179",
-      "source": "data:mongoose",
-      "target": "runtime:gc-core",
-      "type": "dependsOn"
+      "sourceNodeId": "data:mongoose",
+      "targetNodeId": "runtime:gc-core",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e180",
-      "source": "data:mongoose",
-      "target": "runtime:wasm-runtime",
-      "type": "dependsOn"
+      "sourceNodeId": "data:mongoose",
+      "targetNodeId": "runtime:wasm-runtime",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e181",
-      "source": "data:sequelize",
-      "target": "util:axios",
-      "type": "dependsOn"
+      "sourceNodeId": "data:sequelize",
+      "targetNodeId": "util:axios",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e182",
-      "source": "data:sequelize",
-      "target": "runtime:v8",
-      "type": "dependsOn"
+      "sourceNodeId": "data:sequelize",
+      "targetNodeId": "runtime:v8",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e183",
-      "source": "data:sequelize",
-      "target": "util:uuid",
-      "type": "dependsOn"
+      "sourceNodeId": "data:sequelize",
+      "targetNodeId": "util:uuid",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     },
     {
       "id": "e184",
-      "source": "data:knex",
-      "target": "runtime:event-loop",
-      "type": "dependsOn"
+      "sourceNodeId": "data:knex",
+      "targetNodeId": "runtime:event-loop",
+      "userVertices": [],
+      "style": {},
+      "data": {
+        "type": "dependsOn"
+      }
     }
   ]
 }

@@ -333,22 +333,6 @@ export interface EdgeSchema {
   };
 }
 
-export const validateNodeSchema = (node: DiagramNode, schema: NodeSchema): boolean => {
-  try {
-    // Basic validation - in a real implementation, you'd use a proper JSON schema validator
-    if (node.type !== schema.type) return false;
-    
-    // Validate visual properties
-    if (schema.visual.shape && node.visual?.shape && node.visual.shape !== schema.visual.shape) {
-      return false;
-    }
-    
-    // Add more validation logic as needed
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 // Export default configuration
 export const defaultConfig = {

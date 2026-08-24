@@ -3110,1850 +3110,2035 @@
       "sourceNodeId": "framework:react",
       "targetNodeId": "util:clsx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e1",
       "sourceNodeId": "framework:react",
       "targetNodeId": "util:nanoid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e2",
       "sourceNodeId": "framework:react",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e3",
       "sourceNodeId": "framework:vue",
       "targetNodeId": "util:immer",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e4",
       "sourceNodeId": "framework:vue",
       "targetNodeId": "runtime:bun",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e5",
       "sourceNodeId": "framework:vue",
       "targetNodeId": "util:ramda",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e6",
       "sourceNodeId": "framework:svelte",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e7",
       "sourceNodeId": "framework:svelte",
       "targetNodeId": "util:date-fns",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e8",
       "sourceNodeId": "framework:solid",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e9",
       "sourceNodeId": "framework:solid",
       "targetNodeId": "runtime:bun",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e10",
       "sourceNodeId": "framework:solid",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e11",
       "sourceNodeId": "framework:angular",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e12",
       "sourceNodeId": "framework:angular",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e13",
       "sourceNodeId": "framework:preact",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e14",
       "sourceNodeId": "framework:preact",
       "targetNodeId": "runtime:bun",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e15",
       "sourceNodeId": "framework:qwik",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e16",
       "sourceNodeId": "framework:qwik",
       "targetNodeId": "util:date-fns",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e17",
       "sourceNodeId": "framework:qwik",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e18",
       "sourceNodeId": "framework:qwik",
       "targetNodeId": "util:immer",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e19",
       "sourceNodeId": "framework:astro",
       "targetNodeId": "runtime:deno",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e20",
       "sourceNodeId": "framework:astro",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e21",
       "sourceNodeId": "framework:astro",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e22",
       "sourceNodeId": "framework:astro",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e23",
       "sourceNodeId": "framework:remix",
       "targetNodeId": "util:chalk",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e24",
       "sourceNodeId": "framework:nextjs",
       "targetNodeId": "util:nanoid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e25",
       "sourceNodeId": "framework:nextjs",
       "targetNodeId": "runtime:node",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e26",
       "sourceNodeId": "framework:nextjs",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e27",
       "sourceNodeId": "framework:nextjs",
       "targetNodeId": "util:ramda",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e28",
       "sourceNodeId": "ui:button-kit",
       "targetNodeId": "state:signals",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e29",
       "sourceNodeId": "ui:button-kit",
       "targetNodeId": "state:xstate",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e30",
       "sourceNodeId": "ui:button-kit",
       "targetNodeId": "state:mobx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e31",
       "sourceNodeId": "ui:button-kit",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e32",
       "sourceNodeId": "ui:modal-system",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e33",
       "sourceNodeId": "ui:modal-system",
       "targetNodeId": "framework:astro",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e34",
       "sourceNodeId": "ui:table-grid",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e35",
       "sourceNodeId": "ui:table-grid",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e36",
       "sourceNodeId": "ui:table-grid",
       "targetNodeId": "framework:react",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e37",
       "sourceNodeId": "ui:chart-lib",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e38",
       "sourceNodeId": "ui:chart-lib",
       "targetNodeId": "util:commander",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e39",
       "sourceNodeId": "ui:chart-lib",
       "targetNodeId": "state:recoil",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e40",
       "sourceNodeId": "ui:chart-lib",
       "targetNodeId": "util:date-fns",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e41",
       "sourceNodeId": "ui:icon-set",
       "targetNodeId": "state:mobx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e42",
       "sourceNodeId": "ui:icon-set",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e43",
       "sourceNodeId": "ui:form-controls",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e44",
       "sourceNodeId": "ui:form-controls",
       "targetNodeId": "util:nanoid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e45",
       "sourceNodeId": "ui:layout-flex",
       "targetNodeId": "state:valtio",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e46",
       "sourceNodeId": "ui:theme-engine",
       "targetNodeId": "util:clsx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e47",
       "sourceNodeId": "ui:theme-engine",
       "targetNodeId": "util:commander",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e48",
       "sourceNodeId": "ui:theme-engine",
       "targetNodeId": "framework:react",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e49",
       "sourceNodeId": "ui:theme-engine",
       "targetNodeId": "framework:svelte",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e50",
       "sourceNodeId": "ui:tooltip",
       "targetNodeId": "framework:angular",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e51",
       "sourceNodeId": "ui:tooltip",
       "targetNodeId": "state:signals",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e52",
       "sourceNodeId": "ui:tooltip",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e53",
       "sourceNodeId": "ui:tooltip",
       "targetNodeId": "framework:preact",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e54",
       "sourceNodeId": "ui:drawer",
       "targetNodeId": "framework:remix",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e55",
       "sourceNodeId": "ui:tabs",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e56",
       "sourceNodeId": "ui:tabs",
       "targetNodeId": "framework:qwik",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e57",
       "sourceNodeId": "ui:tabs",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e58",
       "sourceNodeId": "ui:tabs",
       "targetNodeId": "state:jotai",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e59",
       "sourceNodeId": "ui:carousel",
       "targetNodeId": "framework:remix",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e60",
       "sourceNodeId": "ui:carousel",
       "targetNodeId": "state:jotai",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e61",
       "sourceNodeId": "ui:carousel",
       "targetNodeId": "state:mobx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e62",
       "sourceNodeId": "ui:carousel",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e63",
       "sourceNodeId": "state:redux",
       "targetNodeId": "framework:svelte",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e64",
       "sourceNodeId": "state:redux",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e65",
       "sourceNodeId": "state:redux",
       "targetNodeId": "framework:react",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e66",
       "sourceNodeId": "state:zustand",
       "targetNodeId": "util:ramda",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e67",
       "sourceNodeId": "state:jotai",
       "targetNodeId": "util:chalk",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e68",
       "sourceNodeId": "state:jotai",
       "targetNodeId": "framework:svelte",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e69",
       "sourceNodeId": "state:recoil",
       "targetNodeId": "framework:react",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e70",
       "sourceNodeId": "state:mobx",
       "targetNodeId": "framework:qwik",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e71",
       "sourceNodeId": "state:mobx",
       "targetNodeId": "framework:react",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e72",
       "sourceNodeId": "state:signals",
       "targetNodeId": "framework:astro",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e73",
       "sourceNodeId": "state:signals",
       "targetNodeId": "framework:angular",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e74",
       "sourceNodeId": "state:xstate",
       "targetNodeId": "util:commander",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e75",
       "sourceNodeId": "state:xstate",
       "targetNodeId": "framework:solid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e76",
       "sourceNodeId": "state:xstate",
       "targetNodeId": "util:clsx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e77",
       "sourceNodeId": "state:xstate",
       "targetNodeId": "framework:qwik",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e78",
       "sourceNodeId": "state:valtio",
       "targetNodeId": "framework:remix",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e79",
       "sourceNodeId": "state:valtio",
       "targetNodeId": "util:ramda",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e80",
       "sourceNodeId": "state:valtio",
       "targetNodeId": "framework:preact",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e81",
       "sourceNodeId": "state:valtio",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e82",
       "sourceNodeId": "build:webpack",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e83",
       "sourceNodeId": "build:vite",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e84",
       "sourceNodeId": "build:vite",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e85",
       "sourceNodeId": "build:vite",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e86",
       "sourceNodeId": "build:rollup",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e87",
       "sourceNodeId": "build:rollup",
       "targetNodeId": "runtime:node",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e88",
       "sourceNodeId": "build:rollup",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e89",
       "sourceNodeId": "build:esbuild",
       "targetNodeId": "util:date-fns",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e90",
       "sourceNodeId": "build:esbuild",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e91",
       "sourceNodeId": "build:swc",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e92",
       "sourceNodeId": "build:swc",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e93",
       "sourceNodeId": "build:babel",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e94",
       "sourceNodeId": "build:turbopack",
       "targetNodeId": "util:commander",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e95",
       "sourceNodeId": "build:parcel",
       "targetNodeId": "util:commander",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e96",
       "sourceNodeId": "build:parcel",
       "targetNodeId": "util:date-fns",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e97",
       "sourceNodeId": "build:parcel",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e98",
       "sourceNodeId": "build:parcel",
       "targetNodeId": "util:chalk",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e99",
       "sourceNodeId": "build:tsc",
       "targetNodeId": "runtime:deno",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e100",
       "sourceNodeId": "testing:jest",
       "targetNodeId": "framework:solid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e101",
       "sourceNodeId": "testing:jest",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e102",
       "sourceNodeId": "testing:jest",
       "targetNodeId": "build:tsc",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e103",
       "sourceNodeId": "testing:jest",
       "targetNodeId": "util:ramda",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e104",
       "sourceNodeId": "testing:vitest",
       "targetNodeId": "build:webpack",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e105",
       "sourceNodeId": "testing:vitest",
       "targetNodeId": "framework:angular",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e106",
       "sourceNodeId": "testing:vitest",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e107",
       "sourceNodeId": "testing:vitest",
       "targetNodeId": "framework:preact",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e108",
       "sourceNodeId": "testing:playwright",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e109",
       "sourceNodeId": "testing:playwright",
       "targetNodeId": "build:esbuild",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e110",
       "sourceNodeId": "testing:playwright",
       "targetNodeId": "build:parcel",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e111",
       "sourceNodeId": "testing:cypress",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e112",
       "sourceNodeId": "testing:cypress",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e113",
       "sourceNodeId": "testing:cypress",
       "targetNodeId": "build:swc",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e114",
       "sourceNodeId": "testing:cypress",
       "targetNodeId": "build:vite",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e115",
       "sourceNodeId": "testing:testing-lib",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e116",
       "sourceNodeId": "testing:testing-lib",
       "targetNodeId": "build:babel",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e117",
       "sourceNodeId": "testing:testing-lib",
       "targetNodeId": "framework:astro",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e118",
       "sourceNodeId": "testing:msw",
       "targetNodeId": "framework:remix",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e119",
       "sourceNodeId": "testing:chai",
       "targetNodeId": "framework:astro",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e120",
       "sourceNodeId": "testing:chai",
       "targetNodeId": "build:rollup",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e121",
       "sourceNodeId": "testing:chai",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e122",
       "sourceNodeId": "testing:chai",
       "targetNodeId": "util:clsx",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e123",
       "sourceNodeId": "testing:sinon",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e124",
       "sourceNodeId": "testing:sinon",
       "targetNodeId": "framework:react",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e125",
       "sourceNodeId": "testing:sinon",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e126",
       "sourceNodeId": "testing:sinon",
       "targetNodeId": "build:babel",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e127",
       "sourceNodeId": "util:lodash",
       "targetNodeId": "runtime:bun",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e128",
       "sourceNodeId": "util:lodash",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e129",
       "sourceNodeId": "util:lodash",
       "targetNodeId": "runtime:deno",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e130",
       "sourceNodeId": "util:ramda",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e131",
       "sourceNodeId": "util:ramda",
       "targetNodeId": "runtime:bun",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e132",
       "sourceNodeId": "util:ramda",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e133",
       "sourceNodeId": "util:date-fns",
       "targetNodeId": "runtime:node",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e134",
       "sourceNodeId": "util:date-fns",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e135",
       "sourceNodeId": "util:date-fns",
       "targetNodeId": "runtime:deno",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e136",
       "sourceNodeId": "util:uuid",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e137",
       "sourceNodeId": "util:axios",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e138",
       "sourceNodeId": "util:axios",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e139",
       "sourceNodeId": "util:axios",
       "targetNodeId": "runtime:deno",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e140",
       "sourceNodeId": "util:axios",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e141",
       "sourceNodeId": "util:zod",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e142",
       "sourceNodeId": "util:zod",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e143",
       "sourceNodeId": "util:zod",
       "targetNodeId": "runtime:node",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e144",
       "sourceNodeId": "util:zod",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e145",
       "sourceNodeId": "util:immer",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e146",
       "sourceNodeId": "util:immer",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e147",
       "sourceNodeId": "util:immer",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e148",
       "sourceNodeId": "util:nanoid",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e149",
       "sourceNodeId": "util:nanoid",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e150",
       "sourceNodeId": "util:clsx",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e151",
       "sourceNodeId": "util:clsx",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e152",
       "sourceNodeId": "util:clsx",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e153",
       "sourceNodeId": "util:dotenv",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e154",
       "sourceNodeId": "util:dotenv",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e155",
       "sourceNodeId": "util:dotenv",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e156",
       "sourceNodeId": "util:chalk",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e157",
       "sourceNodeId": "util:chalk",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e158",
       "sourceNodeId": "util:chalk",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e159",
       "sourceNodeId": "util:commander",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e160",
       "sourceNodeId": "util:commander",
       "targetNodeId": "runtime:bun",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e161",
       "sourceNodeId": "util:commander",
       "targetNodeId": "runtime:deno",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e162",
       "sourceNodeId": "data:graphql",
       "targetNodeId": "util:immer",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e163",
       "sourceNodeId": "data:apollo",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e164",
       "sourceNodeId": "data:apollo",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e165",
       "sourceNodeId": "data:apollo",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e166",
       "sourceNodeId": "data:prisma",
       "targetNodeId": "util:immer",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e167",
       "sourceNodeId": "data:prisma",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e168",
       "sourceNodeId": "data:drizzle",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e169",
       "sourceNodeId": "data:drizzle",
       "targetNodeId": "runtime:libuv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e170",
       "sourceNodeId": "data:drizzle",
       "targetNodeId": "util:dotenv",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e171",
       "sourceNodeId": "data:postgres-js",
       "targetNodeId": "util:immer",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e172",
       "sourceNodeId": "data:redis-client",
       "targetNodeId": "util:nanoid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e173",
       "sourceNodeId": "data:redis-client",
       "targetNodeId": "util:commander",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e174",
       "sourceNodeId": "data:redis-client",
       "targetNodeId": "util:zod",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e175",
       "sourceNodeId": "data:kafka-js",
       "targetNodeId": "util:lodash",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e176",
       "sourceNodeId": "data:kafka-js",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e177",
       "sourceNodeId": "data:kafka-js",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e178",
       "sourceNodeId": "data:mongoose",
       "targetNodeId": "util:ramda",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e179",
       "sourceNodeId": "data:mongoose",
       "targetNodeId": "runtime:gc-core",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e180",
       "sourceNodeId": "data:mongoose",
       "targetNodeId": "runtime:wasm-runtime",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e181",
       "sourceNodeId": "data:sequelize",
       "targetNodeId": "util:axios",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e182",
       "sourceNodeId": "data:sequelize",
       "targetNodeId": "runtime:v8",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e183",
       "sourceNodeId": "data:sequelize",
       "targetNodeId": "util:uuid",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     },
     {
       "id": "e184",
       "sourceNodeId": "data:knex",
       "targetNodeId": "runtime:event-loop",
       "userVertices": [],
-      "style": {},
-      "data": {
-        "type": "dependsOn"
-      }
+      "style": {
+        "sourceMarker": "",
+        "targetMarker": ""
+      },
+      "data": {}
     }
   ]
 }

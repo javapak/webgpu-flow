@@ -1,3 +1,4 @@
+import { canShowResizeHandles } from './CanvasCoords';
 import type { NodeSchema } from "../types";
 import type { DiagramNode } from "./SpatialIndex";
 
@@ -76,7 +77,7 @@ export class MouseInteractions {
 static getResizeHandle(
   worldPos: { x: number; y: number },
   node: NodeSchema,
-  viewport: { x: number; y: number; zoom: number; width: number; height: number }
+  viewport: { x: number; y: number; zoom: number; width: number; height: number; pixelRatio?: number }
 ): ResizeHandle {
   if (!node.visual?.selected) {
     return 'none';
@@ -87,9 +88,14 @@ static getResizeHandle(
   const width = node.visual.size?.width || 120;
   const height = node.visual.size?.height || 80;
   const shape = node.visual.shape || 'rectangle';
+
+  const pixelRatio = viewport.pixelRatio ?? 1;
+  if (!canShowResizeHandles({ width, height }, viewport.zoom, pixelRatio)) {
+    return 'none';
+  }
   
   // Handle detection threshold in world coordinates (adjusted for zoom)
-  const handleSize = Math.max(12 / viewport.zoom, 8); // Minimum 8 world units
+  const handleSize = Math.max((12 * pixelRatio) / viewport.zoom, 8); // 12 CSS px, minimum 8 world units
  
   
   // Get shape-specific handle positions using the same logic as the renderer

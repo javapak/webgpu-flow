@@ -4,6 +4,7 @@ import { Edge } from '../components/Edge';
 import { type NodeType } from '../components/NodePalette';
 import { useEffect, useRef, useState } from 'react';
 import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
+import { useRenderSettings } from '../state/renderSettings';
 
 const raw = await import('../assets/efta_webgpu_flow.json');
 
@@ -12,21 +13,6 @@ const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 };
 
-
-const getOptimalCanvasSize = () => {
-  const isMobile = isMobileDevice();
-  if (isMobile) {
-    return {
-      width: Math.max(300, window.innerWidth - 40),
-      height: Math.max(400, window.innerHeight - 200)
-    };
-  } else {
-    return {
-      width: window.innerWidth - 250,
-      height: window.innerHeight - 150
-    };
-  }
-};
 
   const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
     const isMobile = isMobileDevice();
@@ -40,7 +26,9 @@ const getOptimalCanvasSize = () => {
 
 export default function ERFlow() {
     const [, setSupportedSampleCount] = useState<string[] | undefined>(['2']);
-    const [canvasSize, setCanvasSize] = useState(() => getOptimalCanvasSize());
+    // The canvas fills whatever pane it's placed in; measure it rather than guessing from the window.
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
     const [, setNodes] = useState<any>();
     const [, setEdges ] = useState<any>();
 
@@ -49,8 +37,7 @@ export default function ERFlow() {
 useEffect(() => {
     setNodes(nodes);
     setEdges(edges);
-    const isMobile = isMobileDevice();
-    if (isMobile) {
+    if (isMobileDevice()) {
       // Set up mobile viewport
       let viewport = document.querySelector('meta[name="viewport"]');
       if (!viewport) {
@@ -68,35 +55,32 @@ useEffect(() => {
       document.body.style.touchAction = 'manipulation';
     }
 
-    const handleResize = () => {
-      setCanvasSize(getOptimalCanvasSize());
-      
-    };
-    handleResize(); // Initial check
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setCanvasSize({ width: Math.floor(width), height: Math.floor(height) });
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
 }, []);
 
 
 
 
 
-    const internalResolutionRef = useRef({width: 1920, height: 1080});
+    const resolution = useRenderSettings(s => s.resolution);
     return (
-        <div style={{overflow: 'hidden'}}>
-            <DiagramCanvas 
+        <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+            {canvasSize.width > 0 && <DiagramCanvas 
                     width={canvasSize.width}
                     height={canvasSize.height}
                     setSupportedSampleCount={setSupportedSampleCount}
                     onNodeDropped={handleNodeDropped}
-                    internalResolutionRef={internalResolutionRef}
+                    resolution={resolution}
                     showDebugInfo
                     onNodeClick={() => {}}
-                    
-                  
-
-            />
+            />}
           
         {<>{nodes.map((node) => <Node key={node.id} id={node.id} visual={node.visual} type={node.type} position={node.position} data={node.data} /> )} </>}
         {<>{edges.map((edge) => <Edge key={edge.id} id={edge.id} sourceNodeId={edge.sourceNodeId} data={edge.data} targetNodeId={edge.targetNodeId} userVertices={edge.userVertices} style={{ targetMarker: edge.style.targetMarker as MarkerType, labelColor: "#ffffff", thickness: 3, color: [0,0,0,255] ,sourceMarker: edge.style.sourceMarker as MarkerType}} />)}</>}

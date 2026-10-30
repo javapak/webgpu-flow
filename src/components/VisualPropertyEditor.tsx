@@ -85,7 +85,6 @@ export default function VisualPropertyEditor() {
     <>
     {interaction.selectedNodes.length > 0 && (
         <div>
-            <h3>Visual properties:</h3>
             
             {interaction.selectedNodes[0].data && (<div><div><FontPicker onChange={onChangeFont} value={interaction.selectedNodes[0].visual!.labelFont as DiagramFont}/></div><div><ColorInput title='label text color hex value' label='text color' pb={10} w={150} fixOnBlur={false}  value={textHexValue} defaultValue='#ffffff' 
             onChange={handleTextColorChange} /></div>

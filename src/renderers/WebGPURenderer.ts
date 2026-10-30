@@ -10,6 +10,7 @@ import { ShaderBasedEdgeDetector } from '../compute/ShaderBasedEdgeDetector';
 import GPUCapabilities from '../utils/GPUCapabilities';
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import { GridSnapping } from '../utils/GridSnapping';
+import { canShowResizeHandles } from '../utils/CanvasCoords';
 import SupersamplingManager from './SupersamplingManager';
 import { FXAARenderer } from './FXAARendererer';
 import { SMAARenderer } from './SMAARenderer';
@@ -269,6 +270,23 @@ private recreateSizeDependentTextures(width: number, height: number) {
 
   get currentSampleCount(): string {
     return this.sampleCount;
+  }
+
+  /**
+   * Resizes the render target. Waits out any in-flight frame first, because the
+   * resize path refuses to run while the renderer is busy.
+   */
+  async setResolution(size: { width: number; height: number }): Promise<void> {
+    for (let i = 0; i < 120 && this.isBusy; i++) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    await this.updateDepthTextureOnSizeChange(size);
+
+    // Supersampled targets are sized from the canvas too.
+    const manager = this.supersamplingManager;
+    if (manager && manager.getSupersamplingFactor() > 1) {
+      manager.createSupersampledTextures(size.width, size.height, parseInt(this.sampleCount), navigator.gpu.getPreferredCanvasFormat());
+    }
   }
 
   async setSupersamplingFactor(factor: number) {
@@ -1375,12 +1393,14 @@ private createIntermediateTexture(width: number, height: number) {
       // Render handles (your existing code for selected nodes)
       const handleData: HandleInstanceData[] = [];
       if (selectedNodes.length > 0) {
-        const handleSize = Math.max(12 / viewport.zoom, 8);
+        const pixelRatio = viewport.pixelRatio ?? 1;
+        const handleSize = Math.max((12 * pixelRatio) / viewport.zoom, 8);
 
         selectedNodes.forEach(node => {
           if (!node.data || !node.data.position) return;
           
           const size = node.visual?.size || { width: 100, height: 100 };
+          if (!canShowResizeHandles(size, viewport.zoom, pixelRatio)) return; // too small on screen to resize; still draggable
           const shape = node.visual?.shape || 'rectangle';
           const { x, y } = node.data.position;
           

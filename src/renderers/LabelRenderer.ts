@@ -1,6 +1,8 @@
 import { TextureAtlas } from './TextureAtlas';
 import type { DiagramEdge, DiagramNode, Viewport } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
+import type { DiagramFont } from '../utils/FontLoadUtils';
+import { declutter, labelWorldScale, LABEL_ATLAS_FONT_SIZE, type LabelCandidate } from './LabelScaling';
 
 export interface LabelInstanceData {
   texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
@@ -238,135 +240,69 @@ private hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
   }
 
 prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewport: Viewport): LabelInstanceData[] {
-  const nodesWithLabels = visibleNodes.filter(node => 
-    node.data.label && node.data.label.trim().length > 0
-  );
+  const zoom = viewport.zoom;
+  const pixelRatio = viewport.pixelRatio ?? 1;
+  const scale = labelWorldScale(zoom, pixelRatio);
+  const atlasSize = this.textAtlas.getAtlasSize();
 
-  const edgesWithLabels = visibleEdges.filter(edge => 
-    edge.data?.label && edge.data?.label.trim().length > 0
-  )
-
-  if (nodesWithLabels.length === 0 && edgesWithLabels.length === 0) {
-    return [];
+  const degree = new Map<string, number>();
+  for (const edge of visibleEdges) {
+    degree.set(edge.sourceNodeId, (degree.get(edge.sourceNodeId) ?? 0) + 1);
+    degree.set(edge.targetNodeId, (degree.get(edge.targetNodeId) ?? 0) + 1);
   }
+  const nodesById = new Map(visibleNodes.map(n => [n.id, n]));
 
-  const labelDataArray: LabelInstanceData[] = [];
+  const candidates: LabelCandidate[] = [];
+  const instances = new Map<string, LabelInstanceData>();
 
-  for (const node of nodesWithLabels) {
-    const label = node.data.label!.trim();
-    const fontSize = 90;
-    const fontFamily = node.visual?.labelFont || 'Arial';
-    let textColor = '#ffffffff';
-
-    if (node.visual?.labelColor)
-        textColor = node.visual.labelColor;
-
+  const add = (id: string, priority: number, text: string, color: string, fontFamily: DiagramFont, x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     try {
-      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor, fontFamily);
-      if (!atlasEntry) continue;
-      const textScale = Math.min(0.7, Math.min(0.25, Math.min(1.0 / viewport.zoom, 0.4)))
-
-      
-      const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
-      const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
-
-      // Position at node center
-      const labelX = node.data.position.x;
-      const labelY = node.data.position.y;
-
-      // FIX: Ensure UV coordinates are properly normalized
-      const atlasSize = this.textAtlas.getAtlasSize();
-      const u1 = atlasEntry.x / atlasSize;
-      const v1 = atlasEntry.y / atlasSize;
-      const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
-      const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
-
-      const textColorRGBA = this.hexToRgba(textColor);
-
-      console.log('Label entry:', {
-        text: label,
-        position: [labelX, labelY],
-        size: [labelWorldWidth, labelWorldHeight],
-        uv: [u1, v1, u2, v2],
-        atlasEntry: { x: atlasEntry.x, y: atlasEntry.y, w: atlasEntry.width, h: atlasEntry.height }
+      const entry = this.textAtlas.addText(text, LABEL_ATLAS_FONT_SIZE, color, fontFamily);
+      if (!entry) return;
+      const width = entry.width * scale;
+      const height = entry.height * scale;
+      const rgba = this.hexToRgba(color);
+      candidates.push({ id, priority, x, y, width, height });
+      instances.set(id, {
+        texCoords: [entry.x / atlasSize, entry.y / atlasSize, (entry.x + entry.width) / atlasSize, (entry.y + entry.height) / atlasSize],
+        color: [rgba.r, rgba.g, rgba.b, rgba.a],
+        position: [x, y],
+        size: [width, height],
       });
-
-      labelDataArray.push({
-        texCoords: [u1, v1, u2, v2],
-        color: [textColorRGBA.r, textColorRGBA.g, textColorRGBA.b, textColorRGBA.a],
-        position: [labelX, labelY],
-        size: [labelWorldWidth, labelWorldHeight]
-      });
-
     } catch (error) {
-      console.error('Error preparing label:', label, error);
+      console.error('Error preparing label:', text, error);
     }
+  };
+
+  for (const node of visibleNodes) {
+    const label = node.data.label?.trim();
+    if (!label) continue;
+    // Selected nodes always win; otherwise well-connected nodes are the ones worth naming.
+    const priority = (node.visual?.selected ? 1e6 : 0) + (degree.get(node.id) ?? 0);
+    add(`n:${node.id}`, priority, label, node.visual?.labelColor || '#ffffffff', (node.visual?.labelFont || 'Arial') as DiagramFont,
+      node.data.position.x, node.data.position.y);
   }
 
-    for (const edge of edgesWithLabels) {
-    console.log('edge label is being noticed OwO');
-    const label = edge.data?.label!.trim();
-    const fontSize = 75;
-
-    let textColor = '#ffffff';
-    if (edge.style.labelColor)
-      textColor = edge.style.labelColor;
-
-    try {
-      const atlasEntry = this.textAtlas.addText(label, fontSize, textColor, "Arial");
-      if (!atlasEntry) continue;
-      const textScale = Math.min(0.7, Math.min(0.25, Math.min(1.0 / viewport.zoom, 0.4)))
-
-      
-      const labelWorldWidth = (atlasEntry.width * textScale) / viewport.zoom;
-      const labelWorldHeight = (atlasEntry.height * textScale) / viewport.zoom;
-
-      let labelX: number;
-      let labelY: number;
-
-      // Position at center of edge (midpoint of userVertices if present). Use source/target nodes if no userVertices.
-      if (edge.userVertices.length > 0) {
-        const midIndex = Math.floor(edge.userVertices.length / 2);
-        labelX = edge.userVertices[midIndex].x;
-        labelY = edge.userVertices[midIndex].y;
-
-      }
-      else {
-      labelX = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.x + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.x) / 2;
-      labelY = (visibleNodes.find((node) => node.id === edge.sourceNodeId)?.data!?.position.y + visibleNodes.find((node) => node.id === edge.targetNodeId)?.data!?.position.y) / 2;
-      }
-
-      // FIX: Ensure UV coordinates are properly normalized
-      const atlasSize = this.textAtlas.getAtlasSize();
-      const u1 = atlasEntry.x / atlasSize;
-      const v1 = atlasEntry.y / atlasSize;
-      const u2 = (atlasEntry.x + atlasEntry.width) / atlasSize;
-      const v2 = (atlasEntry.y + atlasEntry.height) / atlasSize;
-
-      const textColorRGBA = this.hexToRgba(textColor);
-
-      console.log('Label entry:', {
-        text: label,
-        position: [labelX, labelY],
-        size: [labelWorldWidth, labelWorldHeight],
-        uv: [u1, v1, u2, v2],
-        atlasEntry: { x: atlasEntry.x, y: atlasEntry.y, w: atlasEntry.width, h: atlasEntry.height }
-      });
-
-      labelDataArray.push({
-        texCoords: [u1, v1, u2, v2],
-        color: [textColorRGBA.r, textColorRGBA.g, textColorRGBA.b, textColorRGBA.a],
-        position: [labelX, labelY],
-        size: [labelWorldWidth, labelWorldHeight]
-      });
-
-    } catch (error) {
-      console.error('Error preparing label:', label, error);
+  for (const edge of visibleEdges) {
+    const label = edge.data?.label?.trim();
+    if (!label) continue;
+    let x: number, y: number;
+    if (edge.userVertices.length > 0) {
+      const mid = edge.userVertices[Math.floor(edge.userVertices.length / 2)];
+      x = mid.x; y = mid.y;
+    } else {
+      const source = nodesById.get(edge.sourceNodeId), target = nodesById.get(edge.targetNodeId);
+      if (!source || !target) continue;
+      x = (source.data.position.x + target.data.position.x) / 2;
+      y = (source.data.position.y + target.data.position.y) / 2;
     }
+    // Below every node label, so edge labels only appear where there's room.
+    add(`e:${edge.id}`, -1, label, edge.style.labelColor || '#ffffff', 'Arial', x, y);
   }
 
-  console.log(`Prepared ${labelDataArray.length} labels for rendering`);
-  return labelDataArray;
+  const keep = declutter(candidates, zoom, 4 * pixelRatio);
+  return candidates.filter(c => keep.has(c.id)).map(c => instances.get(c.id)!);
 }
 
 

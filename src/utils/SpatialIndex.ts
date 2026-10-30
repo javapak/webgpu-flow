@@ -387,7 +387,8 @@ export interface DiagramNode {
 // Helper to convert diagram node to spatial node
 export function diagramNodeToSpatial(node: DiagramNode): SpatialNode<DiagramNode> {
   const defaultSize = { width: 100, height: 60 };
-  const size = node.data.size || defaultSize;
+  // The renderer draws from visual.size, so hit areas must use it too.
+  const size = node.visual?.size || node.data.size || defaultSize;
   const halfWidth = size.width / 2;
   const halfHeight = size.height / 2;
   

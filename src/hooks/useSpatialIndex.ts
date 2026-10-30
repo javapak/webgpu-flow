@@ -49,9 +49,9 @@ export const useSpatialIndex = (initialBounds: AABB): SpatialDiagramHook => {
     // Sort by area (smaller nodes first for better selection)
     return spatialNodes
       .map((sn: SpatialNode) => sn.data)
-      .sort((a: SpatialNode, b: SpatialNode) => {
-        const aSize = a.data.size || { width: 100, height: 60 };
-        const bSize = b.data.size || { width: 100, height: 60 };
+      .sort((a: DiagramNode, b: DiagramNode) => {
+        const aSize = a.visual?.size || a.data.size || { width: 100, height: 60 };
+        const bSize = b.visual?.size || b.data.size || { width: 100, height: 60 };
         return (aSize.width * aSize.height) - (bSize.width * bSize.height);
       });
   }, []);

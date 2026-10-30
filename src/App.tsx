@@ -1,15 +1,17 @@
 
-import React, { useState, useEffect, useCallback, useRef} from 'react';
+import React, { useState, useEffect, useCallback} from 'react';
 import "allotment/dist/style.css";
 import '@mantine/core/styles.css'
 import './App.css';
-import { ActionIcon, Center, Checkbox, NativeSelect } from '@mantine/core';
-import {Dismiss16Regular, Settings16Regular} from '@fluentui/react-icons';
+import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
+import {Dismiss16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
 import PropertyEditorPanel from './components/PropertyEditorPanel';
 import { Allotment } from 'allotment';
 import "allotment/dist/style.css";
 import ERFlow from './components/ERFlow';
+import Toolbar from './components/Toolbar';
+import { RESOLUTION_OPTIONS, parseResolution, useRenderSettings } from './state/renderSettings';
 
 // Mobile detection utility
 const isMobileDevice = () => {
@@ -23,17 +25,8 @@ export const DiagramDemo: React.FC = () => {
   //const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
   const [settingsOpen, setSettingsOpen] = useState(false);
   //const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
-  const internalResolutionRef = useRef({ width: 1920, height: 1080 });
-  const [internalResolution, setInternalResolution] = useState({ 
-    width: 1920, 
-    height: 1080 
-  });
-
-  const changeResolution = (newRes: { width: number; height: number }) => {
-    console.log(internalResolution);
-    internalResolutionRef.current = newRes; 
-    setInternalResolution(newRes);            
-  };
+  const resolution = useRenderSettings(s => s.resolution);
+  const setResolution = useRenderSettings(s => s.setResolution);
 
   const { fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled } = useDiagram();
   
@@ -84,23 +77,31 @@ export const DiagramDemo: React.FC = () => {
     }
   }; */
 
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettingsOpen(false); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [settingsOpen]);
+
   const handleOpenSettingsMenu = useCallback(() => {
      setSettingsOpen(!settingsOpen);
   }, [settingsOpen, setSettingsOpen])
 
   return (
     <div style={{ width: '100vw', height: '100vh'}}>
-      <Allotment defaultSizes={[80, 20]}>
+      <Allotment defaultSizes={[78, 22]}>
 
         {/* Main Canvas Area */}
+        <Allotment.Pane minSize={400}>
         <div style={{display: 'relative', height: '100vh'}}>      
 
           {/* Canvas Container */}
 
-          <Center style={{position: 'relative'}} h='100vh'>
-            <div style={{top: '-215px', left: `${window.innerWidth-515}px`, display: 'block', position: 'relative', zIndex: 10}}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Settings16Regular/></ActionIcon></div>
+          <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
+            <Toolbar onOpenSettings={handleOpenSettingsMenu} />
             <ERFlow/>
-          </Center>
+          </div>
 
           {/* Mobile Instructions */}
           {isMobile && (
@@ -121,45 +122,36 @@ export const DiagramDemo: React.FC = () => {
             </div>
           )}
 
-          {/* Settings Panel */}
+          {/* Settings modal */}
           {settingsOpen && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: isMobile ? '100vw' : 340,
-              height: isMobile ? '100vh' : 'auto',
-              backgroundColor: '#222',
-              zIndex: 200,
-              boxShadow: '0 0 16px #000a',
-              padding: 10,
-              overflowY: 'auto'
-            }}>
-              <div className="SettingsContentContainer">
+            <div className="settings-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) handleOpenSettingsMenu(); }}>
+              <div className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+                <div className="settings-header">
+                  <h2 id="settings-title">Settings</h2>
+                  <ActionIcon variant="subtle" color="gray" aria-label="Close settings" onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon>
+                </div>
 
-                <div style={{ paddingTop: 10, paddingRight: 10, placeSelf: 'end', zIndex: '100' }}><ActionIcon variant='subtle' onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon></div>
-                {/* ... MSAA section ... */}
+                <div className="settings-body">
+                  <section className="settings-section">
+                    <h3>Display</h3>
+                    <NativeSelect label="Resolution" description="Render sharpness; on-screen size is unchanged" data={[...RESOLUTION_OPTIONS]} value={`${resolution.width}x${resolution.height}`} onChange={(e) => setResolution(parseResolution(e.currentTarget.value))} />
+                  </section>
 
-            <NativeSelect label='Resolution' data={['1280x720', '1920x1080', '2560x1440', '3840x2160']} value={`${internalResolutionRef.current.width}x${internalResolutionRef.current.height}`} onChange={(e) => {
-              const widthHeight = e.currentTarget.value.split('x').map(v => parseInt(v));
-              changeResolution({width: widthHeight[0], height: widthHeight[1]});
-              console.log('internal resolution selected', e.currentTarget.value)
-            }} />
-             
-            
-            <div style={{display: 'block'}}><Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/></div>
-            <div style={{display: 'block'}}><Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/></div>
-
-            </div>
-
-                
-              
-        </div>)}
+                  <section className="settings-section">
+                    <h3>Anti-aliasing</h3>
+                    <Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/>
+                    <Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/>
+                  </section>
+                </div>
+              </div>
+            </div>)}
       </div>
-      <div>
-      <PropertyEditorPanel />
-      </div>
+        </Allotment.Pane>
+
+        {/* Sidebar: layout + properties */}
+        <Allotment.Pane minSize={260} maxSize={500} preferredSize={320}>
+          <PropertyEditorPanel />
+        </Allotment.Pane>
     </Allotment>
     </div>
   );

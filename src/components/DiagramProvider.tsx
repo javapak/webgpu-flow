@@ -12,6 +12,8 @@ import type { AABB, Point } from "../types/spatial-indexing/types";
 import type { FloatingEdge } from "../renderers/FloatingEdgeRenderer";
 import { GridSnapping } from '../utils/GridSnapping';
 import globalRenderer from '../renderers/gpuInstance'
+import { canvasToWorld, clampZoom, clientToCanvas as clientToCanvasPoint, zoomAbout, type View } from '../utils/CanvasCoords';
+import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutResult } from '../layout/graphLayout';
 
 export const InteractionMode = {
   SELECT: 0,
@@ -39,6 +41,17 @@ export interface DiagramContextValue extends DiagramState {
   updateNode: (node: DiagramNode) => void;
   clearVertexSelection: () => void;
   updateEdge: (edge: DiagramEdge) => void;
+  /** Computes a layout for the current graph, applies it and frames the result. */
+  applyLayout: (options?: Partial<LayoutOptions>) => Promise<void>;
+  /** Pans/zooms the viewport (animated by default) so the whole graph is visible. */
+  fitToContent: (options?: { padding?: number; animate?: boolean }) => void;
+  /** Zooms about the centre of the view by a factor, animated. */
+  zoomBy: (factor: number) => void;
+  /** Zooms about the centre of the view to an absolute level, animated. */
+  setZoom: (zoom: number) => void;
+  /** Stops an in-flight fit/zoom animation; call when the user takes over the viewport. */
+  cancelViewportAnimation: () => void;
+  setGridSnapping: (enabled: boolean) => void;
   removeEdge: (edgeId: string) => void;
   selectEdge: (edge: DiagramEdge | null) => void;
   clearEdgeSelection: () => void;
@@ -73,7 +86,10 @@ export interface DiagramContextValue extends DiagramState {
   
   // Viewport methods
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;
+  /** Takes canvas-backing-store pixels (see CanvasCoords.ts), not CSS pixels. */
   screenToWorld: (screenPoint: Point) => Point;
+  /** Converts page (client) coordinates to canvas-backing-store pixels. */
+  clientToCanvas: (clientX: number, clientY: number) => Point;
   worldToScreen: (worldPoint: Point) => Point;
   setAltKey: (pressed: boolean) => void;
 
@@ -109,6 +125,8 @@ type DiagramAction =
   | { type: 'ADD_EDGE'; edge: DiagramEdge }
   | { type: 'REMOVE_EDGE'; edgeId: string }
   | { type: 'UPDATE_EDGE'; edge: DiagramEdge }
+  | { type: 'APPLY_LAYOUT'; layout: LayoutResult }
+  | { type: 'SET_GRID_SNAPPING'; enabled: boolean }
   | { type: 'SET_VIEWPORT'; viewport: Partial<Viewport> }
   | { type: 'SELECT_NODE'; node: DiagramNode | null }
   | { type: 'SELECT_EDGE'; edge: DiagramEdge | null }
@@ -171,6 +189,34 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
 
+    case 'SET_GRID_SNAPPING':
+      return { ...state, gridSnapping: { ...state.gridSnapping, enabled: action.enabled } };
+
+    case 'APPLY_LAYOUT': {
+      const { positions, edgeVertices } = action.layout;
+      const moved = state.nodes.map((node): DiagramNode => {
+        const position = positions.get(node.id);
+        return position ? { ...node, data: { ...node.data, position } } : node;
+      });
+      // Drags mutate node.data in place, so the selection must share the
+      // exact objects held in `nodes`, not separate copies.
+      const movedById = new Map(moved.map(node => [node.id, node]));
+      const moveNode = (node: DiagramNode) => movedById.get(node.id) ?? node;
+      return {
+        ...state,
+        nodes: moved,
+        edges: state.edges.map(edge => {
+          const userVertices = edgeVertices.get(edge.id);
+          return userVertices ? { ...edge, userVertices } : edge;
+        }),
+        interaction: {
+          ...state.interaction,
+          selectedNodes: state.interaction.selectedNodes.map(moveNode),
+          selectedVertex: null,
+        },
+      };
+    }
+
     case 'SELECT_EDGE_VERTEX':
       return {
         ...state,
@@ -198,6 +244,12 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         edges: state.edges.map(edge =>
           edge.id === action.edge.id ? action.edge : edge
         ),
+        interaction: {
+          ...state.interaction,
+          selectedEdges: state.interaction.selectedEdges.map(edge =>
+            edge.id === action.edge.id ? action.edge : edge
+          ),
+        },
       };
 
     case 'SET_VIEWPORT':
@@ -430,7 +482,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const interactionRef = useRef<InteractionState>({altKeyPressed: false, selectedVertex: null, dragState: {isDragging: false, dragType: 'viewport', lastPos: null, startPos: null }, mode: 'select', selectedEdges: [], selectedNodes: []})
 
 
-const viewportRef = useRef({
+const viewportRef = useRef<Viewport>({
     x: 0, y: 0, zoom: 1,
     width: 800, height: 600,
 });
@@ -442,9 +494,6 @@ const drawingStateRef = useRef<EdgeDrawingState>({isDrawing: false, sourceNodeId
     stateRef.current = state;
   }, [state]);
 
-  useEffect(() => {
-    viewportRef.current = state.viewport;
-}, [state.viewport]);
 
 
 const updateDrag = useCallback((screenPoint: Point) => {
@@ -468,57 +517,72 @@ const updateDrag = useCallback((screenPoint: Point) => {
         selectedNode.data.position.x += deltaX / zoom;
         selectedNode.data.position.y += deltaY / zoom;
         scheduleRender();
+
+    } else if (drag.dragState.dragType === 'resize') {
+        const { originalSize, originalPosition, resizeHandle, startPos } = drag.dragState;
+        const selected = stateRef.current.interaction.selectedNodes[0];
+        if (!selected || !originalSize || !originalPosition || !resizeHandle || !startPos) return;
+
+        // calculateResize works from the original geometry and the total delta.
+        const zoom = viewportRef.current.zoom;
+        const next = MouseInteractions.calculateResize(
+            resizeHandle,
+            (screenPoint.x - startPos.x) / zoom,
+            (screenPoint.y - startPos.y) / zoom,
+            originalSize.width, originalSize.height,
+            originalPosition.x, originalPosition.y,
+            12, 12,
+            MouseInteractions.shouldLockAspectRatio(selected.visual?.shape),
+        );
+
+        // `visual` is copied per node on selection, so update both the stored node and the selected copy.
+        const stored = stateRef.current.nodes.find(n => n.id === selected.id);
+        for (const node of [stored, selected]) {
+            if (!node) continue;
+            node.visual = { ...node.visual, size: { width: next.width, height: next.height } };
+            node.data.position = { x: next.x, y: next.y };
+            if (node.data.size) node.data.size = { width: next.width, height: next.height };
+        }
+        scheduleRender();
+
+    } else if (drag.dragState.dragType === 'edge-vertex') {
+        const { edgeId, vertexIndex, originalVertexPosition, startPos } = drag.dragState;
+        if (!edgeId || vertexIndex === undefined || !originalVertexPosition || !startPos) return;
+        const edge = stateRef.current.edges.find(e => e.id === edgeId);
+        if (!edge || !edge.userVertices[vertexIndex]) return;
+
+        const zoom = viewportRef.current.zoom;
+        edge.userVertices[vertexIndex] = {
+            x: originalVertexPosition.x + (screenPoint.x - startPos.x) / zoom,
+            y: originalVertexPosition.y + (screenPoint.y - startPos.y) / zoom,
+        };
+        scheduleRender();
     }
 }, []);
 
-const screenToWorld = useCallback((screenPoint: Point): Point => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
-    
+const screenToWorld = useCallback((canvasPoint: Point): Point => {
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const vp = viewportRef.current; 
-    
-    const scaleX = (canvas.width / rect.width) * 0.7;
-    const scaleY = (canvas.height / rect.height) * 0.7;
-    
-    const canvasX = screenPoint.x * scaleX;
-    const canvasY = screenPoint.y * scaleY;
-    
-    const canvasCenterX = canvas.width / 2;
-    const canvasCenterY = canvas.height / 2;
-    
-    const worldX = (canvasX - canvasCenterX) / vp.zoom + vp.x;
-    const worldY = (canvasY - canvasCenterY) / vp.zoom + vp.y;
-    
-    return { x: worldX, y: worldY };
-}, []); 
+    if (!canvas) return { x: 0, y: 0 };
+    return canvasToWorld(viewportRef.current, canvas, canvasPoint);
+}, []);
+
+const clientToCanvas = useCallback((clientX: number, clientY: number): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    return clientToCanvasPoint(canvas.getBoundingClientRect(), canvas, clientX, clientY);
+}, []);
 
   const worldToScreen = useCallback((worldPoint: Point): Point => {
-    const currentState = stateRef.current;
-    
-    if (!canvasRef.current) {
-      return { x: 0, y: 0 };
-    }
-    
     const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const vp = viewportRef.current;
     const rect = canvas.getBoundingClientRect();
-    
-    // Convert world to canvas coordinates
-    const canvasCenterX = canvas.width / 2;
-    const canvasCenterY = canvas.height / 2;
-    
-    const canvasX = (worldPoint.x - currentState.viewport.x) * currentState.viewport.zoom + canvasCenterX;
-    const canvasY = (worldPoint.y - currentState.viewport.y) * currentState.viewport.zoom + canvasCenterY;
-    
-    // Convert canvas to screen coordinates
-    const scaleX = rect.width / canvas.width;
-    const scaleY = rect.height / canvas.height;
-    
-    const screenX = canvasX * scaleX;
-    const screenY = canvasY * scaleY;
-    
-    return { x: screenX, y: screenY };
-  }, [stateRef, canvasRef]);
+    // world -> canvas px -> CSS px relative to the canvas element
+    return {
+      x: ((worldPoint.x - vp.x) * vp.zoom + canvas.width / 2) * (rect.width / canvas.width),
+      y: ((worldPoint.y - vp.y) * vp.zoom + canvas.height / 2) * (rect.height / canvas.height),
+    };
+  }, []);
 
   // Get only visible nodes for efficient rendering
   const getVisibleNodes = useCallback(() => {
@@ -545,13 +609,17 @@ useLayoutEffect(() => {
         rendererRef.current.attachCanvas(canvasRef.current);
 
   
-  const currentState = stateRef.current;
+  // This effect re-runs on every render (the spatial hook returns a new object each time),
+  // so it must draw the *live* viewport. stateRef lags a render behind, and drawing from it
+  // here would paint the pre-pan view right after a gesture commits.
   rendererRef.current.render(
       state.nodes, // for now we render it all.
-      currentState.edges,
-      currentState.viewport,
-      { width: canvasRef.current.width, height: canvasRef.current.height }
-      
+      state.edges,
+      viewportRef.current,
+      { width: canvasRef.current.width, height: canvasRef.current.height },
+      state.interaction.selectedNodes,
+      state.interaction.selectedEdges,
+      drawingStateRef.current
     );
   }}, [spatial]);
 
@@ -644,7 +712,7 @@ const scheduleRender = useCallback(() => {
       const resizeHandle = MouseInteractions.getResizeHandle(
         worldPoint,
         nodeWithSelection as any, 
-        currentState.viewport
+        viewportRef.current
       );
       
       if (resizeHandle !== 'none') {
@@ -688,9 +756,106 @@ const scheduleRender = useCallback(() => {
   }, []);
 
   // Viewport methods
+  // viewportRef is the source of truth while the user pans/zooms (gestures mutate it
+  // per frame and only sync React state afterwards), so always merge onto it.
   const setViewport = useCallback((viewport: Partial<Viewport>) => {
-    dispatch({ type: 'SET_VIEWPORT', viewport });
+    viewportRef.current = { ...viewportRef.current, ...viewport };
+    dispatch({ type: 'SET_VIEWPORT', viewport: { ...viewportRef.current } });
   }, []);
+
+  const viewAnimRef = useRef<number | null>(null);
+
+  const cancelViewportAnimation = useCallback(() => {
+    if (viewAnimRef.current !== null) {
+      cancelAnimationFrame(viewAnimRef.current);
+      viewAnimRef.current = null;
+    }
+  }, []);
+
+  /** Eases the viewport to `target`. Zoom is interpolated geometrically so it feels even. */
+  const animateViewportTo = useCallback((target: View, duration = 280) => {
+    cancelViewportAnimation();
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (duration <= 0 || reduceMotion) {
+      setViewport(target);
+      return;
+    }
+    const from = { ...viewportRef.current };
+    const startTime = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const vp = viewportRef.current;
+      vp.x = from.x + (target.x - from.x) * eased;
+      vp.y = from.y + (target.y - from.y) * eased;
+      vp.zoom = from.zoom * Math.pow(target.zoom / from.zoom, eased);
+      scheduleRender();
+      if (t < 1) {
+        viewAnimRef.current = requestAnimationFrame(step);
+      } else {
+        viewAnimRef.current = null;
+        setViewport(target); // sync React state once, at the end
+      }
+    };
+    viewAnimRef.current = requestAnimationFrame(step);
+  }, [cancelViewportAnimation, setViewport, scheduleRender]);
+
+  useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);
+
+  const fitToContent = useCallback(({ padding = 60, animate = true }: { padding?: number; animate?: boolean } = {}) => {
+    const canvas = canvasRef.current;
+    const { nodes, edges } = stateRef.current;
+    const bounds = nodeBounds(nodes);
+    if (!canvas || !bounds) return;
+
+    // Routed edges can bulge past the nodes, so include their bend points.
+    for (const edge of edges) {
+      for (const v of edge.userVertices) {
+        bounds.minX = Math.min(bounds.minX, v.x); bounds.maxX = Math.max(bounds.maxX, v.x);
+        bounds.minY = Math.min(bounds.minY, v.y); bounds.maxY = Math.max(bounds.maxY, v.y);
+      }
+    }
+
+    // Padding is in canvas pixels so the margin looks the same at any zoom.
+    const w = Math.max(bounds.maxX - bounds.minX, 1);
+    const h = Math.max(bounds.maxY - bounds.minY, 1);
+    const fit = Math.min(Math.max(canvas.width - padding * 2, 1) / w, Math.max(canvas.height - padding * 2, 1) / h);
+    // Don't blow a tiny graph up to fill the screen.
+    const zoom = clampZoom(Math.min(fit, 1.5));
+    const target = { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2, zoom };
+
+    if (animate) animateViewportTo(target);
+    else { cancelViewportAnimation(); setViewport(target); }
+  }, [animateViewportTo, cancelViewportAnimation, setViewport]);
+
+  const setZoom = useCallback((zoom: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const center = { x: canvas.width / 2, y: canvas.height / 2 };
+    animateViewportTo(zoomAbout(viewportRef.current, canvas, center, zoom), 160);
+  }, [animateViewportTo]);
+
+  const zoomBy = useCallback((factor: number) => setZoom(viewportRef.current.zoom * factor), [setZoom]);
+
+  const setGridSnapping = useCallback((enabled: boolean) => {
+    dispatch({ type: 'SET_GRID_SNAPPING', enabled });
+  }, []);
+
+  const applyLayout = useCallback(async (options: Partial<LayoutOptions> = {}) => {
+    const { nodes, edges } = stateRef.current;
+    const layout = await computeLayout(nodes, edges, { ...DEFAULT_LAYOUT_OPTIONS, ...options });
+    // stateRef is updated by an effect, so patch it now for fitToContent.
+    stateRef.current = {
+      ...stateRef.current,
+      nodes: nodes.map(n => {
+        const position = layout.positions.get(n.id);
+        return position ? { ...n, data: { ...n.data, position } } : n;
+      }),
+      edges: edges.map(e => ({ ...e, userVertices: layout.edgeVertices.get(e.id) ?? e.userVertices })),
+    };
+    dispatch({ type: 'APPLY_LAYOUT', layout });
+    fitToContent({ animate: false });
+  }, [fitToContent]);
 
   // Selection methods
   const selectNode = useCallback((node: DiagramNode | null) => {
@@ -749,36 +914,31 @@ const startDrag = useCallback((
     };
 }, []);
 const endDrag = useCallback(() => {
-    const drag = interactionRef.current;
-    drag.dragState.isDragging = false;
+    const drag = interactionRef.current.dragState;
+    const wasDragging = drag.isDragging;
+    const type = drag.dragType;
+    const edgeId = drag.edgeId;
+    drag.isDragging = false;
+    if (!wasDragging) return;
 
-    if (drag.dragState.dragType === 'viewport') {
+    const current = stateRef.current;
+    const selected = current.interaction.selectedNodes[0];
+
+    if (type === 'viewport') {
         // Flush viewport ref back into reducer so rest of app sees it
-        dispatch({ 
-            type: 'SET_VIEWPORT', 
-            viewport: { ...viewportRef.current } 
-        });
-
-    } else if (drag.dragState.dragType === 'node') {
-        const selectedNode = stateRef.current.interaction.selectedNodes[0];
-        if (!selectedNode) return;
-
-        // Apply grid snapping on release
-        const snapped = !stateRef.current.interaction.altKeyPressed
-            ? GridSnapping.snapPointToGrid(
-                selectedNode.data.position,
-                stateRef.current.gridSnapping.gridSize
-              )
-            : selectedNode.data.position;
-
-        selectedNode.data.position = snapped;
-
-        // Flush back to reducer
-        dispatch({ type: 'UPDATE_NODE', node: { ...selectedNode } });
-        dispatch({ type: 'END_DRAG' });
-    } else {
-        dispatch({ type: 'END_DRAG' });
+        dispatch({ type: 'SET_VIEWPORT', viewport: { ...viewportRef.current } });
+    } else if ((type === 'node' || type === 'resize') && selected) {
+        const stored = current.nodes.find(n => n.id === selected.id) ?? selected;
+        // Snap the final position (not while dragging) unless Alt is held. Resizing keeps its exact geometry.
+        if (type === 'node' && current.gridSnapping.enabled && !current.interaction.altKeyPressed) {
+            stored.data.position = GridSnapping.snapPointToGrid(stored.data.position, current.gridSnapping.gridSize);
+        }
+        dispatch({ type: 'UPDATE_NODE', node: { ...stored } });
+    } else if (type === 'edge-vertex' && edgeId) {
+        const edge = current.edges.find(e => e.id === edgeId);
+        if (edge) dispatch({ type: 'UPDATE_EDGE', edge: { ...edge, userVertices: [...edge.userVertices] } });
     }
+    dispatch({ type: 'END_DRAG' });
 }, []);
   // Renderer methods
   const getRenderer = useCallback(() => rendererRef.current, []);
@@ -1149,7 +1309,7 @@ const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
 
 const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): number => {
   const worldPoint = screenToWorld(screenPoint);
-  const vertexSize = Math.max(12 / state.viewport.zoom, 8);
+  const vertexSize = Math.max((12 * (viewportRef.current.pixelRatio ?? 1)) / viewportRef.current.zoom, 8);
   
   for (let i = 0; i < edge.userVertices.length; i++) {
     const vertex = edge.userVertices[i];
@@ -1164,7 +1324,7 @@ const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): n
   }
   
   return -1;
-}, [screenToWorld, state.viewport.zoom]);
+}, [screenToWorld]);
 
 
   const handleSampleCountChange = useCallback(async (value: string) => {
@@ -1211,7 +1371,9 @@ const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): n
 
 const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean} => {
   const worldPoint = screenToWorld(screenPoint);
-  const threshold = 5; 
+  // ~8 CSS pixels either side of the line, whatever the zoom.
+  const threshold = (8 * (viewportRef.current.pixelRatio ?? 1)) / viewportRef.current.zoom;
+  const nodesById = new Map(state.nodes.map(n => [n.id, n]));
   
   // Check vertices first (if any edge is selected)
   if (state.interaction.selectedEdges.length > 0) {
@@ -1224,8 +1386,8 @@ const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null,
   
   // Check edge lines
   for (const edge of state.edges) {
-    const sourceNode = state.nodes.find(n => n.id === edge.sourceNodeId);
-    const targetNode = state.nodes.find(n => n.id === edge.targetNodeId);
+    const sourceNode = nodesById.get(edge.sourceNodeId);
+    const targetNode = nodesById.get(edge.targetNodeId);
     
     if (!sourceNode || !targetNode) continue;
     
@@ -1250,7 +1412,7 @@ const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null,
   }
   
   return { edge: null, vertexIndex: -1, isVertex: false };
-}, [screenToWorld, hitTestEdgeVertex, state.viewport.zoom, state.interaction.selectedEdges, state.edges, state.nodes]);
+}, [screenToWorld, hitTestEdgeVertex, state.interaction.selectedEdges, state.edges, state.nodes]);
 
 
 
@@ -1346,6 +1508,12 @@ useEffect(() => {
     addEdge,
     removeEdge,
     updateEdge,
+    applyLayout,
+    fitToContent,
+    zoomBy,
+    setZoom,
+    cancelViewportAnimation,
+    setGridSnapping,
     selectEdgeVertex,
     // Spatial methods
     getVisibleNodes,
@@ -1354,6 +1522,7 @@ useEffect(() => {
     // Viewport methods
     setViewport,
     screenToWorld,
+    clientToCanvas,
     worldToScreen,
     // Selection methods
     selectNode,
@@ -1393,6 +1562,12 @@ useEffect(() => {
     addEdge,
     removeEdge,
     updateEdge,
+    applyLayout,
+    fitToContent,
+    zoomBy,
+    setZoom,
+    cancelViewportAnimation,
+    setGridSnapping,
     getVisibleNodes,
     hitTestPoint,
     hitTestWithHandles,
@@ -1400,6 +1575,7 @@ useEffect(() => {
     setFocusedOnInput,
     setViewport,
     screenToWorld,
+    clientToCanvas,
     worldToScreen,
     selectNode,
     clearSelection,

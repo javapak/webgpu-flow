@@ -1,28 +1,34 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { InteractionMode, useDiagram } from './DiagramProvider';
-import { MouseInteractions } from '../utils/MouseInteractions';
+import { MouseInteractions, type ResizeHandle } from '../utils/MouseInteractions';
 import type { DiagramNode } from '../types';
+import {
+  clampZoom, distance, fitContain, midpoint, pinchView, wheelZoomFactor, zoomAbout,
+  type Point, type View,
+} from '../utils/CanvasCoords';
 
 interface DiagramCanvasProps {
+  /** Size of the area the canvas may occupy; the canvas is letterboxed to fit inside it. */
   width: number;
   height: number;
-  internalResolutionRef: React.RefObject<{width: number, height: number}>;
+  /** Backing-store size. Changing it resizes the render target; on-screen size is unaffected. */
+  resolution: { width: number; height: number };
   className?: string;
   showDebugInfo?: boolean;
   onNodeClick?: (node: any) => void;
   onNodeDropped?: (nodeType: any, position: {x: number, y: number}) => void;
   onNodeDoubleClick?: (node: any) => void;
   onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
-  selectedNodeType?: any; // For mobile tap-to-place
+  selectedNodeType?: any; // For tap-to-place
   onPlaceNode?: (nodeType: any, position: {x: number, y: number}) => void;
   setSupportedSampleCount: React.Dispatch<React.SetStateAction<string[] | undefined>>
 }
 
-// Mobile detection utility
-const isMobileDevice = () => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-};
-
+// How far (CSS px) a pointer must travel before a node/handle/vertex press becomes a drag.
+// Fingers jitter more than mice, so touch gets a larger dead zone.
+const DRAG_SLOP_CSS: Record<string, number> = { mouse: 3, pen: 5, touch: 8 };
+// A debounce for syncing the (ref-driven) viewport back into React state after a gesture.
+const VIEWPORT_COMMIT_MS = 150;
 
 export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   width,
@@ -31,7 +37,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   showDebugInfo = false,
   onNodeClick,
   onCanvasClick,
-  internalResolutionRef,
+  resolution,
   onNodeDropped,
   selectedNodeType,
   onPlaceNode,
@@ -42,23 +48,13 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const [currentCursor, setCurrentCursor] = useState<string>('grab');
   const initializationAttempted = useRef(false);
 
-  const isMobile = isMobileDevice();
-  
-  // Mobile touch state - simplified and more stable
-  const [touchState, setTouchState] = useState<{
-    touches: Map<number, any>;
-    isPinching: boolean;
-    lastPinchDistance: number;
-    lastPinchCenter: { x: number; y: number };
-  }>({
-    touches: new Map(),
-    isPinching: false,
-    lastPinchDistance: 0,
-    lastPinchCenter: { x: 0, y: 0 },
-  });
-
-
-  const zoomRequestRef = useRef<number | null>(null);
+  // Gesture state lives in refs: it changes on every pointer event and must not re-render.
+  const pointersRef = useRef(new Map<number, Point>());          // active pointers, canvas px
+  const pinchRef = useRef<{ view: View; center: Point; distance: number } | null>(null);
+  const dragPointerRef = useRef<number | null>(null);            // pointer that owns the current drag
+  const pendingRef = useRef<{ start: Point; slop: number; committed: boolean } | null>(null);
+  const hoverRef = useRef<{ pos: Point; raf: number | null }>({ pos: { x: 0, y: 0 }, raf: null });
+  const commitTimerRef = useRef<number | null>(null);
 
   const {
     viewport,
@@ -80,12 +76,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     exitDrawMode,
     completeEdge,
     hitTestEdge,
+    hitTestEdgeVertex,
     addControlPoint,
     setFocusedOnInput,
     focusedOnInput,
     endDrag,
     setViewport,
+    cancelViewportAnimation,
     screenToWorld,
+    clientToCanvas,
     getRenderer,
     getSpatialDebugInfo,
     initializeRenderer,
@@ -95,15 +94,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     mode
   } = useDiagram();
 
-
-useEffect(() => {
-  return () => {
-    if (zoomRequestRef.current) {
-      cancelAnimationFrame(zoomRequestRef.current);
-    }
-  };
-}, []);
-
+  // The backing store keeps its internal resolution (and aspect); the CSS box is the
+  // largest box of that aspect that fits the container, so 1 CSS px maps linearly to canvas px.
+  const cssSize = fitContain({ width, height }, resolution.width / resolution.height);
+  // After mount the renderer owns the canvas's pixel size (it must recreate depth/MSAA targets
+  // in step), so React only ever sets the initial attributes.
+  const initialResolution = useRef(resolution).current;
 
   useEffect(() => {
     if (!canvasRef.current || initializationAttempted.current) {
@@ -130,46 +126,46 @@ useEffect(() => {
     initCanvas();
   }, [initializeRenderer, getRenderer, setSupportedSampleCount]);
 
+  // Tell the viewport how the canvas is displayed. pixelRatio lets labels, handles and hit
+  // tolerances stay a constant size on screen whatever the resolution or pane size.
+  useEffect(() => {
+    if (cssSize.width <= 0) return;
+    setViewport({ width: cssSize.width, height: cssSize.height, pixelRatio: resolution.width / cssSize.width });
+  }, [cssSize.width, cssSize.height, resolution.width, setViewport]);
 
+  // Apply resolution changes. Zoom is scaled with the pixel count so the scene looks the same size.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || (canvas.width === resolution.width && canvas.height === resolution.height)) return;
+    const previousWidth = canvas.width;
+    void (async () => {
+      const renderer = getRenderer();
+      if (renderer?.initialized) {
+        await renderer.setResolution(resolution);
+      } else {
+        canvas.width = resolution.width;
+        canvas.height = resolution.height;
+      }
+      setViewport({ zoom: clampZoom(viewportRef.current.zoom * (canvas.width / previousWidth)) });
+      renderFrame();
+    })();
+  }, [resolution, getRenderer, setViewport, viewportRef, renderFrame]);
 
-useEffect(() => {
-  const updateOnSizeChange = async () => {
-    // Check if renderer is busy before attempting resize
-    if (!getRenderer() || getRenderer()?.isBusy) {
-      console.log('Skipping size change, renderer busy');
-      return;
+  useEffect(() => {
+    // Only render if initialized and not busy with resize/reconfiguration
+    if (isRendererInitialized() && !getRenderer()?.isBusy && canvasRef.current) {
+      const renderer = getRenderer();
+      if (renderer && renderer.depthTexture) {
+        requestAnimationFrame(() => {
+          if (!renderer.isBusy) {
+            renderFrame();
+          }
+        });
+      }
     }
-    
-    try {
-      setViewport({ width, height });
-      console.log('Updated depth texture on size change');
-
-
-    } catch (error) {
-      console.error('Failed to update depth texture on size change:', error);
-    }
-  };
-  
-  updateOnSizeChange();
-}, [width, height, setViewport, getRenderer]);
-
-useEffect(() => {
-  // Only render if initialized and not busy with resize/reconfiguration
-  if (isRendererInitialized() && !getRenderer()?.isBusy && canvasRef.current) {
-    // check if depth texture exists and matches canvas size
-    const renderer = getRenderer();
-    if (renderer && renderer.depthTexture) {
-      requestAnimationFrame(() => {
-        // Double-check busy state before rendering
-        if (!renderer.isBusy) {
-          renderFrame();
-        }
-      });
-    }
-  }
-}, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, 
-    viewport.zoom, viewport.width, viewport.height, isRendererInitialized, 
-    getRenderer, renderFrame]);
+  }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, 
+      viewport.zoom, viewport.width, viewport.height, isRendererInitialized, 
+      getRenderer, renderFrame]);
 
   // Update debug info periodically
   useEffect(() => {
@@ -181,526 +177,284 @@ useEffect(() => {
       return () => clearInterval(interval);
     }
   }, [showDebugInfo, getSpatialDebugInfo]);
-  
-  const getCanvasMousePos = useCallback((e: WheelEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || !canvasRef.current) return { x: 0, y: 0 };
-  
-    const visualX = e.clientX - rect.left;
-    const visualY = e.clientY - rect.top;
-    
-    // ADD SCALE FACTOR:
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
-    
-    return {
-      x: visualX * scaleX,
-      y: visualY * scaleY,
-    };
-}, []);
 
-
-  const getCanvasTouchPos = useCallback((touch: Touch) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || !canvasRef.current) return { x: 0, y: 0 };
-
-
-    const visualX = touch.clientX - rect.left;
-    const visualY = touch.clientY - rect.top;
-
-
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
-    
-    return {
-      x: visualX * scaleX,
-      y: visualY * scaleY
-    };
-
-
+  useEffect(() => () => {
+    if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current);
+    if (hoverRef.current.raf !== null) cancelAnimationFrame(hoverRef.current.raf);
   }, []);
 
-  const performHitTest = useCallback((canvasPos: { x: number; y: number }) => {
-    const result = hitTestWithHandles(canvasPos);
-    const edgeResults = hitTestEdge(canvasPos);
-    const worldPos = screenToWorld(canvasPos);
-    
-    return {
-      nodes: result.nodes,
-      selectedEdge: edgeResults.edge || null,
-      edgeVertexIndex: edgeResults.vertexIndex,
-      isEdgeVertex: edgeResults.isVertex,
-      resizeHandle: result.resizeHandle,
-      worldPos
-    };
-  }, [hitTestWithHandles, hitTestEdge, screenToWorld]);
+  // ---- helpers -------------------------------------------------------------
 
-  const getTouchDistance = (touch1: Touch, touch2: Touch): number => {
-    const dx = touch2.clientX - touch1.clientX;
-    const dy = touch2.clientY - touch1.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
+  const canvasPosOf = useCallback(
+    (e: { clientX: number; clientY: number }) => clientToCanvas(e.clientX, e.clientY),
+    [clientToCanvas],
+  );
 
-  const getTouchCenter = (touch1: Touch, touch2: Touch) => {
+  const canvasSizeOf = () => ({ width: canvasRef.current?.width ?? 1, height: canvasRef.current?.height ?? 1 });
+
+  /** Canvas px per CSS px (the canvas is usually displayed smaller than its backing store). */
+  const canvasPerCss = () => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    
-    return {
-      x: (touch1.clientX + touch2.clientX) / 2 - rect.left,
-      y: (touch1.clientY + touch2.clientY) / 2 - rect.top,
-    };
+    return rect && rect.width > 0 ? (canvasRef.current!.width / rect.width) : 1;
   };
 
-  // Mobile touch handlers - fixed and simplified
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  /** Moves the viewport without touching React state; state is synced once the gesture settles. */
+  const applyView = useCallback((view: View) => {
+    viewportRef.current.x = view.x;
+    viewportRef.current.y = view.y;
+    viewportRef.current.zoom = view.zoom;
+    renderFrame();
+    if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = window.setTimeout(() => {
+      commitTimerRef.current = null;
+      setViewport({}); // merges the ref and dispatches
+    }, VIEWPORT_COMMIT_MS);
+  }, [viewportRef, renderFrame, setViewport]);
+
+  const cursorForDrag = (type: string | null, handle?: ResizeHandle) => {
+    if (type === 'resize') return MouseInteractions.getCursorForHandle(handle ?? 'none');
+    if (type === 'node' || type === 'edge-vertex') return 'move';
+    return 'grabbing';
+  };
+
+  /** Starts a drag owned by `pointerId`. Non-viewport drags wait for the slop distance before moving. */
+  const beginDrag = useCallback((
+    type: 'node' | 'viewport' | 'resize' | 'edge-vertex',
+    pos: Point,
+    pointerId: number,
+    pointerType: string,
+    resizeHandle?: ResizeHandle,
+    edgeId?: string,
+    vertexIndex?: number,
+  ) => {
+    startDrag(type, pos, resizeHandle, edgeId, vertexIndex);
+    dragPointerRef.current = pointerId;
+    pendingRef.current = type === 'viewport'
+      ? null
+      : { start: pos, slop: (DRAG_SLOP_CSS[pointerType] ?? 5) * canvasPerCss(), committed: false };
+    if (mode !== InteractionMode.DRAW_EDGE) setCurrentCursor(cursorForDrag(type, resizeHandle));
+  }, [startDrag, mode]);
+
+  const finishDrag = useCallback(() => {
+    if (interactionRef.current.dragState.isDragging) endDrag();
+    dragPointerRef.current = null;
+    pendingRef.current = null;
+  }, [endDrag, interactionRef]);
+
+  // ---- pointer input (mouse, touch and pen share one path) ------------------
+
+  const beginPinch = useCallback(() => {
+    const [a, b] = [...pointersRef.current.values()];
+    finishDrag(); // a half-started node drag shouldn't fight the pinch
+    pinchRef.current = {
+      view: { x: viewportRef.current.x, y: viewportRef.current.y, zoom: viewportRef.current.zoom },
+      center: midpoint(a, b),
+      distance: distance(a, b),
+    };
+  }, [finishDrag, viewportRef]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Left button (or any touch/pen contact) interacts; middle button pans; right is left alone.
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
     e.preventDefault();
-    
-    const touches = Array.from(e.touches);
+    cancelViewportAnimation();
 
-    if (touches.length === 1) {
-      // Single touch
-      const touch = touches[0];
-      const canvasPos = getCanvasTouchPos(touch as Touch);
-      
-      setTouchState(prev => ({
-        ...prev,
-        touches: new Map([[touch.identifier, {
-          startX: canvasPos.x,
-          startY: canvasPos.y,
-          currentX: canvasPos.x,
-          currentY: canvasPos.y,
-          startTime: Date.now(),
-        }]]),
-        isPinching: false,
-      }));
+    if (focusedOnInput) setFocusedOnInput(false);
+    canvas.setPointerCapture(e.pointerId);
 
-      // Handle mobile tap-to-place mode
-      if (selectedNodeType && onPlaceNode) {
-        const worldPos = screenToWorld(canvasPos);
-        onPlaceNode(selectedNodeType, worldPos);
-        if (navigator.vibrate) navigator.vibrate(100);
-        return;
-      }
+    const pos = canvasPosOf(e);
+    pointersRef.current.set(e.pointerId, pos);
 
-      // Regular node/canvas interaction
-      const hitResult = performHitTest(canvasPos);
-      if (hitResult.selectedEdge) {
-        console.log('Edge selected')
-        clearEdgeSelection();
-        clearVertexSelection();
-        clearSelection();
-        selectEdge(hitResult.selectedEdge);
+    if (pointersRef.current.size === 2) { beginPinch(); return; }
+    if (pointersRef.current.size > 2) return;
 
-      }
-      
-      else if (hitResult.resizeHandle !== 'none') {
-        startDrag('resize', canvasPos, hitResult.resizeHandle);
-      } else if (hitResult.nodes.length > 0) {
-        const topNode = hitResult.nodes[0];
-        selectNode(topNode);
-        startDrag('node', canvasPos);
-        onNodeClick?.(topNode);
-      } else {
-        clearSelection();
-        clearVertexSelection();
-        clearEdgeSelection();
-        startDrag('viewport', canvasPos);
-        onCanvasClick?.(hitResult.worldPos);
-      }
-      
-    } else if (touches.length === 2) {
-      // Two touches - pinch zoom
-      const [touch1, touch2] = touches;
-      const distance = getTouchDistance(touch1 as Touch, touch2 as Touch);
-      const center = getTouchCenter(touch1 as Touch, touch2 as Touch);
-
-      // End any existing drag
-      if (interaction.dragState.isDragging) {
-        endDrag();
-      }
-
-      setTouchState(prev => ({
-        ...prev,
-        isPinching: true,
-        lastPinchDistance: distance,
-        lastPinchCenter: center,
-      }));
-    }
-  }, [getCanvasTouchPos, selectedNodeType, onPlaceNode, performHitTest, 
-      startDrag, selectNode, clearSelection, onNodeClick, onCanvasClick, 
-      screenToWorld, interaction.dragState.isDragging, endDrag]);
-
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-  e.preventDefault();
-  
-  const touches = Array.from(e.touches);
-  
-  if (touches.length === 1 && !touchState.isPinching) {
-    // Single touch drag - unchanged
-    const touch = touches[0];
-    const canvasPos = getCanvasTouchPos(touch as Touch);
-    
-    if (interactionRef.current.dragState.isDragging) {
-      updateDrag(canvasPos);
-
-    }
-    
-  } else if (touches.length === 2 && touchState.isPinching) {
-    // Ultra-optimized pinch zoom
-    const [touch1, touch2] = touches;
-    
-    // Pre-calculate squared distances to avoid sqrt until needed
-    const dx = touch2.clientX - touch1.clientX;
-    const dy = touch2.clientY - touch1.clientY;
-    const currentDistanceSquared = dx * dx + dy * dy;
-    
-    // Only update if distance changed significantly (reduces unnecessary updates)
-    const lastDistanceSquared = touchState.lastPinchDistance * touchState.lastPinchDistance;
-    const distanceChangeRatio = Math.abs(currentDistanceSquared - lastDistanceSquared) / Math.max(lastDistanceSquared, 1);
-    
-    if (distanceChangeRatio > 0.001) { // Only update if 0.1% change
-      const currentDistance = Math.sqrt(currentDistanceSquared);
-      
-      if (touchState.lastPinchDistance > 0) {
-        // Simple zoom factor
-        const zoomFactor = currentDistance / touchState.lastPinchDistance;
-        
-        // Clamp zoom without complex math
-        let newZoom = viewport.zoom * zoomFactor;
-        if (newZoom < 0.2) newZoom = 0.2;
-        if (newZoom > 3.0) newZoom = 3.0;
-        
-        // Skip center calculation entirely - just zoom at current viewport center
-        // This eliminates the most expensive calculation
-        setViewport({
-          zoom: newZoom,
-          x: viewport.x, // Keep current position
-          y: viewport.y,
-        });
-        
-        // Minimal state update
-        touchState.lastPinchDistance = currentDistance;
-      }
-    }
-  }
-}, [touchState, getCanvasTouchPos,
-    updateDrag, viewport.zoom, setViewport]);
-
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    
-    const remainingTouches = Array.from(e.touches);
-    
-    if (remainingTouches.length === 0) {
-      // All touches ended
-      if (interaction.dragState.isDragging) {
-        endDrag();
-      }
-      
-      setTouchState({
-        touches: new Map(),
-        isPinching: false,
-        lastPinchDistance: 0,
-        lastPinchCenter: { x: 0, y: 0 },
-      });
-    } else if (remainingTouches.length === 1 && touchState.isPinching) {
-      // Transition from pinch to single touch
-      setTouchState(prev => ({
-        ...prev,
-        isPinching: false,
-        lastPinchDistance: 0,
-      }));
-    }
-  }, [interaction.dragState.isDragging, endDrag, touchState.isPinching]);
-
-  const handleTouchCancel = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    
-    if (interaction.dragState.isDragging) {
-      endDrag();
-    }
-    
-    setTouchState({
-      touches: new Map(),
-      isPinching: false,
-      lastPinchDistance: 0,
-      lastPinchCenter: { x: 0, y: 0 },
-    });
-  }, [interaction.dragState.isDragging, endDrag]);
-
-
-  useEffect(() => {
-    if (isMobile && canvasRef.current){
-      canvasRef.current.addEventListener('touchstart', 
-        handleTouchStart as unknown as (e: TouchEvent) => void, {passive: false});
-        return () =>  canvasRef.current?.removeEventListener('touchstart', handleTouchStart as unknown as (e: TouchEvent) => void);
-
-    }
-  }, [handleTouchStart]);
-
-  useEffect(() => {
-    if (isMobile && canvasRef.current && canvasRef.current !== null){
-      canvasRef.current.addEventListener('touchmove', 
-      handleTouchMove as unknown as (e: TouchEvent) => void, {passive: false});
-      return () =>  canvasRef.current?.removeEventListener('touchmove', handleTouchMove as unknown as (e: TouchEvent) => void);
-
-    }
-  }, [handleTouchMove]);
-
-
-  useEffect(() => {
-    if (isMobile && canvasRef.current){
-      canvasRef.current.addEventListener('touchend', 
-      handleTouchEnd as unknown as (e: TouchEvent) => void, {passive: false});
-      return () =>  canvasRef.current?.removeEventListener('touchend', handleTouchEnd as unknown as (e: TouchEvent) => void);
-    }
-  }, [handleTouchEnd]);
-
-  useEffect(() => {
-    if (isMobile && canvasRef.current){
-      canvasRef.current.addEventListener('touchcancel', 
-        handleTouchCancel as unknown as (e: TouchEvent) => void, {passive: false});
-    }
-    return () =>  canvasRef.current?.removeEventListener('touchcancel', handleTouchCancel as unknown as (e: TouchEvent) => void);
-  }, [handleTouchCancel]);
-
-  
-
-
-  useEffect(() => {
-    if (mode === InteractionMode.DRAW_EDGE)
-      setCurrentCursor('crosshair');
-    else 
-      setCurrentCursor('grabbing');
-  }, [mode]);
-
-
-    const handleMouseMove = useCallback((e: WheelEvent) => {
-    if (isMobile) return;
-    
-    const canvasPos = getCanvasMousePos(e);
-    const worldPos = screenToWorld(canvasPos);
-
-    if (mode === InteractionMode.DRAW_EDGE && drawingState.isDrawing) {
-        if (drawingState.userVertices.length === 0) {
-            addControlPoint(worldPos, false);
-        } else {
-            addControlPoint(worldPos, true);
-        }
-        return;
-    }
-    
-    let newCursor = 'grab';
-    
-    if (interactionRef.current.dragState.isDragging) { e
-        if (interactionRef.current.dragState.dragType === 'resize') {
-            newCursor = MouseInteractions.getCursorForHandle(interactionRef.current.dragState.resizeHandle || 'none');
-        } else if (interactionRef.current.dragState.dragType === 'edge-vertex' || interactionRef.current.dragState.dragType === 'node') {
-            newCursor = 'move';
-        } else {
-            newCursor = 'grabbing';
-        }
-        updateDrag(canvasPos); // this now mutates refs and calls scheduleRenderFromRef
-    } else {
-        const hitResult = performHitTest(canvasPos);
-        if (hitResult.resizeHandle !== 'none') {
-            newCursor = MouseInteractions.getCursorForHandle(hitResult.resizeHandle);
-        } else if (hitResult.nodes.length > 0 || hitResult.selectedEdge) {
-            newCursor = 'pointer';
-        }
-    }
-    
-    if (newCursor !== currentCursor && mode !== InteractionMode.DRAW_EDGE) {
-        setCurrentCursor(newCursor);
-    }
-
-}, [isMobile, drawingState.userVertices, drawingState.isDrawing, getCanvasMousePos, 
-    performHitTest, updateDrag, screenToWorld, mode, currentCursor, addControlPoint]);
-
-
-
-const handleMouseDown = useCallback((e: WheelEvent) => {
-  if (isMobile) return;
-
-  if (focusedOnInput) {
-    setFocusedOnInput(false);
-  }
-  
-  const canvasPos = getCanvasMousePos(e);
-  const worldPos = screenToWorld(canvasPos);
-  const hitResult = performHitTest(canvasPos);
-
-  if (mode === InteractionMode.DRAW_EDGE) {
-    
-    if (hitResult.nodes.length > 0 && !drawingState.isDrawing) {
-      console.log('drawing started....');
-      startDrawing(hitResult.nodes[0].id);
-      
-   }
-
-    else if (drawingState.isDrawing && hitResult.nodes.length === 0) {
-        console.log('adding control point at: ', worldPos);
-        addControlPoint(worldPos);;
-    } 
-
-    else if (drawingState.isDrawing && hitResult.nodes.length > 0) {
-      if (hitResult.nodes[0].id !== drawingState.sourceNodeId) {
-
-        addEdge(completeEdge(hitResult.nodes[0].id)!);
-        exitDrawMode();
-    
-      }
-    }
-  }
-
-
-
-  if (!drawingState.isDrawing && mode !== InteractionMode.DRAW_EDGE) {
-
-    if (interaction.selectedEdges.length > 0 && hitResult.selectedEdge?.id && hitResult.isEdgeVertex) {
-
-      if (!interaction.selectedVertex) {
-        console.log('edge vertex not selected, selecting now');
-        selectEdgeVertex(hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
-      }
-      else {
-        console.log('edge vertex previously selected... updating now');
-        clearVertexSelection();
-        selectEdgeVertex(hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
-      }
-      // Start dragging edge vertex
-      console.log('======Starting edge vertex drag======');
-      console.log('edge-vertex', canvasPos, hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
-      
-      startDrag('edge-vertex', canvasPos, undefined, hitResult.selectedEdge.id, hitResult.edgeVertexIndex);
+    if (e.pointerType === 'mouse' && e.button === 1) {
+      beginDrag('viewport', pos, e.pointerId, e.pointerType);
       return;
     }
 
-    if (hitResult.selectedEdge) {
-      // Select edge, but do not block viewport drag if clicking on empty canvas
-      clearSelection();
-      clearVertexSelection();
-      selectEdge(hitResult.selectedEdge);
-      // If not clicking on an edge vertex or handle, allow viewport drag
-      if (!hitResult.isEdgeVertex && hitResult.nodes.length === 0 && hitResult.resizeHandle === 'none') {
-        startDrag('viewport', canvasPos);
-        onCanvasClick?.(hitResult.worldPos);
+    const worldPos = screenToWorld(pos);
+
+    // Tap-to-place a palette item
+    if (selectedNodeType && onPlaceNode) {
+      onPlaceNode(selectedNodeType, worldPos);
+      if (navigator.vibrate) navigator.vibrate(50);
+      return;
+    }
+
+    // Edge drawing mode
+    if (mode === InteractionMode.DRAW_EDGE) {
+      const nodes = hitTestWithHandles(pos).nodes;
+      if (nodes.length > 0 && !drawingState.isDrawing) {
+        startDrawing(nodes[0].id);
+      } else if (drawingState.isDrawing && nodes.length === 0) {
+        addControlPoint(worldPos);
+      } else if (drawingState.isDrawing && nodes.length > 0 && nodes[0].id !== drawingState.sourceNodeId) {
+        const edge = completeEdge(nodes[0].id);
+        if (edge) addEdge(edge);
+        exitDrawMode();
+      }
+      return;
+    }
+    if (drawingState.isDrawing) return;
+
+    // Selection, most specific target first:
+    // resize handle > vertex of the selected edge > node > edge > empty canvas.
+    const { nodes, resizeHandle } = hitTestWithHandles(pos);
+    if (resizeHandle !== 'none') {
+      beginDrag('resize', pos, e.pointerId, e.pointerType, resizeHandle);
+      return;
+    }
+
+    const selectedEdge = interaction.selectedEdges[0];
+    if (selectedEdge) {
+      const vertexIndex = hitTestEdgeVertex(pos, selectedEdge);
+      if (vertexIndex !== -1) {
+        clearVertexSelection();
+        selectEdgeVertex(selectedEdge.id, vertexIndex);
+        beginDrag('edge-vertex', pos, e.pointerId, e.pointerType, undefined, selectedEdge.id, vertexIndex);
+        return;
       }
     }
-    else if (hitResult.resizeHandle !== 'none') {
-      startDrag('resize', canvasPos, hitResult.resizeHandle);
-    } 
-    // Then check for node selection
-    else if (hitResult.nodes.length > 0) {
-      const topNode = hitResult.nodes[0];
+
+    if (nodes.length > 0) {
+      const topNode = nodes[0];
       clearEdgeSelection();
-      clearSelection();
-      selectNode(topNode);
-      startDrag('node', canvasPos);
+      clearVertexSelection();
+      if (interaction.selectedNodes[0]?.id !== topNode.id) {
+        clearSelection();
+        selectNode(topNode);
+      }
+      beginDrag('node', pos, e.pointerId, e.pointerType);
       onNodeClick?.(topNode);
-    } 
-    else {
-      clearSelection();
+      return;
+    }
+
+    const edgeHit = hitTestEdge(pos);
+    clearSelection();
+    clearVertexSelection();
+    if (edgeHit.edge) {
+      selectEdge(edgeHit.edge);
+    } else {
       clearEdgeSelection();
-      startDrag('viewport', canvasPos);
-      onCanvasClick?.(hitResult.worldPos);
+      onCanvasClick?.(worldPos);
     }
-  }
-}, [isMobile, getCanvasMousePos, drawingState, startDrawing, focusedOnInput, setFocusedOnInput, addControlPoint, mode, performHitTest, 
-    startDrag, selectNode, clearSelection, screenToWorld, onNodeClick, onCanvasClick, 
-    interaction. selectedEdges, selectEdge]);
+    // Pressing empty space (or an edge) and dragging pans the view.
+    beginDrag('viewport', pos, e.pointerId, e.pointerType);
+  }, [canvasPosOf, cancelViewportAnimation, focusedOnInput, setFocusedOnInput, beginPinch, beginDrag, screenToWorld, selectedNodeType,
+      onPlaceNode, mode, hitTestWithHandles, drawingState, startDrawing, addControlPoint, completeEdge,
+      addEdge, exitDrawMode, interaction.selectedEdges, interaction.selectedNodes, hitTestEdgeVertex,
+      clearVertexSelection, selectEdgeVertex, clearEdgeSelection, clearSelection, selectNode, onNodeClick,
+      hitTestEdge, selectEdge, onCanvasClick]);
 
-  const handleMouseUp = useCallback(() => {
-    if (isMobile) return; // Skip on mobile
+  const updateHoverCursor = useCallback(() => {
+    hoverRef.current.raf = null;
+    if (mode === InteractionMode.DRAW_EDGE || interactionRef.current.dragState.isDragging) return;
+    const pos = hoverRef.current.pos;
+    const { nodes, resizeHandle } = hitTestWithHandles(pos);
+    let cursor = 'grab';
+    if (resizeHandle !== 'none') cursor = MouseInteractions.getCursorForHandle(resizeHandle);
+    else if (nodes.length > 0 || hitTestEdge(pos).edge) cursor = 'pointer';
+    setCurrentCursor(cursor);
+  }, [mode, hitTestWithHandles, hitTestEdge, interactionRef]);
 
-    
-    if (interactionRef.current.dragState.isDragging) {
-      endDrag();
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const pos = canvasPosOf(e);
+    if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, pos);
+
+    // Two fingers: pan and zoom together, anchored between the fingers.
+    if (pinchRef.current) {
+      if (pointersRef.current.size < 2) return;
+      const [a, b] = [...pointersRef.current.values()];
+      const start = pinchRef.current;
+      applyView(pinchView(start.view, canvasSizeOf(), start.center, start.distance, midpoint(a, b), distance(a, b)));
+      return;
     }
-  }, [isMobile, endDrag]);
 
-
-  const handleMouseLeave = useCallback(() => {
-    if (isMobile) return; // Skip on mobile
-    
-    if (interaction.dragState.isDragging) {
-      interactionRef.current.dragState.isDragging = false;
-      endDrag();
+    if (mode === InteractionMode.DRAW_EDGE && drawingState.isDrawing) {
+      addControlPoint(screenToWorld(pos), drawingState.userVertices.length > 0);
+      return;
     }
-  }, [isMobile, interaction.dragState.isDragging, endDrag]);
 
+    if (interactionRef.current.dragState.isDragging && dragPointerRef.current === e.pointerId) {
+      const pending = pendingRef.current;
+      if (pending && !pending.committed) {
+        if (distance(pos, pending.start) < pending.slop) return; // still a press, not a drag
+        pending.committed = true;
+      }
+      updateDrag(pos); // lastPos is still the press point, so the first move carries the full delta
+      return;
+    }
 
-  // Wheel zoom (desktop only)
-const handleWheel = useCallback((e: WheelEvent) => {
-    if (isMobile) return;
-    e.preventDefault();
+    if (e.pointerType === 'mouse' && pointersRef.current.size === 0) {
+      hoverRef.current.pos = pos;
+      if (hoverRef.current.raf === null) hoverRef.current.raf = requestAnimationFrame(updateHoverCursor);
+    }
+  }, [canvasPosOf, applyView, mode, drawingState, addControlPoint, screenToWorld, interactionRef, updateDrag, updateHoverCursor]);
 
-    const canvasPos = getCanvasMousePos(e);
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(10, viewportRef.current.zoom * zoomFactor));
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    pointersRef.current.delete(e.pointerId);
 
-    const worldPos = screenToWorld(canvasPos);
-    const oldZoom = viewportRef.current.zoom;
-    viewportRef.current.zoom = newZoom;
-    viewportRef.current.x = worldPos.x - (worldPos.x - viewportRef.current.x) * (newZoom / oldZoom);
-    viewportRef.current.y = worldPos.y - (worldPos.y - viewportRef.current.y) * (newZoom / oldZoom);
+    if (pinchRef.current) {
+      if (pointersRef.current.size < 2) {
+        pinchRef.current = null;
+        // Lifting one finger of a pinch keeps panning with the other.
+        const [remaining] = [...pointersRef.current.entries()];
+        if (remaining) beginDrag('viewport', remaining[1], remaining[0], e.pointerType);
+      }
+      return;
+    }
 
-    renderFrame(); 
-}, [isMobile, screenToWorld]);
+    if (dragPointerRef.current === e.pointerId) {
+      finishDrag();
+      if (mode !== InteractionMode.DRAW_EDGE) setCurrentCursor('grab');
+    }
+  }, [beginDrag, finishDrag, mode]);
+
+  // Mouse wheel / trackpad scroll and pinch zoom about the cursor. Needs a non-passive
+  // native listener so preventDefault() can stop the page from scrolling or zooming.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      cancelViewportAnimation();
+      const anchor = clientToCanvas(e.clientX, e.clientY);
+      const view = viewportRef.current;
+      applyView(zoomAbout(view, { width: canvas.width, height: canvas.height }, anchor, view.zoom * wheelZoomFactor(e)));
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [clientToCanvas, viewportRef, applyView, cancelViewportAnimation]);
 
   useEffect(() => {
-    if (canvasRef.current && !isMobile) {
-      canvasRef.current.addEventListener('wheel', handleWheel, {passive: false});
-      return () => {
-        if (canvasRef.current) {
-          canvasRef.current.removeEventListener('wheel', handleWheel);
-        }
-      };
-    
-    }
-  }, [handleWheel, isMobile]);
+    setCurrentCursor(mode === InteractionMode.DRAW_EDGE ? 'crosshair' : 'grab');
+  }, [mode]);
 
-  // Drag and drop handlers (desktop only)
+  // ---- drag and drop from the palette --------------------------------------
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (isMobile) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-  }, [isMobile]);
-
-  useEffect(() => {
-    console.log('Edge completed');
-  }, [completeEdge]);
-
-  const dragEventToWorld = (e: React.DragEvent, canvas: HTMLCanvasElement, viewport: any) => {
-    console.log(viewport);
-    const rect = canvas.getBoundingClientRect();
-    const top = rect.top;
-    const left = rect.left;
-    return screenToWorld({
-      x: e.clientX - left,
-      y: e.clientY - top
-    });
-  }
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    if (isMobile) return;
     e.preventDefault();
-    
     if (!canvasRef.current) return;
-    
+
     try {
       const nodeTypeData = e.dataTransfer.getData('application/node-type');
       if (!nodeTypeData) return;
-      
+
       const nodeType: any = JSON.parse(nodeTypeData);
-      const worldPos = dragEventToWorld(e, canvasRef.current, viewport);
-      
-      const newNodeId = `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-      
+      const worldPos = screenToWorld(clientToCanvas(e.clientX, e.clientY));
+
       const newNode: DiagramNode = {
-        id: newNodeId,
+        id: `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         type: nodeType.id,
         data: { 
           label: nodeType.name,
@@ -713,71 +467,49 @@ const handleWheel = useCallback((e: WheelEvent) => {
           shape: nodeType.shape,
           selected: false,
           size: { width: nodeType.width, height: nodeType.height }
-
         }
       };
-      
+
       addNode(newNode);
       onNodeDropped?.(nodeType, worldPos);
-      
     } catch (error) {
       console.error('Drop error:', error);
     }
-  }, [isMobile, viewport, addNode, onNodeDropped]);
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    if (isMobile) return;
-    e.preventDefault();
-    if (canvasRef.current) {
-      canvasRef.current.style.backgroundColor = '#f0f8ff';
-    }
-  }, [isMobile]);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    if (isMobile) return;
-    if (canvasRef.current && !canvasRef.current.contains(e.relatedTarget as Node)) {
-      canvasRef.current.style.backgroundColor = '';
-    }
-  }, [isMobile]);
+  }, [screenToWorld, clientToCanvas, addNode, onNodeDropped]);
 
   // Helper function for debug display
   const getMaxDepth = (nodeInfo: any): number => {
     if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
     return Math.max(nodeInfo.depth, ...nodeInfo.children.map((child: any) => getMaxDepth(child)));
   };
-  
-  return (
-    <div style={{width: `${width}px`, height: `${height}px`, justifySelf: 'center' }} >
 
+  return (
+    <div style={{ position: 'relative', width: `${width}px`, height: `${height}px`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <canvas
         ref={canvasRef}
-        width={internalResolutionRef.current.width}
-        height={internalResolutionRef.current.height}
-        style={{ 
-          width: `${width}px`,
-          height: `${height}px`,
+        width={initialResolution.width}
+        height={initialResolution.height}
+        style={{
+          width: `${cssSize.width}px`,
+          height: `${cssSize.height}px`,
           cursor: currentCursor,
-          transform: `scale(${(internalResolutionRef.current.width / width) * 0.7}, ${(internalResolutionRef.current.height / height) * 0.7})`,
-          touchAction: isMobile ? 'none' : 'auto',
+          // Stop the browser from claiming touches for scrolling/zooming; we handle every gesture.
+          touchAction: 'none',
           userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
           backgroundColor: selectedNodeType ? '#f0f8ff' : 'transparent'
         }}
-
-        // Mouse events (desktop)
-        onPointerDown={!isMobile ? handleMouseDown as any : undefined}
-        onPointerMove={!isMobile ? handleMouseMove as any : undefined}
-        onPointerUp={!isMobile ? handleMouseUp : undefined}
-        onPointerLeave={!isMobile ? handleMouseLeave : undefined}
-        
-        // Drag and drop (desktop only)
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onContextMenu={(e) => e.preventDefault()}
         onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       />
-      
-      {/* Mobile placement indicator */}
-      {isMobile && selectedNodeType && (
+
+      {selectedNodeType && (
         <div style={{
           position: 'absolute',
           top: '10px',
@@ -794,8 +526,8 @@ const handleWheel = useCallback((e: WheelEvent) => {
           Tap canvas to place {selectedNodeType.name}
         </div>
       )}
-      
-      <div className={`relative ${className}`}>
+
+      <div className={className} style={{ position: 'absolute', top: 4, left: 8, fontSize: 11, pointerEvents: 'none' }}>
         {showDebugInfo && (
           <div>
             <div>
@@ -806,9 +538,6 @@ const handleWheel = useCallback((e: WheelEvent) => {
               <div>
                 Selected: {interaction.selectedNodes.length}, 
                 Dragging: {interaction.dragState.isDragging ? interaction.dragState.dragType : 'No'}
-                {touchState.touches.size > 0 && (
-                  <span>, Touches: {touchState.touches.size}{touchState.isPinching && ' (Pinching)'}</span>
-                )}
                 {debugInfo && (
                   <span>, Spatial Items: {debugInfo.totalItems}, Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</span>
                 )}
@@ -819,7 +548,6 @@ const handleWheel = useCallback((e: WheelEvent) => {
       </div>
 
     </div>
-
   );
 };
 

@@ -85,8 +85,11 @@ export interface Viewport {
   x: number;
   y: number;
   zoom: number;
+  /** CSS size of the canvas element. */
   width: number;
   height: number;
+  /** Canvas pixels per CSS pixel (internal resolution / displayed size). Sizes meant to look constant on screen scale by this. */
+  pixelRatio?: number;
 }
 
 export interface InteractionState {

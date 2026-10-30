@@ -12,6 +12,7 @@ import { GridSnapping } from '../utils/GridSnapping';
 import globalRenderer from '../renderers/gpuInstance'
 import { canvasToWorld, clampZoom, clientToCanvas as clientToCanvasPoint, zoomAbout, type View } from '../utils/CanvasCoords';
 import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutResult } from '../layout/graphLayout';
+import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 
 export const InteractionMode = {
   SELECT: 0,
@@ -39,10 +40,15 @@ export interface DiagramContextValue extends DiagramState {
   updateNode: (node: DiagramNode) => void;
   clearVertexSelection: () => void;
   updateEdge: (edge: DiagramEdge) => void;
-  /** Computes a layout for the current graph, applies it and frames the result. */
-  applyLayout: (options?: Partial<LayoutOptions>) => Promise<void>;
+  /**
+   * Computes a layout for the current graph, applies it and frames the result.
+   * With `animate`, nodes travel to their new positions and the promise resolves once they land.
+   */
+  applyLayout: (options?: Partial<LayoutOptions>, transition?: { animate?: boolean }) => Promise<void>;
+  /** Jumps an in-flight layout transition to its end; call before hit-testing. */
+  finishLayoutAnimation: () => void;
   /** Pans/zooms the viewport (animated by default) so the whole graph is visible. */
-  fitToContent: (options?: { padding?: number; animate?: boolean }) => void;
+  fitToContent: (options?: { padding?: number; animate?: boolean; duration?: number; ignoreReducedMotion?: boolean }) => void;
   /** Zooms about the centre of the view by a factor, animated. */
   zoomBy: (factor: number) => void;
   /** Zooms about the centre of the view to an absolute level, animated. */
@@ -493,7 +499,12 @@ useLayoutEffect(() => {
   drawingStateRef.current = drawingState;
 }, [drawingState]);
 
+// Set while a layout transition is writing in-flight positions to stateRef.
+const layoutAnimRef = useRef<{ raf: number; finish: () => void } | null>(null);
+
   useEffect(() => {
+    // A transition owns stateRef until it commits; syncing now would flash the old layout.
+    if (layoutAnimRef.current) return;
     stateRef.current = state;
   }, [state]);
 
@@ -733,10 +744,13 @@ const scheduleRender = useCallback(() => {
     }
   }, []);
 
-  /** Eases the viewport to `target`. Zoom is interpolated geometrically so it feels even. */
-  const animateViewportTo = useCallback((target: View, duration = 280) => {
+  /**
+   * Eases the viewport to `target`. Zoom is interpolated geometrically so it feels even.
+   * Jumps instead under prefers-reduced-motion, unless the caller was explicitly opted in.
+   */
+  const animateViewportTo = useCallback((target: View, duration = 280, ignoreReducedMotion = false) => {
     cancelViewportAnimation();
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const reduceMotion = !ignoreReducedMotion && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (duration <= 0 || reduceMotion) {
       setViewport(target);
       return;
@@ -763,7 +777,7 @@ const scheduleRender = useCallback(() => {
 
   useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);
 
-  const fitToContent = useCallback(({ padding = 60, animate = true }: { padding?: number; animate?: boolean } = {}) => {
+  const fitToContent = useCallback(({ padding = 60, animate = true, duration, ignoreReducedMotion }: { padding?: number; animate?: boolean; duration?: number; ignoreReducedMotion?: boolean } = {}) => {
     const canvas = canvasRef.current;
     const { nodes, edges } = stateRef.current;
     const bounds = nodeBounds(nodes);
@@ -785,7 +799,7 @@ const scheduleRender = useCallback(() => {
     const zoom = clampZoom(Math.min(fit, 1.5));
     const target = { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2, zoom };
 
-    if (animate) animateViewportTo(target);
+    if (animate) animateViewportTo(target, duration, ignoreReducedMotion);
     else { cancelViewportAnimation(); setViewport(target); }
   }, [animateViewportTo, cancelViewportAnimation, setViewport]);
 
@@ -802,21 +816,87 @@ const scheduleRender = useCallback(() => {
     dispatch({ type: 'SET_GRID_SNAPPING', enabled });
   }, []);
 
-  const applyLayout = useCallback(async (options: Partial<LayoutOptions> = {}) => {
+  const finishLayoutAnimation = useCallback(() => {
+    layoutAnimRef.current?.finish();
+  }, []);
+
+  useEffect(() => () => {
+    if (layoutAnimRef.current) cancelAnimationFrame(layoutAnimRef.current.raf);
+  }, []);
+
+  const applyLayout = useCallback(async (options: Partial<LayoutOptions> = {}, { animate = false }: { animate?: boolean } = {}) => {
+    finishLayoutAnimation();
+    const resolved = { ...DEFAULT_LAYOUT_OPTIONS, ...options };
     const { nodes, edges } = stateRef.current;
-    const layout = await computeLayout(nodes, edges, { ...DEFAULT_LAYOUT_OPTIONS, ...options });
-    // stateRef is updated by an effect, so patch it now for fitToContent.
-    stateRef.current = {
-      ...stateRef.current,
-      nodes: nodes.map(n => {
-        const position = layout.positions.get(n.id);
-        return position ? { ...n, data: { ...n.data, position } } : n;
-      }),
-      edges: edges.map(e => ({ ...e, userVertices: layout.edgeVertices.get(e.id) ?? e.userVertices })),
+    const layout = await computeLayout(nodes, edges, resolved);
+
+    const finalNodes = nodes.map(n => {
+      const position = layout.positions.get(n.id);
+      return position ? { ...n, data: { ...n.data, position } } : n;
+    });
+    const finalEdges = edges.map(e => ({ ...e, userVertices: layout.edgeVertices.get(e.id) ?? e.userVertices }));
+    // stateRef is updated by an effect, so patch it now: fitToContent and the next frame read it.
+    const commit = () => {
+      stateRef.current = { ...stateRef.current, nodes: finalNodes, edges: finalEdges };
+      dispatch({ type: 'APPLY_LAYOUT', layout });
     };
-    dispatch({ type: 'APPLY_LAYOUT', layout });
-    fitToContent({ animate: false });
-  }, [fitToContent]);
+
+    if (!animate) {
+      commit();
+      fitToContent({ animate: false });
+      return;
+    }
+
+    // Frame the final layout over the same duration the nodes take to get there.
+    const duration = transitionDuration(layout.positions.size);
+    stateRef.current = { ...stateRef.current, nodes: finalNodes, edges: finalEdges };
+    fitToContent({ duration, ignoreReducedMotion: true });
+
+    // Like pan/zoom, frames write positions to stateRef and render directly; React state is
+    // committed once at the end. Bend points from the old and new layouts don't correspond,
+    // so edges travel straight between the moving nodes and pick up their routing on landing.
+    const delays = staggerDelays(layout.positions, resolved);
+    const straightEdges = edges.map(e => (e.userVertices.length ? { ...e, userVertices: [] } : e));
+
+    await new Promise<void>(resolve => {
+      const start = performance.now();
+      const anim = {
+        raf: 0,
+        finish: () => {
+          cancelAnimationFrame(anim.raf);
+          layoutAnimRef.current = null;
+          commit();
+          scheduleRender();
+          resolve();
+        },
+      };
+      layoutAnimRef.current = anim;
+
+      const step = (now: number) => {
+        const elapsed = now - start;
+        const frameNodes = nodes.map(n => {
+          const to = layout.positions.get(n.id);
+          if (!to) return n;
+          const t = nodeProgress(elapsed, delays.get(n.id) ?? 0);
+          const from = n.data.position;
+          return { ...n, data: { ...n.data, position: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t } } };
+        });
+        const byId = new Map(frameNodes.map(n => [n.id, n]));
+        const current = stateRef.current;
+        stateRef.current = {
+          ...current,
+          nodes: frameNodes,
+          edges: straightEdges,
+          // Selection handles are drawn from the selected copies, so move those too.
+          interaction: { ...current.interaction, selectedNodes: current.interaction.selectedNodes.map(n => byId.get(n.id) ?? n) },
+        };
+        scheduleRender();
+        if (elapsed >= duration) anim.finish();
+        else anim.raf = requestAnimationFrame(step);
+      };
+      anim.raf = requestAnimationFrame(step);
+    });
+  }, [fitToContent, finishLayoutAnimation, scheduleRender]);
 
   // Selection methods
   const selectNode = useCallback((node: DiagramNode | null) => {
@@ -1450,6 +1530,7 @@ useEffect(() => {
     removeEdge,
     updateEdge,
     applyLayout,
+    finishLayoutAnimation,
     fitToContent,
     zoomBy,
     setZoom,
@@ -1522,6 +1603,7 @@ useEffect(() => {
     removeEdge,
     updateEdge,
     applyLayout,
+    finishLayoutAnimation,
     fitToContent,
     zoomBy,
     setZoom,

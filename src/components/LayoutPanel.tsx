@@ -1,4 +1,4 @@
-import { Button, NativeSelect, Slider, Text } from '@mantine/core';
+import { Button, NativeSelect, Slider, Switch, Text } from '@mantine/core';
 import { useDiagram } from './DiagramProvider';
 import type { LayoutAlgorithm, LayoutDirection, EdgeRouting } from '../layout/graphLayout';
 import { useLayoutStore } from '../layout/layoutStore';
@@ -28,6 +28,8 @@ export default function LayoutPanel() {
   const { fitToContent } = useDiagram();
   const layoutOptions = useLayoutStore(s => s.options);
   const setOptions = useLayoutStore(s => s.setOptions);
+  const animate = useLayoutStore(s => s.animate);
+  const setAnimate = useLayoutStore(s => s.setAnimate);
   const { run: runLayout, running: layoutRunning, error: layoutError } = useRunLayout();
 
   return (
@@ -46,6 +48,8 @@ export default function LayoutPanel() {
             <Text size="sm" mt="xs">Spacing</Text>
             <Slider min={0.4} max={3} step={0.1} value={layoutOptions.spacing} label={(v) => `${v.toFixed(1)}x`}
               onChange={(v) => setOptions({ spacing: v })} />
+            <Switch mt="md" size="sm" label="Animate layout changes" checked={animate}
+              onChange={(e) => setAnimate(e.currentTarget.checked)} />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <Button size="xs" loading={layoutRunning} onClick={runLayout}>Apply layout</Button>
               <Button size="xs" variant="default" onClick={() => fitToContent()}>Fit to view</Button>

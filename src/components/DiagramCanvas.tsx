@@ -81,6 +81,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     endDrag,
     setViewport,
     cancelViewportAnimation,
+    finishLayoutAnimation,
     screenToWorld,
     clientToCanvas,
     getRenderer,
@@ -245,6 +246,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
     e.preventDefault();
     cancelViewportAnimation();
+    // Nodes mid-transition aren't where the spatial index thinks they are; land them first.
+    finishLayoutAnimation();
 
     if (focusedOnInput) setFocusedOnInput(false);
     canvas.setPointerCapture(e.pointerId);
@@ -328,7 +331,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
     // Pressing empty space (or an edge) and dragging pans the view.
     beginDrag('viewport', pos, e.pointerId, e.pointerType);
-  }, [canvasPosOf, cancelViewportAnimation, focusedOnInput, setFocusedOnInput, beginPinch, beginDrag, screenToWorld, selectedNodeType,
+  }, [canvasPosOf, cancelViewportAnimation, finishLayoutAnimation, focusedOnInput, setFocusedOnInput, beginPinch, beginDrag, screenToWorld, selectedNodeType,
       onPlaceNode, mode, hitTestWithHandles, drawingState, startDrawing, addControlPoint, completeEdge,
       addEdge, exitDrawMode, interaction.selectedEdges, interaction.selectedNodes, hitTestEdgeVertex,
       clearVertexSelection, selectEdgeVertex, clearEdgeSelection, clearSelection, selectNode, onNodeClick,

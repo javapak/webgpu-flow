@@ -9,11 +9,11 @@ export function useRunLayout() {
   const error = useLayoutStore(s => s.error);
 
   const run = useCallback(async () => {
-    const { options, running: busy, setStatus } = useLayoutStore.getState();
+    const { options, animate, running: busy, setStatus } = useLayoutStore.getState();
     if (busy) return;
     setStatus({ running: true });
     try {
-      await applyLayout(options);
+      await applyLayout(options, { animate });
       setStatus({ running: false });
     } catch (err) {
       console.error('Layout failed', err);

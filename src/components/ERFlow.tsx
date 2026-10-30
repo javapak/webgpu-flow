@@ -1,7 +1,6 @@
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { Node } from '../components/Node';
 import { Edge } from '../components/Edge';
-import { type NodeType } from '../components/NodePalette';
 import { useEffect, useRef, useState } from 'react';
 import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
 import { useRenderSettings } from '../state/renderSettings';
@@ -14,11 +13,9 @@ const isMobileDevice = () => {
 };
 
 
-  const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
+  const handleNodeDropped = () => {
     const isMobile = isMobileDevice();
-    console.log(`Dropped ${nodeType.name} at position:`, position);
     
-    // Provide haptic feedback on mobile
     if (isMobile && navigator.vibrate) {
       navigator.vibrate(100);
     }

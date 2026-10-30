@@ -74,9 +74,7 @@ export default function VisualPropertyEditor() {
 
     },[interaction.selectedNodes, updateNode, nodeLabelValue, setNodeLabelValue]);
 
-    const onFocusTextInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-
-        console.log('text input focus triggered...', e.currentTarget);
+    const onFocusTextInput = useCallback(() => {
         if (!focusedOnInput) setFocusedOnInput(true);
     }, [setFocusedOnInput, focusedOnInput]);
 

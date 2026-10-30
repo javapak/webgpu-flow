@@ -34,32 +34,28 @@ export class LabelRenderer {
     catch (e) {
       return false;
     }
-    console.log('LabelRenderer initialized successfully');
     return true;
   }
 
   private async setupLabelRenderPipeline() {
-    // Label buffer for batched label data
-    // Size remains the same: 12 floats * 4 bytes = 48 bytes per label
+    // Per-label instance data: 12 floats (48 bytes) each
     this.labelBuffer = this.device.createBuffer({
       size: 1000 * 48, 
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Batched label shader with corrected struct alignment
+    // All labels are drawn in one instanced call.
     const labelShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
         viewport: vec4<f32>, // x, y, zoom, aspect
       }
 
-      // Aligned for WebGPU storage buffer rules
+      // vec4s first, then vec2s, to satisfy storage-buffer alignment.
       struct LabelData {
-        // Start with the largest types for better alignment
         @align(16) texCoords: vec4<f32>, 
         @align(16) color: vec4<f32>,
         
-        // Follow with medium types
         @align(8) position: vec2<f32>,
         @align(8) size: vec2<f32>,
       }
@@ -117,15 +113,13 @@ export class LabelRenderer {
           if (textSample.a < 0.01) {
             discard;
           }
-        // Use the alpha channel for text rendering
-        // White text on transparent background
+        // The atlas holds coverage in alpha; tint it with the label colour.
         return vec4<f32>(color.rgb, textSample.a * color.a);
       }
     `;
 
     const labelShaderModule = this.device.createShaderModule({ code: labelShaderCode });
 
-    // Create bind group layout for batched labels
     const labelBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         {
@@ -151,7 +145,6 @@ export class LabelRenderer {
       ]
     });
 
-    // Create render pipeline for batched labels
     const labelPipelineLayout = this.device.createPipelineLayout({
       bindGroupLayouts: [labelBindGroupLayout]
     });
@@ -194,7 +187,7 @@ export class LabelRenderer {
       multisample: {count: parseInt(this.sampleCount)}
     });
 
-    // Create bind group (will be updated when atlas texture is ready)
+    // No-op until the atlas texture exists; rebuilt when it does.
     this.updateBindGroup();
   }
 
@@ -313,14 +306,12 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       return;
     }
 
-    // Update atlas texture on GPU
     this.textAtlas.updateGPUTexture();
 
     // Prepare batched label data for GPU
     const flatLabelData = new Float32Array(labelData.length * 12); // 12 floats per label
     labelData.forEach((label, i) => {
       const offset = i * 12;
-      // Write data in the corrected order
       // texCoords: vec4<f32>
       flatLabelData[offset + 0] = label.texCoords[0];
       flatLabelData[offset + 1] = label.texCoords[1];
@@ -355,15 +346,12 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     // Upload label data to GPU
     this.device.queue.writeBuffer(this.labelBuffer, 0, flatLabelData);
 
-    // Render all labels in one batch
-    renderPass.setPipeline(this.labelRenderPipeline);
+        renderPass.setPipeline(this.labelRenderPipeline);
     renderPass.setBindGroup(0, this.labelBindGroup!);
-    renderPass.draw(6, labelData.length); // Render all labels in one draw call
+    renderPass.draw(6, labelData.length);
 
-    console.log(`Rendered ${labelData.length} labels in batch`);
   }
 
-  // Utility methods
   clearAtlas() {
     this.textAtlas.clear();
   }

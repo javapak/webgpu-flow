@@ -21,14 +21,12 @@ export class VisualContentRenderer {
   constructor(device: GPUDevice, uniformBuffer: GPUBuffer, sampleCount = '1') {
     this.device = device;
     this.uniformBuffer = uniformBuffer;
-    this.visualAtlas = new VisualContentAtlas(device, sampleCount);
+    this.visualAtlas = new VisualContentAtlas(device);
     this.sampleCount =  sampleCount;
   }
 
   async initialize(): Promise<void> {
-    console.log('🎨 VisualContentRenderer.initialize() called');
     await this.setupVisualRenderPipeline();
-    console.log('🎨 VisualContentRenderer initialized successfully');
   }
 
     private hexToRgba(hex: string) {
@@ -224,7 +222,6 @@ export class VisualContentRenderer {
   
 
   async prepareVisualData(visibleNodes: DiagramNode[]): Promise<VisualInstanceData[]> {
-    console.log('🎨 prepareVisualData called with', visibleNodes.length, 'nodes');
     
     const nodesWithVisuals = visibleNodes.filter(node => 
       node.visual?.visualContent || 
@@ -233,10 +230,8 @@ export class VisualContentRenderer {
       node.data?.icon
     );
 
-    console.log('🎨 Nodes with visuals found:', nodesWithVisuals.length);
 
     if (nodesWithVisuals.length === 0) {
-      console.log('🎨 No nodes with visual content found');
       return [];
     }
 
@@ -244,7 +239,6 @@ export class VisualContentRenderer {
 
     // Process nodes sequentially to handle async SVG loading
     for (const node of nodesWithVisuals) {
-      console.log('🎨 Processing node:', node.id, node);
       try {
         let atlasEntry = null;
         let iconSize = 64;
@@ -256,32 +250,25 @@ export class VisualContentRenderer {
           content = node.visual.visualContent.content;
           type = node.visual.visualContent.type;
           iconSize = node.visual.visualContent.size?.width || 64;
-          console.log('🎨 Using visualContent:', { content: content.substring(0, 50), type });
         } else if (node.visual?.icon) {
           content = node.visual.icon;
           type = 'emoji';
-          console.log('🎨 Using visual.icon:', content);
         } else if (node.data?.emoji) {
           content = node.data.emoji;
           type = 'emoji';
-          console.log('🎨 Using data.emoji:', content);
         } else if (node.data?.icon) {
           content = node.data.icon;
           type = 'emoji';
-          console.log('🎨 Using data.icon:', content);
         }
 
         if (!content) {
-          console.log('🎨 No content found for node:', node.id);
           continue;
         }
 
         // Handle different content types
         if (type === 'svg') {
-          console.log('🎨 Processing SVG content');
           atlasEntry = await this.visualAtlas.addSVG(content, iconSize, node, node.visual?.visualContent?.colorizable);
         } else if (type === 'image') {
-          console.log('🎨 Processing image URL');
           atlasEntry = await this.visualAtlas.addImageURL(content, iconSize, node);
         } else if (type === 'emoji' || content.length <= 2) {
           atlasEntry = this.visualAtlas.addEmoji(content, iconSize, node);
@@ -292,7 +279,7 @@ export class VisualContentRenderer {
         }
         
         if (!atlasEntry) {
-          console.warn('🎨 Failed to add visual content to atlas:', content.substring(0, 50));
+          console.warn('Failed to add visual content to atlas:', content.substring(0, 50));
           continue;
         }
         let tintColor = [1, 1, 1, 1];
@@ -321,29 +308,24 @@ export class VisualContentRenderer {
           size: [visualWorldWidth, visualWorldHeight]
         });
 
-        console.log(`🎨 Added visual: ${type}:"${content.substring(0, 30)}" at (${visualX}, ${visualY})`);
 
       } catch (error) {
-        console.error('🎨 Error preparing visual content:', error);
+        console.error('Error preparing visual content:', error);
       }
     }
 
-    console.log(`🎨 Prepared ${visualDataArray.length} visuals for rendering`);
     return visualDataArray;
   }
 
   render(renderPass: GPURenderPassEncoder, visualData: VisualInstanceData[]): void {
-    console.log(`🎨 render() called with ${visualData.length} visual items`);
     
     if (!this.visualRenderPipeline || !this.visualBuffer || visualData.length === 0) {
-      console.log('🎨 Skipping render - missing pipeline or buffer or no data');
       return;
     }
 
     this.visualAtlas.updateGPUTexture();
     this.updateBindGroup();
 
-    console.log('🎨 First visual item debug:', visualData[0]);
 
     const flatVisualData = new Float32Array(visualData.length * 12);
     visualData.forEach((visual, i) => {
@@ -378,7 +360,6 @@ export class VisualContentRenderer {
     renderPass.setBindGroup(0, this.visualBindGroup!);
     renderPass.draw(6, visualData.length);
 
-    console.log(`🎨 Rendered ${visualData.length} visual elements in batch`);
   }
 
   clearAtlas(): void {
@@ -426,7 +407,7 @@ export class VisualContentRenderer {
   }
 }
 
-// After rendering visual content to atlas, scan for boundaries
+// Edge scanning over rendered visual content, used to find where edges meet a shape.
 
 function checkIfEdgePixel(
   imageData: ImageData, 
@@ -442,7 +423,6 @@ function checkIfEdgePixel(
     return false;
   }
   
-  // Get current pixel alpha
   const centerIdx = (absoluteY * width + absoluteX) * 4;
   const centerAlpha = imageData.data[centerIdx + 3];
   
@@ -454,7 +434,7 @@ function checkIfEdgePixel(
   // Check 4-connected neighbors (up, right, down, left)
   const neighbors = [
     { x: absoluteX, y: absoluteY - 1 }, // up
-    { x: absoluteX + 1, y: absoluteY }, // right  
+    { x: absoluteX + 1, y: absoluteY }, // right
     { x: absoluteX, y: absoluteY + 1 }, // down
     { x: absoluteX - 1, y: absoluteY }  // left
   ];
@@ -465,7 +445,6 @@ function checkIfEdgePixel(
       return true; // Edge pixel (borders empty space)
     }
     
-    // Check neighbor's alpha
     const neighborIdx = (neighbor.y * width + neighbor.x) * 4;
     const neighborAlpha = imageData.data[neighborIdx + 3];
     

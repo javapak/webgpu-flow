@@ -1,4 +1,3 @@
-// Enhanced FloatingEdgeRenderer with comprehensive marker support
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { VisualContentNodeManager } from '../compute/VisualContentNode';
 import type { DiagramEdge, DiagramNode } from '../types';
@@ -209,9 +208,9 @@ export class FloatingEdgeRenderer {
       label: 'floating-edge-buffer'
     });
     
-    // Buffer for markers (more instances needed)
+    // Marker instances
     this.markerBuffer = this.device.createBuffer({
-      size: this.maxEdges * 2 * 64, // 2 markers per edge, 12 floats each
+      size: this.maxEdges * 2 * 64, // 2 markers per edge, 16 floats (64 bytes) each
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'edge-marker-buffer'
     });
@@ -448,7 +447,7 @@ export class FloatingEdgeRenderer {
           format: format,
           blend: {
             color: {
-              srcFactor: 'src-alpha',        // CHANGED back
+              srcFactor: 'src-alpha',
               dstFactor: 'one-minus-src-alpha',
             },
             alpha: {
@@ -519,7 +518,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         let marker = markerData[instanceIndex];
         let localPos = positions[vertexIndex];
         
-        //Rotate to align with direction
+        // Rotate to align with direction
         let angle = atan2(marker.direction.y, marker.direction.x);
         let cosA = cos(angle);
         let sinA = sin(angle);
@@ -688,11 +687,11 @@ private createMarkerPipeline(format: GPUTextureFormat) {
           format: format,
           blend: {
             color: {
-              srcFactor: 'one',           // CHANGED
+              srcFactor: 'one',
               dstFactor: 'one-minus-src-alpha',
             },
             alpha: {
-              srcFactor: 'one',           // CHANGED
+              srcFactor: 'one',
               dstFactor: 'one-minus-src-alpha',
             }
           }
@@ -700,7 +699,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       },
       primitive: {
         topology: 'triangle-list',
-        cullMode: 'none',  // ADDED - don't cull any faces
+        cullMode: 'none',
       },
       depthStencil: {
         format: 'depth24plus',
@@ -976,7 +975,6 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       }
     }
     
-    console.log('Generated markers:', markers);
     
     return markers;
   }
@@ -1077,9 +1075,9 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     
     // Draw markers
     if (allMarkers.length > 0) {
-    const flatMarkerData = new Float32Array(allMarkers.length * 14); // Changed from 12 to 14!
+    const flatMarkerData = new Float32Array(allMarkers.length * 16); // 16 floats per marker, matching the WGSL struct
       allMarkers.forEach((marker, i) => {
-        const offset = i * 16; // Changed from 12 to 14
+        const offset = i * 16;
         flatMarkerData[offset + 0] = marker.position[0];
         flatMarkerData[offset + 1] = marker.position[1];
         flatMarkerData[offset + 2] = marker.direction[0];
@@ -1088,7 +1086,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         flatMarkerData[offset + 5] = marker.markerType;
         flatMarkerData[offset + 6] = 0; // padding1
         flatMarkerData[offset + 7] = 0; // padding1
-        flatMarkerData[offset + 8] = marker.color[0];   // color now at offset 8
+        flatMarkerData[offset + 8] = marker.color[0];
         flatMarkerData[offset + 9] = marker.color[1];
         flatMarkerData[offset + 10] = marker.color[2];
         flatMarkerData[offset + 11] = marker.color[3];
@@ -1101,14 +1099,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       
       renderPass.setPipeline(this.markerPipeline);
       renderPass.setBindGroup(0, this.markerBindGroup);
-      console.log('About to draw:', {
-      vertices: 6,
-      instanceCount: allMarkers.length,
-      bufferLength: flatMarkerData.length,
-      expectedLength: allMarkers.length * 14
-    });
     renderPass.draw(6, allMarkers.length);
-      console.log('Rendered markers count:', allMarkers.length);
     }
     
     // Draw vertex handles for selected edges

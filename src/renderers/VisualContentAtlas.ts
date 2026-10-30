@@ -14,26 +14,23 @@ export class VisualContentAtlas {
   private texture: GPUTexture | null = null;
   private device: GPUDevice;
   private entries: Map<string, VisualAtlasEntry> = new Map();
-  private sampleCount: string;
   
   // Cache for loaded images
   private imageCache: Map<string, HTMLImageElement> = new Map();
   
   // Atlas configuration
-  private readonly ATLAS_SIZE = 4096; // Max
+  private readonly ATLAS_SIZE = 4096;
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;
   private needsUpdate = false;
 
-  constructor(device: GPUDevice, sampleCount = '1') {
-    this.sampleCount = sampleCount;
+  constructor(device: GPUDevice) {
     this.device = device;
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.ATLAS_SIZE;
     this.canvas.height = this.ATLAS_SIZE;
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
-    console.log(this.sampleCount);
     
     // High quality rendering
     this.ctx.textRendering = 'optimizeLegibility';
@@ -58,9 +55,7 @@ export class VisualContentAtlas {
     });
   }
 
-  /**
-   * Hash content WITHOUT color for reusability
-   */
+  /** Hashes content without colour, so tinted copies share one atlas entry. */
   private hashContent(content: string, size: number): string {
     let hash = 5381;
     const fullString = `${content}-${size}`;
@@ -71,14 +66,12 @@ export class VisualContentAtlas {
   }
 
   /**
-   * Rewrite SVG to use a single replaceable color
-   * Converts fills and strokes to use a template color that can be tinted
+   * Rewrites an SVG's fills and strokes to white, so the shader can tint it
+   * by multiplying with the node colour.
    */
   private prepareSVGForColorTinting(svgString: string): string {
     let processedSvg = svgString.trim();
     
-    // Strategy: Replace all fill and stroke colors with white
-    // Then we'll multiply by the desired color in the shader
     
     // Replace fill attributes with white
     processedSvg = processedSvg.replace(/fill="[^"]*"/g, 'fill="white"');
@@ -89,9 +82,7 @@ export class VisualContentAtlas {
     return processedSvg;
   }
 
-  /**
-   * Convert SVG string to Image for rendering
-   */
+  /** Loads an SVG string as an Image so it can be drawn into the atlas. */
   private async svgToImage(svgString: string, width: number, height: number, colorizable: boolean = false): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       let processedSvg = svgString.trim();
@@ -148,8 +139,8 @@ export class VisualContentAtlas {
   }
 
   /**
-   * Add SVG content to the atlas
-   * @param colorizable - If true, SVG will be prepared for GPU color tinting
+   * Adds SVG content to the atlas.
+   * @param colorizable - If true, the SVG is prepared for GPU colour tinting.
    */
   async addSVG(
     svgString: string, 
@@ -207,7 +198,6 @@ export class VisualContentAtlas {
       this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
       this.needsUpdate = true;
 
-      console.log(`Added ${colorizable ? 'colorizable ' : ''}SVG to atlas at (${entry.x}, ${entry.y})`);
       return entry;
     } catch (error) {
       console.error('Failed to add SVG to atlas:', error);
@@ -215,9 +205,7 @@ export class VisualContentAtlas {
     }
   }
 
-  /**
-   * Add emoji to atlas 
-   */
+  /** Adds an emoji to the atlas. */
   addEmoji(emoji: string, size: number = 64, node: DiagramNode): VisualAtlasEntry | null {
     const cacheKey = `emoji:${emoji}-${size}`;
     
@@ -269,9 +257,7 @@ export class VisualContentAtlas {
     return entry;
   }
 
-  /**
-   * Add external image URL to atlas
-   */
+  /** Adds an image from a URL to the atlas. */
   async addImageURL(imageUrl: string, size: number = 64, node: DiagramNode): Promise<VisualAtlasEntry | null> {
     const cacheKey = `image:${this.hashContent(imageUrl, size)}`;
     
@@ -327,7 +313,6 @@ export class VisualContentAtlas {
       this.currentRowHeight = Math.max(this.currentRowHeight, totalSize);
       this.needsUpdate = true;
 
-      console.log(`Added image to atlas at (${entry.x}, ${entry.y})`);
       return entry;
     } catch (error) {
       console.error('Failed to add image to atlas:', error);

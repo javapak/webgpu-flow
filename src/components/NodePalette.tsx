@@ -99,20 +99,13 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
     onNodeDragStart(nodeType, event);
   };
 
-  const handleTouchStart = (nodeType: NodeType) => (event: React.TouchEvent) => {
+  const handleTouchStart = (event: React.TouchEvent) => {
     event.preventDefault();
     if (isMobileDevice) {
-      // Provide haptic feedback on mobile
+      // Haptic feedback on press
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
-      
-      // For mobile, we might want to show a different interaction
-      // Could implement a tap-to-select, then tap-on-canvas-to-place workflow
-      console.log('Mobile node selected:', nodeType.name);
-      
-      // You could add additional mobile-specific logic here
-      // For example, highlighting the selected node or showing instructions
     }
   };
 
@@ -151,9 +144,9 @@ export const NodePalette: React.FC<NodePaletteProps> = ({
         {nodeTypes.map((nodeType) => (
           <div
             key={nodeType.id}
-            draggable={!isMobileDevice} // Disable drag on mobile to prevent conflicts
+            draggable={!isMobileDevice} // touch uses tap-to-place instead of HTML drag and drop
             onDragStart={!isMobileDevice ? handleDragStart(nodeType) : undefined}
-            onTouchStart={handleTouchStart(nodeType)}
+            onTouchStart={handleTouchStart}
             style={{
               display: 'flex',
               alignItems: 'center',

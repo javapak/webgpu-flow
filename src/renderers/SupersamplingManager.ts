@@ -110,7 +110,6 @@ export default class SupersamplingManager {
     }
     
     if (this.supersamplingFactor !== factor) {
-      console.log(`Supersampling factor changed: ${this.supersamplingFactor}x → ${factor}x`);
       this.supersamplingFactor = factor;
     }
   }
@@ -125,7 +124,6 @@ export default class SupersamplingManager {
     sampleCount: number,
     format: GPUTextureFormat = 'bgra8unorm'
   ) {
-    // Destroy old textures
     if (this.supersampledTexture) {
       this.supersampledTexture.destroy();
     }
@@ -139,7 +137,6 @@ export default class SupersamplingManager {
     const supersampledWidth = width * this.supersamplingFactor;
     const supersampledHeight = height * this.supersamplingFactor;
 
-    console.log(`Creating supersampled textures: ${supersampledWidth}x${supersampledHeight} (${this.supersamplingFactor}x) with ${sampleCount}x MSAA`);
 
     if (sampleCount > 1) {
       this.supersampledTexture = this.device.createTexture({
@@ -230,7 +227,7 @@ downsample(commandEncoder: GPUCommandEncoder, targetTexture: GPUTexture) {
     return;
   }
   
-  // ALWAYS recreate bind group to ensure correct texture reference
+  // Rebuilt every call: the source texture may have been recreated since the last one.
   this.downsampleBindGroup = this.device.createBindGroup({
     layout: this.downsamplePipeline.getBindGroupLayout(0),
     entries: [

@@ -89,7 +89,6 @@ export const useMobileTouch = (
     e.preventDefault();
     
     const touches = Array.from(e.touches);
-    console.log('🤏 Touch start:', touches.length, 'touches');
 
     if (touches.length === 1) {
       // Single touch - potential tap or drag
@@ -115,16 +114,13 @@ export const useMobileTouch = (
 
       // Handle node/canvas interaction
       if (hitResult.resizeHandle !== 'none') {
-        console.log('🔄 Touch resize start:', hitResult.resizeHandle);
         startDrag('resize', canvasPos, hitResult.resizeHandle);
       } else if (hitResult.nodes.length > 0) {
         const topNode = hitResult.nodes[0];
-        console.log('🎯 Touch node:', topNode.id);
         selectNode(topNode);
         startDrag('node', canvasPos);
         onNodeClick?.(topNode);
       } else {
-        console.log('🌍 Touch canvas');
         clearSelection();
         startDrag('viewport', canvasPos);
         onCanvasClick?.(hitResult.worldPos);
@@ -134,13 +130,7 @@ export const useMobileTouch = (
       // Two touches - pinch to zoom
       const [touch1, touch2] = touches;
       const distance = getTouchDistance(touch1 as Touch, touch2 as Touch);
-      const center = getTouchCenter(touch1 as Touch, touch2 as Touch);
-      const canvasCenter = {
-        x: center.x - (canvasRef.current?.getBoundingClientRect().left || 0),
-        y: center.y - (canvasRef.current?.getBoundingClientRect().top || 0),
-      };
 
-      console.log('🤏 Pinch start:', { distance, center: canvasCenter });
 
       // End any existing drag operation
       if (interaction.dragState.isDragging) {
@@ -191,7 +181,6 @@ export const useMobileTouch = (
       const touchInfo = touchState.touches.get(touch.identifier);
       
       if (touchInfo && interaction.dragState.isDragging) {
-        console.log('📱 Touch drag update');
         updateDrag(canvasPos);
         
         setTouchState(prev => ({
@@ -222,11 +211,6 @@ export const useMobileTouch = (
         // Calculate pan offset
         const worldCenter = screenToWorld(canvasCenter);
         
-        console.log('🤏 Pinch update:', { 
-          zoomFactor: zoomFactor.toFixed(3),
-          newZoom: newZoom.toFixed(3),
-          center: canvasCenter 
-        });
 
         setViewport({
           zoom: newZoom,
@@ -244,11 +228,6 @@ export const useMobileTouch = (
     const remainingTouches = Array.from(e.touches);
     const endedTouches = Array.from(e.changedTouches);
     
-    console.log('🤏 Touch end:', {
-      ended: endedTouches.length,
-      remaining: remainingTouches.length,
-      wasPinching: touchState.isPinching
-    });
 
     // Handle tap gesture detection
     if (endedTouches.length === 1 && remainingTouches.length === 0) {
@@ -263,7 +242,6 @@ export const useMobileTouch = (
         );
         
         const isTap = duration < 300 && distance < 10;
-        console.log('👆 Potential tap:', { duration, distance, isTap });
         
         if (isTap) {
           // Handle tap - this is already handled in touchStart, so we just ensure drag ends
@@ -277,7 +255,6 @@ export const useMobileTouch = (
     // End drag if no touches remain
     if (remainingTouches.length === 0) {
       if (interaction.dragState.isDragging) {
-        console.log('🤏 Ending drag - no touches');
         endDrag();
       }
       
@@ -323,7 +300,6 @@ export const useMobileTouch = (
 
   const handleTouchCancel = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
-    console.log('🤏 Touch cancelled');
     
     if (interaction.dragState.isDragging) {
       endDrag();

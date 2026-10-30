@@ -20,7 +20,7 @@ export class VisualContentNode {
     this.visualContentRenderer = visualContentRenderer;
   }
   
-  // Proxy properties to the underlying DiagramNode
+  /** Pass-through accessors for the wrapped DiagramNode. */
   get id(): string {
     return this.node.id;
   }
@@ -49,7 +49,7 @@ export class VisualContentNode {
     return this.node.visual;
   }
   
-  // Update the underlying node reference
+  /** Swaps in a new node, dropping the edge cache if its content changed. */
   updateNode(newNode: DiagramNode) {
     // Clear cache if node content changed
     const newContentHash = this.calculateContentHash(newNode);
@@ -81,7 +81,7 @@ export class VisualContentNode {
       return this.getGeometricEdgePoint(direction);
     }
     
-    // For visual content shapes, use shader-based detectionF
+    // Visual-content shapes: find the outline on the GPU
     const directionKey = `${direction.x.toFixed(3)},${direction.y.toFixed(3)}`;
     
     if (!this.edgeCache.has(directionKey)) {
@@ -190,7 +190,7 @@ export class VisualContentNode {
     
 
     const device = this.visualContentRenderer.Device;
-    const nodeRegion = this.getNodeAtlasRegion(); // You'd need to implement this
+    const nodeRegion = this.getNodeAtlasRegion();
     
     if (!nodeRegion) {
       throw new Error(`No atlas region found for node ${this.id}`);
@@ -250,7 +250,7 @@ export class VisualContentNode {
     }
   }
   
-  // Check if the edge cache should be invalidated due to node changes
+  /** Whether a change to the node invalidates the cached edge points. */
   shouldInvalidateCache(newNode: DiagramNode): boolean {
     return (
       this.node.data.position.x !== newNode.data.position.x ||
@@ -266,7 +266,7 @@ export class VisualContentNode {
     this.invalidateCache();
   }
   
-  // Static factory method to create from DiagramNode
+  /** Wraps a DiagramNode. */
   static create(
     node: DiagramNode, 
     edgeDetector: ShaderBasedEdgeDetector,
@@ -275,7 +275,7 @@ export class VisualContentNode {
     return new VisualContentNode(node, edgeDetector, visualContentRenderer);
   }
   
-  // Batch creation for multiple nodes
+  /** Wraps several DiagramNodes. */
   static createMany(
     nodes: DiagramNode[], 
     edgeDetector: ShaderBasedEdgeDetector,
@@ -291,7 +291,7 @@ export class VisualContentNode {
   }
 }
 
-// Helper class to manage collections of VisualContentNodes
+/** Keeps a VisualContentNode for each diagram node, in sync with the node list. */
 export class VisualContentNodeManager {
   private visualNodes = new Map<string, VisualContentNode>();
   private edgeDetector: ShaderBasedEdgeDetector;
@@ -300,7 +300,6 @@ export class VisualContentNodeManager {
   constructor(edgeDetector: ShaderBasedEdgeDetector, renderer: VisualContentRenderer) {
     this.edgeDetector = edgeDetector;
     this.visualContentRenderer = renderer;
-    console.log('from VisualConentNodeManager util class constructor: ', this.edgeDetector, this.visualContentRenderer);
   }
   
   updateNodes(nodes: DiagramNode[]) {

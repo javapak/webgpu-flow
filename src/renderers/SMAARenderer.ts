@@ -54,7 +54,7 @@ export class SMAARenderer {
       }
     `;
 
-    // IMPROVED: Better edge detection with lower threshold
+    // Pass 1: luma edge detection
     const edgeDetectionShader = `
       ${vertexShader}
 
@@ -62,7 +62,7 @@ export class SMAARenderer {
       @group(0) @binding(1) var inputSampler: sampler;
 
       const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
-      const EDGE_THRESHOLD = 0.15;  // Slightly higher to reduce noise
+      const EDGE_THRESHOLD = 0.15;
 
       fn rgb2luma(color: vec3<f32>) -> f32 {
         return dot(color, LUMA);
@@ -111,7 +111,7 @@ export class SMAARenderer {
       }
     `;
 
-    // IMPROVED: Better weight calculation based on edge strength
+    // Pass 2: blend weights from edge strength
     const blendingWeightShader = `
       ${vertexShader}
 

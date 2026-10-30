@@ -1,4 +1,3 @@
-// spatial/types.ts
 export interface Point {
   x: number;
   y: number;
@@ -26,7 +25,6 @@ export interface QuadTreeNode<T = any> {
   maxDepth: number;
 }
 
-// spatial/quadtree.ts
 export class QuadTree<T = any> {
   private root: QuadTreeNode<T>;
   private MAX_ITEMS = 10;
@@ -45,7 +43,7 @@ export class QuadTree<T = any> {
     };
   }
 
-  // Insert a spatial node into the quadtree
+  /** Inserts an item; it is stored in every leaf its bounds overlap. */
   insert(item: SpatialNode<T>): void {
     this._insertIntoNode(this.root, item);
   }
@@ -132,7 +130,7 @@ export class QuadTree<T = any> {
     ];
   }
 
-  // Query for items intersecting with a region
+  /** Items whose bounds intersect a region. */
   query(region: AABB): SpatialNode<T>[] {
     const results: SpatialNode<T>[] = [];
     this._queryNode(this.root, region, results);
@@ -164,7 +162,7 @@ export class QuadTree<T = any> {
     }
   }
 
-  // Point query for hit testing
+  /** Items whose bounds contain a point. */
   queryPoint(point: Point): SpatialNode<T>[] {
     const results: SpatialNode<T>[] = [];
     this._queryPointNode(this.root, point, results);
@@ -196,7 +194,7 @@ export class QuadTree<T = any> {
     }
   }
 
-  // Remove an item from the quadtree
+  /** Removes an item, merging children back once they are sparse enough. */
   remove(itemId: string): boolean {
     return this._removeFromNode(this.root, itemId);
   }
@@ -241,19 +239,19 @@ export class QuadTree<T = any> {
     }
   }
 
-  // Clear all items
+  /** Removes all items. */
   clear(): void {
     this.root.items = [];
     this.root.children = null;
   }
 
-  // Update an item (remove and re-insert)
+  /** Re-inserts an item with new bounds. */
   update(item: SpatialNode<T>): void {
     this.remove(item.id);
     this.insert(item);
   }
 
-  // Rebuild the entire tree (useful after many updates)
+  /** Rebuilds the tree from scratch, e.g. after many updates. */
   rebuild(items: SpatialNode<T>[]): void {
     this.clear();
     for (const item of items) {
@@ -261,7 +259,6 @@ export class QuadTree<T = any> {
     }
   }
 
-  // Utility methods
   private _intersects(a: AABB, b: AABB): boolean {
     return !(
       a.maxX < b.minX ||
@@ -280,7 +277,7 @@ export class QuadTree<T = any> {
     );
   }
 
-  // Debug method to visualize tree structure
+  /** Tree structure, for debugging. */
   getDebugInfo(): any {
     return this._getNodeDebugInfo(this.root);
   }
@@ -296,7 +293,6 @@ export class QuadTree<T = any> {
   }
 }
 
-// spatial/spatialIndex.ts
 export class SpatialIndex<T = any> {
   private quadTree: QuadTree<T>;
   private items: Map<string, SpatialNode<T>> = new Map();
@@ -305,7 +301,7 @@ export class SpatialIndex<T = any> {
     this.quadTree = new QuadTree<T>(bounds, maxItems, maxDepth);
   }
 
-  // Add or update an item
+  /** Adds an item, replacing any existing one with the same id. */
   addItem(id: string, bounds: AABB, data: T): void {
     const item: SpatialNode<T> = { id, bounds, data };
     
@@ -318,7 +314,7 @@ export class SpatialIndex<T = any> {
     this.quadTree.insert(item);
   }
 
-  // Remove an item
+  /** Removes an item by id. */
   removeItem(id: string): boolean {
     const item = this.items.get(id);
     if (!item) return false;
@@ -327,28 +323,28 @@ export class SpatialIndex<T = any> {
     return this.quadTree.remove(id);
   }
 
-  // Query items in a region
+  /** Items intersecting a region. */
   queryRegion(bounds: AABB): SpatialNode<T>[] {
     return this.quadTree.query(bounds);
   }
 
-  // Hit test at a point
+  /** Items under a point. */
   hitTest(point: Point): SpatialNode<T>[] {
     return this.quadTree.queryPoint(point);
   }
 
-  // Get all items
+  /** All items. */
   getAllItems(): SpatialNode<T>[] {
     return Array.from(this.items.values());
   }
 
-  // Clear all items
+  /** Removes all items. */
   clear(): void {
     this.quadTree.clear();
     this.items.clear();
   }
 
-  // Update bounds (useful for viewport changes)
+  /** Changes the indexed area and rebuilds. */
   updateBounds(bounds: AABB): void {
     const allItems = Array.from(this.items.values());
     this.quadTree = new QuadTree<T>(bounds);
@@ -358,7 +354,7 @@ export class SpatialIndex<T = any> {
     }
   }
 
-  // Get debug information
+  /** Item count and tree structure, for debugging. */
   getDebugInfo() {
     return {
       totalItems: this.items.size,
@@ -367,7 +363,7 @@ export class SpatialIndex<T = any> {
   }
 }
 
-// Integration with diagram types
+// Diagram types as seen by the spatial index
 export interface DiagramNode {
   id: string;
   type: string;
@@ -384,7 +380,7 @@ export interface DiagramNode {
   };
 }
 
-// Helper to convert diagram node to spatial node
+/** Spatial entry for a diagram node, using its rendered size. */
 export function diagramNodeToSpatial(node: DiagramNode): SpatialNode<DiagramNode> {
   const defaultSize = { width: 100, height: 60 };
   // The renderer draws from visual.size, so hit areas must use it too.

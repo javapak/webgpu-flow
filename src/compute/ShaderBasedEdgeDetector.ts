@@ -4,7 +4,6 @@ export class ShaderBasedEdgeDetector {
   private edgeBuffer!: GPUBuffer;
   private uniformBuffer!: GPUBuffer;
   private bindGroupLayout!: GPUBindGroupLayout;
-  private sampler!: GPUSampler;
 
   
   constructor(device: GPUDevice) {
@@ -12,7 +11,6 @@ export class ShaderBasedEdgeDetector {
     this.createBuffers();
     this.createSampler();
     this.createPipeline();
-    console.log(this.device, this.sampler);
   }
   
   getDevice(): GPUDevice {
@@ -87,7 +85,7 @@ export class ShaderBasedEdgeDetector {
             // Convert UV to integer texture coordinates for textureLoad
             let texCoords = vec2<i32>(uv * textureDims);
             
-            // Use textureLoad instead of textureSample (compute shader requirement)
+            // Compute shaders can't use textureSample, so load texels directly
             let alpha = textureLoad(inputTexture, texCoords, 0).a;
             
             // If we hit transparent area, we found the edge
@@ -158,7 +156,7 @@ export class ShaderBasedEdgeDetector {
     // Update uniform buffer with parameters
     const uniformData = new Float32Array([
       nodeCenter.x, nodeCenter.y,                    // nodeCenter
-      normalizedDirection.x, normalizedDirection.y,  // targetDirection  
+      normalizedDirection.x, normalizedDirection.y,  // targetDirection
       maxDistance,                                    // maxDistance
       1.0,                                           // stepSize
       0.0, 0.0                                       // padding
@@ -212,15 +210,13 @@ export class ShaderBasedEdgeDetector {
     return result;
   }
   
-  // Batch edge detection for multiple directions at once
+  /** Edge points for several directions. Runs one dispatch per direction for now. */
   async detectMultipleEdgePoints(
     nodeTexture: GPUTexture,
     nodeCenter: {x: number, y: number},
     directions: Array<{x: number, y: number}>,
     maxDistance: number = 100
   ): Promise<Array<{x: number, y: number}>> {
-    // This would require modifying the compute shader to handle multiple rays
-    // For now, just call detectEdgePoint multiple times
     const results: Array<{x: number, y: number}> = [];
     
     for (const direction of directions) {
@@ -231,7 +227,7 @@ export class ShaderBasedEdgeDetector {
     return results;
   }
   
-  // Helper method to detect edge points for common directions
+  /** Edge points in the four cardinal directions. */
   async detectCardinalEdgePoints(
     nodeTexture: GPUTexture,
     nodeCenter: {x: number, y: number},
@@ -244,7 +240,7 @@ export class ShaderBasedEdgeDetector {
   }> {
     const directions = [
       { x: 0, y: -1 },  // north
-      { x: 0, y: 1 },   // south  
+      { x: 0, y: 1 },   // south
       { x: 1, y: 0 },   // east
       { x: -1, y: 0 }   // west
     ];

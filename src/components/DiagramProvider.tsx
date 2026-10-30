@@ -1,7 +1,5 @@
-// NOTE TO-DO: DISABLED CULLING METHODS DUE TO BUGGY EDGES. NEED TO COME BACK TO FIX. 
-// (example - node gets culled for being non visible, 
-// but because node gets cullled and may be a source or target node, 
-// the edge also gets culled even if the edge also points to an on-screen node.)
+// TODO: viewport culling is disabled. Culling an off-screen node also dropped every
+// edge attached to it, even edges whose other end was on screen.
 
 import { useReducer, useEffect, useCallback, useMemo, useContext, createContext, useRef, useState, useLayoutEffect } from "react";
 import { useSpatialIndex } from "../hooks/useSpatialIndex";
@@ -82,7 +80,8 @@ export interface DiagramContextValue extends DiagramState {
   
   // Hit testing for edges
   hitTestEdge: (screenPoint: Point) => {edge: DiagramEdge | null, vertexIndex: number, isVertex: boolean};
-  hitTestEdgeVertex: (screenPoint: Point, edge: DiagramEdge) => number; // returns vertex index or -1
+  /** Index of the vertex under the point, or -1. */
+  hitTestEdgeVertex: (screenPoint: Point, edge: DiagramEdge) => number;
   
   // Viewport methods
   setViewport: (viewport: Partial<DiagramState['viewport']>) => void;
@@ -463,7 +462,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const spatial: SpatialDiagramHook = useSpatialIndex(initialBounds);
   const rendererRef = useRef<WebGPURenderer | null>(globalRenderer);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef(state); // Keep current state in ref
+  const stateRef = useRef(state);
   const [supersamplingValue, setSuperSamplingValue] = useState('Disabled');
   const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([]);
   const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
@@ -489,7 +488,6 @@ const viewportRef = useRef<Viewport>({
 
 const drawingStateRef = useRef<EdgeDrawingState>({isDrawing: false, sourceNodeId: null, userVertices: []});
 
-  // Update state ref whenever state changes
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
@@ -584,23 +582,9 @@ const clientToCanvas = useCallback((clientX: number, clientY: number): Point => 
     };
   }, []);
 
-  // Get only visible nodes for efficient rendering
+  /** Every node for now; culling is disabled (see the TODO at the top of this file). */
   const getVisibleNodes = useCallback(() => {
     if (!canvasRef.current) return [];
-    
-    // Calculate viewport bounds in world coordinates using canvas dimensions
-    // const canvas = canvasRef.current;
-    //const halfWidth = canvas.width / (2 * state.viewport.zoom);
-    //const halfHeight = canvas.height / (2 * state.viewport.zoom);
-    
-    /*const viewportBounds: AABB = {
-      minX: state.viewport.x - halfWidth,
-      minY: state.viewport.y - halfHeight,
-      maxX: state.viewport.x + halfWidth,
-      maxY: state.viewport.y + halfHeight,
-    }; */
-    
-    //const visible = spatial.getVisibleNodes(viewportBounds);
     return state.nodes;
   }, [spatial, state.viewport, state.nodes.length, canvasRef]);
   
@@ -613,7 +597,7 @@ useLayoutEffect(() => {
   // so it must draw the *live* viewport. stateRef lags a render behind, and drawing from it
   // here would paint the pre-pan view right after a gesture commits.
   rendererRef.current.render(
-      state.nodes, // for now we render it all.
+      state.nodes,
       state.edges,
       viewportRef.current,
       { width: canvasRef.current.width, height: canvasRef.current.height },
@@ -622,33 +606,6 @@ useLayoutEffect(() => {
       drawingStateRef.current
     );
   }}, [spatial]);
-
-
-
-
-/*const performSyncRender = useCallback(() => {
-  const renderer = rendererRef.current;
-  const canvas = canvasRef.current;
-  const currentState = stateRef.current;
-
-  if (!renderer?.initialized || !canvas) return;
-
-  try {
-    renderer.render(
-      spatial.getVisibleNodes({
-        minX: currentState.viewport.x - canvas.width / (2 * currentState.viewport.zoom),
-        minY: currentState.viewport.y - canvas.height / (2 * currentState.viewport.zoom),
-        maxX: currentState.viewport.x + canvas.width / (2 * currentState.viewport.zoom),
-        maxY: currentState.viewport.y + canvas.height / (2 * currentState.viewport.zoom),
-      }),
-      currentState.edges,
-      currentState.viewport,
-      { width: canvas.width, height: canvas.height },
-    );
-  } catch (e) {
-    console.error("Initial render failed", e);
-  }
-}, [spatial]); */
 
 const scheduleRender = useCallback(() => {
     const renderer = rendererRef.current;
@@ -663,7 +620,6 @@ const scheduleRender = useCallback(() => {
     renderer.rafHandle = requestAnimationFrame(() => {
       device?.pushErrorScope('validation');
       device?.pushErrorScope('out-of-memory');
-      console.log('yo im mothafuckin raf');
         const s = stateRef.current;
         const vp = viewportRef.current;
         try {
@@ -682,18 +638,18 @@ const scheduleRender = useCallback(() => {
     });
 }, []);
 
-  // Enhanced hit testing that also checks for resize handles
+  /** Nodes under a point (canvas px). */
   const hitTestPoint = useCallback((screenPoint: Point) => {
     const worldPoint = screenToWorld(screenPoint);
     const hits = spatial.hitTest(worldPoint);
     return hits;
   }, [spatial, screenToWorld, state.viewport]);
 
-  // Separate function for enhanced hit testing with resize handles
+  /** Like hitTestPoint, but a resize handle of the selected node takes priority. */
   const hitTestWithHandles = useCallback((screenPoint: Point) => {
     const worldPoint = screenToWorld(screenPoint);
     
-    // Use the most current state from stateRef to avoid stale closures
+    // Read stateRef so the callback never sees a stale selection
     const currentState = stateRef.current;
     
     // First check if we're hitting a resize handle of a selected node
@@ -705,7 +661,7 @@ const scheduleRender = useCallback(() => {
         ...selectedNode,
         visual: {
           ...selectedNode.visual,
-          selected: true // Force this to be true for hit testing
+          selected: true // handles are only hit-tested on selected nodes
         }
       };
       
@@ -723,7 +679,7 @@ const scheduleRender = useCallback(() => {
     // Then check for node hits
     const hits = spatial.hitTest(worldPoint);
     return { nodes: hits, resizeHandle: 'none' as ResizeHandle };
-  }, [spatial, screenToWorld, stateRef]); // Use stateRef instead of state dependencies
+  }, [spatial, screenToWorld, stateRef]);
 
   // Node methods
   const addNode = useCallback((node: DiagramNode) => {
@@ -925,7 +881,7 @@ const endDrag = useCallback(() => {
     const selected = current.interaction.selectedNodes[0];
 
     if (type === 'viewport') {
-        // Flush viewport ref back into reducer so rest of app sees it
+        // Sync the gesture-driven viewport ref back into React state
         dispatch({ type: 'SET_VIEWPORT', viewport: { ...viewportRef.current } });
     } else if ((type === 'node' || type === 'resize') && selected) {
         const stored = current.nodes.find(n => n.id === selected.id) ?? selected;
@@ -1007,7 +963,6 @@ const endDrag = useCallback(() => {
     };
   }, [setAltKey]);
 
-    // Check supersampling support when canvas size or MSAA changes
   const initializeRenderer = useCallback(async (canvas: HTMLCanvasElement): Promise<boolean> => {
     globalRenderer.onResizeComplete = () => scheduleRender();
     canvasRef.current = canvas;
@@ -1034,7 +989,6 @@ const endDrag = useCallback(() => {
       const renderer = getRenderer();
       
       if (!renderer || !renderer.gpuCapibilitiesRef || !canvasRef.current) {
-        console.log('Waiting for initialization...');
         return;
       }
       
@@ -1042,17 +996,11 @@ const endDrag = useCallback(() => {
       const currentHeight = canvasRef.current.height;
       
       if (currentWidth === 0 || currentHeight === 0) {
-        console.log('Waiting for valid canvas dimensions...');
         return;
       }
       
       const isInitialCheck = supportedSupersamplingFactors.length === 0;
       
-      console.log(
-        isInitialCheck 
-          ? `Initial supersampling check: ${currentWidth}x${currentHeight}` 
-          : `Rechecking supersampling: ${currentWidth}x${currentHeight}`
-      );
       
       try {
         const support = await renderer.gpuCapibilitiesRef.checkSupersamplingSupport(
@@ -1064,11 +1012,6 @@ const endDrag = useCallback(() => {
         setSupportedSupersamplingFactors(support.supportedFactors);
         setSupersamplingWarnings(support.warnings);
         
-        console.log(isInitialCheck ? '✓ Initial support loaded' : '✓ Support updated', {
-          supported: support.supportedFactors,
-          maxFactor: support.maxFactor,
-          warnings: support.warnings.length
-        });
         
         if (!isInitialCheck && supersamplingValue !== 'Disabled') {
           const currentFactor = parseInt(supersamplingValue.replace('x', ''));
@@ -1108,7 +1051,7 @@ const endDrag = useCallback(() => {
     canvasRef.current?.height, 
     sampleCount,
     getRenderer,
-    supportedSupersamplingFactors.length // Tracks if initial check is done
+    supportedSupersamplingFactors.length // non-zero once the first check has run
   ]);
 
 
@@ -1146,7 +1089,6 @@ const endDrag = useCallback(() => {
 
 const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?: boolean) => {
   setDrawingState(prev => {
-    // Create a new array to avoid mutation
     const newVertices = [...prev.userVertices];
     
     if (replaceLast && newVertices.length > 0) {
@@ -1178,7 +1120,6 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
       }
     };
 
-    console.log('completed edge: ', newEdge);
 
     // Reset drawing state
     setDrawingState({
@@ -1186,7 +1127,6 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
       sourceNodeId: null,
       userVertices: []
     });
-    console.log('completed edge: ', newEdge);
 
     return newEdge;
   }, [drawingState]);
@@ -1293,7 +1233,7 @@ const addEdgeVertex = useCallback((edgeId: string, position: {x: number, y: numb
 
 const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
   const edge = state.edges.find(e => e.id === edgeId);
-  if (!edge || edge.userVertices.length <= 0) return; // Keep at least one vertex for valid edge
+  if (!edge || edge.userVertices.length <= 0) return;
   
   const updatedVertices = edge.userVertices.filter((_, idx) => idx !== vertexIndex);
   
@@ -1305,7 +1245,6 @@ const removeEdgeVertex = useCallback((edgeId: string, vertexIndex: number) => {
   updateEdge(updatedEdge);
 }, [state.edges, updateEdge]);
 
-// Add hit testing for edges:
 
 const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): number => {
   const worldPoint = screenToWorld(screenPoint);
@@ -1339,7 +1278,6 @@ const hitTestEdgeVertex = useCallback((screenPoint: Point, edge: DiagramEdge): n
 
 
   const handleSupersamplingChange = useCallback(async (value: string) => {
-    console.log('Changing supersampling to:', value);
     setSuperSamplingValue(value);
     
     const renderer = getRenderer();
@@ -1418,7 +1356,7 @@ const hitTestEdge = useCallback((screenPoint: Point): {edge: DiagramEdge | null,
 
 
 
-// Helper function for point-to-line distance
+/** Distance from a point to a line segment. */
 function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): number {
   const dx = lineEnd.x - lineStart.x;
   const dy = lineEnd.y - lineStart.y;
@@ -1517,8 +1455,8 @@ useEffect(() => {
     selectEdgeVertex,
     // Spatial methods
     getVisibleNodes,
-    hitTestPoint, // Keep the basic version for compatibility
-    hitTestWithHandles, // Add the enhanced version
+    hitTestPoint,
+    hitTestWithHandles,
     // Viewport methods
     setViewport,
     screenToWorld,

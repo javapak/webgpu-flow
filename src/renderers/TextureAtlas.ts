@@ -88,7 +88,6 @@ export class TextureAtlas {
     this.ctx.shadowOffsetX = 0;
     this.ctx.shadowOffsetY = 0;
 
-    // Create entry
     const entry: TextureAtlasEntry = {
       texture: this.texture!,
       x: this.currentX,
@@ -145,12 +144,12 @@ export class TextureAtlas {
     this.entries.clear();
   }
 
-  // Debug method to see the atlas
+  /** The backing canvas, for inspecting the atlas. */
   getDebugCanvas(): HTMLCanvasElement {
     return this.canvas;
   }
 
-  // Get usage statistics
+  /** Usage statistics. */
   getStats() {
     return {
       totalEntries: this.entries.size,

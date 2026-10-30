@@ -1,4 +1,3 @@
-// index.ts - Main library exports with spatial indexing
 
 import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
 import type { SHAPE_TYPES } from '../renderers/WebGPURenderer';
@@ -60,7 +59,7 @@ export interface DiagramNode {
     shape?: string;
     visualContent?: {type: string, content: string, size: {width: number, height: number}, colorizable?: boolean}
     selected?: boolean;
-    cacheKey?: string; // For caching rendered visuals
+    cacheKey?: string; // key for the cached rendered visual
     [key: string]: any;
   };
 }
@@ -70,12 +69,13 @@ export interface DiagramEdge {
   data?: Record<string, any>
   sourceNodeId: string;
   targetNodeId: string;
-  userVertices: Array<{x: number, y: number}>; // User-defined intermediate points
+  /** User-placed bend points between source and target. */
+  userVertices: Array<{x: number, y: number}>;
   style: {
     labelColor?: string;
     color: [number, number, number, number];
     thickness: number;
-    dashPattern?: number[]; // Optional dashing
+    dashPattern?: number[];
     sourceMarker? : MarkerType;
     targetMarker? : MarkerType;
   };
@@ -96,7 +96,7 @@ export interface InteractionState {
   selectedNodes: DiagramNode[];
   selectedEdges: DiagramEdge[];
   selectedVertex: {edgeId: string; vertexIndex: number} | null;
-  altKeyPressed: boolean; // True when Alt key is pressed
+  altKeyPressed: boolean;
   dragState: {
     isDragging: boolean;
     dragType: 'node' | 'viewport' | 'resize' | 'edge-vertex' | null;
@@ -120,7 +120,8 @@ export interface DiagramState {
   viewport: Viewport;
   interaction: InteractionState;
   gridSnapping: {
-    enabled: boolean; // True when Alt is NOT pressed
+    /** Turned off temporarily while Alt is held. */
+    enabled: boolean;
     gridSize: number;
   };
 }

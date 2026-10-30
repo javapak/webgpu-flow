@@ -19,7 +19,8 @@ interface DiagramCanvasProps {
   onNodeDropped?: (nodeType: any, position: {x: number, y: number}) => void;
   onNodeDoubleClick?: (node: any) => void;
   onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
-  selectedNodeType?: any; // For tap-to-place
+  /** Palette item to place on the next tap. */
+  selectedNodeType?: any;
   onPlaceNode?: (nodeType: any, position: {x: number, y: number}) => void;
   setSupportedSampleCount: React.Dispatch<React.SetStateAction<string[] | undefined>>
 }
@@ -27,7 +28,7 @@ interface DiagramCanvasProps {
 // How far (CSS px) a pointer must travel before a node/handle/vertex press becomes a drag.
 // Fingers jitter more than mice, so touch gets a larger dead zone.
 const DRAG_SLOP_CSS: Record<string, number> = { mouse: 3, pen: 5, touch: 8 };
-// A debounce for syncing the (ref-driven) viewport back into React state after a gesture.
+// Delay before the ref-driven viewport is synced back into React state after a gesture.
 const VIEWPORT_COMMIT_MS = 150;
 
 export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
@@ -113,7 +114,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         const success = await initializeRenderer(canvasRef.current!);
         
         if (success) {
-          console.log('DiagramCanvas: WebGPU initialized');
           setSupportedSampleCount(getRenderer()?.sampleCountsSupported);
         } else {
           console.warn('DiagramCanvas: WebGPU failed');
@@ -477,8 +477,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
   }, [screenToWorld, clientToCanvas, addNode, onNodeDropped]);
 
-  // Helper function for debug display
-  const getMaxDepth = (nodeInfo: any): number => {
+    const getMaxDepth = (nodeInfo: any): number => {
     if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
     return Math.max(nodeInfo.depth, ...nodeInfo.children.map((child: any) => getMaxDepth(child)));
   };
@@ -552,7 +551,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 };
 
 
-// Performance monitoring component (unchanged)
 interface PerformanceMonitorProps {
   className?: string;
 }

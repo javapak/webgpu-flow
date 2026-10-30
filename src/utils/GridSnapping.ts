@@ -1,4 +1,3 @@
-// src/utils/GridSnapping.ts
 export interface GridSnappingOptions {
   gridSize: number;
   enabled: boolean;
@@ -72,10 +71,7 @@ export class GridSnapping {
     };
   }
 
-  /**
-   * Calculate snapped resize based on handle type
-   * This ensures resizing respects grid snapping
-   */
+  /** Snaps the result of a resize to the grid. */
   static snapResize(
     newDimensions: { width: number; height: number; x: number; y: number },
     gridSize: number = this.DEFAULT_GRID_SIZE,

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { DiagramNode } from '../types';
 import { useDiagram } from './DiagramProvider';
-// Node component
 export interface NodeProps {
   id: string;
   type: string;
@@ -41,11 +40,10 @@ export const Node: React.FC<NodeProps> = ({
         }
       };
 
-      console.log('Adding node:', node);
       addNode(node as DiagramNode);
       hasAddedRef.current = true;
     }
-  }, []); // Empty dependency array - only run once
+  }, []);
 
   return null;
 };

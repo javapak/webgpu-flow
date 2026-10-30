@@ -3,14 +3,14 @@ import { useDiagram } from "../components/DiagramProvider";
 import type { MarkerType } from "../renderers/FloatingEdgeRenderer";
 
 
-// Edge component
 
 export interface EdgeProps{
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
   data?: Record<string, unknown>;
-  userVertices: Array<{x: number, y: number}>; // User-defined intermediate points
+  /** User-placed bend points between source and target. */
+  userVertices: Array<{x: number, y: number}>;
   style: {
     labelColor?: string,
     color: [number, number, number, number];

@@ -5,7 +5,7 @@ import type { DiagramNode } from "./SpatialIndex";
 export type ResizeHandle = 'none' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 export class MouseInteractions {
-  // Convert screen coordinates to world coordinates
+  /** Screen (CSS px relative to the canvas) to world coordinates. */
   static screenToWorld(
     screenX: number, 
     screenY: number, 
@@ -20,15 +20,13 @@ export class MouseInteractions {
 
   const rect = canvas.getBoundingClientRect();
   
-  // ADD SCALE FACTOR:
+  // CSS px -> canvas backing-store px
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
   
-  // screenPoint is already in canvas coordinates, so apply scale
   const canvasX = screenX * scaleX;
   const canvasY = screenY * scaleY;
   
-  // Convert to world coordinates
   const screenCenterX = rect.width / 2;
   const screenCenterY = rect.height / 2;
   
@@ -38,7 +36,7 @@ export class MouseInteractions {
   return { x: worldX, y: worldY };
   }
 
-  // Convert world coordinates to screen coordinates
+  /** World to screen coordinates. */
   static worldToScreen(
     worldX: number,
     worldY: number,
@@ -53,7 +51,7 @@ export class MouseInteractions {
     return { x: screenX, y: screenY };
   }
 
-  // Check if a point is inside a node's bounds
+  /** Whether a world point is inside a node's bounds. */
   static isPointInNode(
     worldPos: { x: number; y: number },
     node: DiagramNode
@@ -213,7 +211,7 @@ private static getShapeHandlePositions(
   }
 }
 
-// Add helper method to determine handle type from position
+/** Corner or edge handle, from its position relative to the node centre. */
 private static determineHandleType(
   handleX: number, 
   handleY: number, 
@@ -244,7 +242,7 @@ private static determineHandleType(
 }
 
 
-  // Get cursor style for resize handle
+  /** CSS cursor for a resize handle. */
   static getCursorForHandle(handle: ResizeHandle): string {
     switch (handle) {
       case 'n':
@@ -264,7 +262,7 @@ private static determineHandleType(
     }
   }
 
-  // Find the topmost node at a given position
+  /** Topmost node at a world point. */
   static findNodeAtPosition(
     worldPos: { x: number; y: number },
     nodes: DiagramNode[]
@@ -278,7 +276,7 @@ private static determineHandleType(
     return null;
   }
 
-  // Helper to get shape type
+  /** Shape name to the renderer's shape index. */
   private static getShapeType(shape?: string): number {
     const SHAPE_TYPES = {
       rectangle: 0,
@@ -296,7 +294,7 @@ private static determineHandleType(
     return SHAPE_TYPES[shape as keyof typeof SHAPE_TYPES] ?? 0;
   }
 
-  // Calculate new node dimensions with aspect ratio locking support
+  /** New node position and size for a resize drag; circle-like shapes keep their aspect ratio. */
   static calculateResize(
     handle: ResizeHandle,
     deltaX: number,
@@ -442,13 +440,13 @@ private static determineHandleType(
     return { width: newWidth, height: newHeight, x: newX, y: newY };
   }
 
-  // Helper method to check if a shape should lock aspect ratio
+  /** Whether resizing this shape keeps its aspect ratio. */
   static shouldLockAspectRatio(shape?: string): boolean {
     const shapeType = this.getShapeType(shape);
     return shapeType === 1 || shapeType === 6 || shapeType === 7; // Circle, Initial, Final
   }
 
-  // Helper method to convert drag event coordinates to world coordinates
+  /** Drag event position to world coordinates. */
   static dragEventToWorld(
     event: React.DragEvent,
     canvas: HTMLCanvasElement,
@@ -460,7 +458,7 @@ private static determineHandleType(
     return this.screenToWorld(event.clientX, event.clientY, canvas, viewport);
   }
 
-  // Helper method to get mouse position relative to canvas
+  /** Mouse position relative to the canvas. */
   static getCanvasMousePosition(
     event: MouseEvent | DragEvent,
     canvas: HTMLCanvasElement

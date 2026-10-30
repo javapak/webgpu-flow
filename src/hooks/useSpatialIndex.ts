@@ -26,27 +26,17 @@ export const useSpatialIndex = (initialBounds: AABB): SpatialDiagramHook => {
   }, []);
 
   const updateNode = useCallback((node: DiagramNode) => {
-    // This automatically handles remove + re-insert
     addNode(node);
   }, [addNode]);
 
   const getVisibleNodes = useCallback((viewport: AABB) => {
     const spatialNodes = spatialIndexRef.current.queryRegion(viewport);
-    console.log('📊 Spatial query returned:', spatialNodes.length, 'nodes');
-    const results = spatialNodes.map((sn: SpatialNode) => sn.data);
-    results.forEach((node, i) => {
-      console.log(`📦 Result ${i}:`, {
-        id: node.id,
-        position: node.data.position
-      });
-    });
-
-    return results;
+    return spatialNodes.map((sn: SpatialNode) => sn.data);
   }, []);
 
   const hitTest = useCallback((point: Point) => {
     const spatialNodes = spatialIndexRef.current.hitTest(point);
-    // Sort by area (smaller nodes first for better selection)
+    // Smallest first, so a node on top of a larger one wins the tap
     return spatialNodes
       .map((sn: SpatialNode) => sn.data)
       .sort((a: DiagramNode, b: DiagramNode) => {

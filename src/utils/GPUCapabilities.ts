@@ -16,7 +16,6 @@ export default class GPUCapabilities {
       this.device.pushErrorScope('out-of-memory');
       
       let testTexture: GPUTexture | null = null;
-      let testPipeline: GPURenderPipeline | null = null;
       let depthTexture: GPUTexture | null = null;
       
       try {
@@ -42,7 +41,8 @@ export default class GPUCapabilities {
           `
         });
         
-        testPipeline = this.device.createRenderPipeline({
+        // Creating the pipeline is the test; validation errors surface via the error scope.
+        this.device.createRenderPipeline({
           layout: 'auto',
           vertex: {
             module: testShader,
@@ -74,13 +74,9 @@ export default class GPUCapabilities {
         // Check both error scopes
         const memoryError = await this.device.popErrorScope();
         const validationError = await this.device.popErrorScope();
-        console.log(testPipeline);
         
-        if (memoryError || validationError) {
-          const error = memoryError || validationError;
-          console.warn(`Sample count ${sampleCount} not supported: ${error?.message}`);
-        } else {
-          console.log(`Sample count ${sampleCount} is supported`);
+        // An error here just means this count is unsupported.
+        if (!memoryError && !validationError) {
           this.supportedSampleCounts.push(sampleCount.toString());
         }
         
@@ -104,8 +100,6 @@ export default class GPUCapabilities {
     const numberArr = this.supportedSampleCounts.map((val) => parseInt(val));
     const maxSampleCount = numberArr.length > 0 ? Math.max(...numberArr) : 1;
     
-    console.log(`📊 Supported MSAA sample counts: [${this.supportedSampleCounts.join(', ')}]`);
-    console.log(`📊 Maximum supported: ${maxSampleCount}x`);
     
     return {
       maxSampleCount,
@@ -117,7 +111,8 @@ export default class GPUCapabilities {
   }
 
   /**
-   * Check what supersampling factors are supported based on GPU texture size limits
+   * Finds the supersampling factors this GPU can handle, by checking texture-size
+   * limits and test-allocating the targets for each factor.
    */
   async checkSupersamplingSupport(
     baseWidth: number, 
@@ -131,7 +126,6 @@ export default class GPUCapabilities {
     recommendations: string[];
     warnings: string[];
   }> {
-    console.log('🔍 Checking supersampling support...');
     
     // Get adapter to check limits
     const adapter = await navigator.gpu.requestAdapter();
@@ -148,9 +142,6 @@ export default class GPUCapabilities {
 
     // Get maximum texture dimension from limits
     this.maxTextureSize = adapter.limits.maxTextureDimension2D;
-    console.log(`Max texture size: ${this.maxTextureSize}x${this.maxTextureSize}`);
-    console.log(`Base canvas size: ${baseWidth}x${baseHeight}`);
-    console.log(`Sample count: ${sampleCount}x`);
 
     const testFactors = [1, 2, 4, 8];
     const supportedFactors: number[] = [];
@@ -163,12 +154,11 @@ export default class GPUCapabilities {
 
       // Check if dimensions exceed GPU limits
       if (supersampledWidth > this.maxTextureSize || supersampledHeight > this.maxTextureSize) {
-        console.log(`${factor}x supersampling: ${supersampledWidth}x${supersampledHeight} exceeds max texture size (${this.maxTextureSize})`);
         warnings.push(`${factor}x exceeds GPU texture size limit`);
         break;
       }
 
-      // Push error scopes BEFORE creating resources
+      // Error scopes must be pushed before the resources are created
       this.device.pushErrorScope('validation');
       this.device.pushErrorScope('out-of-memory');
       
@@ -213,19 +203,15 @@ export default class GPUCapabilities {
         const validationError = await this.device.popErrorScope();
         
         if (memoryError) {
-          console.log(`❌ ${factor}x supersampling: Out of memory`);
           warnings.push(`${factor}x: Insufficient GPU memory`);
           break; // Stop testing higher factors
         }
         
         if (validationError) {
-          console.log(`❌ ${factor}x supersampling: Validation error - ${validationError.message}`);
           warnings.push(`${factor}x: ${validationError.message}`);
           break;
         }
         
-        // Success!
-        console.log(`${factor}x supersampling: ${supersampledWidth}x${supersampledHeight} is supported`);
         supportedFactors.push(factor);
 
         // Add recommendations based on performance
@@ -249,7 +235,6 @@ export default class GPUCapabilities {
         }
         
       } catch (e) {
-        console.error(`❌ ${factor}x supersampling threw exception (current pixel multiplier:): ${e}`);
         warnings.push(`${factor}x: Failed with error - ${e}`);
   
         
@@ -273,13 +258,6 @@ export default class GPUCapabilities {
 
     const maxFactor = supportedFactors.length > 0 ? Math.max(...supportedFactors) : 1;
 
-    console.log(`📊 Supersampling support summary:`);
-    console.log(`   Supported factors: [${supportedFactors.join(', ')}]`);
-    console.log(`   Maximum factor: ${maxFactor}x`);
-    if (warnings.length > 0) {
-      console.log(`   Warnings: ${warnings.length}`);
-    }
-
     this.supportedSupersamplingFactors = supportedFactors;
 
     return {
@@ -291,9 +269,7 @@ export default class GPUCapabilities {
     };
   }
 
-  /**
-   * Get recommended supersampling factor based on canvas size and GPU capabilities
-   */
+  /** Recommended supersampling factor for a canvas size, given what's supported. */
   getRecommendedSupersamplingFactor(width: number, height: number): number {
     const totalPixels = width * height;
     

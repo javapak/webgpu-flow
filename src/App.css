@@ -433,8 +433,3 @@ body {
   overflow-y: auto;
   padding-bottom: env(safe-area-inset-bottom);
 }
-
-/* The debug readout collides with the toolbar on narrow screens. */
-@media (max-width: 768px) {
-  .canvas-debug { display: none; }
-}

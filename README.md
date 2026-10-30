@@ -1,291 +1,168 @@
-#  WebGPU Flow 
+# WebGPU Flow
 
-An interactive flow diagram editor built with **React**, **TypeScript**, and **WebGPU**. Create flow graphs, system diagrams, and visual workflows with hardware-accelerated rendering.
+A node-and-edge diagram editor whose canvas is drawn entirely on the GPU. Shapes, edges, arrowheads, labels and the grid are rendered with WebGPU shaders instead of DOM elements or SVG, so the editor works on the GPU the way a game engine does.
 
-![WebGPU Flow Editor](https://img.shields.io/badge/WebGPU-Enabled-blue) ![React](https://img.shields.io/badge/React-18+-61dafb) ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178c6) ![License](https://img.shields.io/badge/license-MIT-green)
+![WebGPU](https://img.shields.io/badge/WebGPU-native-005a9c) ![React](https://img.shields.io/badge/React-19-61dafb) ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6) ![License](https://img.shields.io/badge/license-MIT-green)
 
-## Features
+Most web diagram tools (React Flow, JointJS, draw.io) build the canvas from HTML or SVG elements. That's easy to style, but each node and edge is a DOM element the browser has to lay out and paint. WebGPU Flow skips that layer: each node is one instance in a single instanced draw call, its shape is an anti-aliased signed distance function, and text comes from a glyph atlas.
 
-### GPU acceleration and performance
-- **WebGPU Rendering**: Hardware-accelerated viewport rendering.
-- **Spatial Indexing**: Quadtree-based spatial partitioning for efficient hit testing and viewport culling
-- **Optimized for Scale**: Handle large diagrams with ease thanks to rendering optimizations
+The demo opens on a dependency graph of the JavaScript ecosystem (77 nodes, 185 edges) that you can pan, zoom, rearrange and auto-lay-out.
 
-### Customizability
-- **Custom Visual Content**: Embed emojis, icons, and custom graphics with texture atlas optimization
-- **Flexible Styling**: Full color customization, size control, and visual properties
+## What's in it
 
-### Floating Edges + Definable anchor vertices
-- **Floating Edge System**: User defined control points with dynamic connector placement based on node positions
-- **Smart Connection Points**: Automatic edge-to-shape intersection calculation
-- **Interactive Editing**: Add, move, and delete edge vertices with visual handles
-- **Edge Labels**: Add descriptive text labels to connections
+### Rendering
+- **Hand-written WebGPU pipeline**: raw WebGPU API and WGSL shaders with no rendering library. Nodes are instanced, edges and labels are batched, and depth layers are explicit.
+- **SDF shapes** with smooth edges at any zoom: rectangle, rounded rectangle, circle, oval, diamond, hexagon, package, UML initial/final nodes and actor.
+- **SVG and emoji nodes.** Pass an SVG string or emoji as `visualContent` and it's rasterised into a texture atlas. SVGs can be tinted on the GPU.
+- **Outline detection on the GPU.** For SVG nodes, a compute shader marches the rendered image to find its real silhouette, so edges attach to the drawn outline, not the bounding box.
+- **Readable labels at every zoom.** Text tracks the content but stays within a legible on-screen size, and overlapping labels are dropped by priority (selected first, then most-connected).
+- **Anti-aliasing:** MSAA, FXAA, SMAA, and supersampling based on what your GPU supports. Render resolution can be set separately from on-screen size.
 
-### Intuitive Interactions
-- **Multi-Mode Editing**: Select, pan, draw edges, and edit modes
-- **Resize Handles**: 8-point handles for all shapes
-- **Drag & Drop**: Drag nodes from palette onto canvas
-- **Zoom & Pan**: Smooth viewport navigation with mouse wheel zoom
+### Edges
+- **Floating edges** that attach wherever the line meets the shape's border, recomputed as nodes move.
+- **User-placed bend points** you can add, drag and delete.
+- **20 marker types**, covering the notations people actually use: UML (association, inheritance, realization, aggregation/composition diamonds), ER crow's-foot (one, many, optional, mandatory), plus arrows, bars, dots and squares.
+- **Edge labels**, decluttered alongside node labels.
 
-### Mobile Support (currently not fully featured)
-- **Touch Optimized**: Full touch support with pinch-to-zoom and tap interactions
-- **Responsive Design**: Adapts to different screen sizes and orientations
+### Layout
+- **Automatic layout via [ELK](https://eclipse.dev/elk/):** layered (hierarchical), tree, radial, stress, force and box.
+- **Orthogonal, polyline or straight edge routing**, with adjustable direction and spacing. Results are framed to fit the view.
 
+### Interaction
+- Select, drag and resize nodes. Handles adapt to the shape and hide when a node is too small on screen to grab.
+- Grid snapping, with **Alt** to bypass it while dragging.
+- Zoom about the cursor, with smooth fit-to-content and zoom animations.
+- Edit a node's label, font, colour and icon colour in the properties panel.
+- Quadtree spatial index for hit-testing.
 
-### Visual Features
-- **Dynamic Grid**: Adaptive grid that adjusts to zoom level
-- **Text Labels**: Texture atlas-based text rendering
-- **Depth Layering**: Proper z-ordering for overlapping elements
-- **Selection Highlighting**: Visual feedback for selected nodes and edges
-- **Anti-aliased Shapes**: Smoothed rendering with SDF.
+### Touch and mobile
+- Mouse, touch and pen share one input path. Pinch zooms and pans together, and lifting one finger carries on panning.
+- Drag thresholds sized for fingers, so taps aren't mistaken for drags.
+- Phone layout: full-screen canvas, compact toolbar, and properties in a bottom sheet.
 
+## Status
 
-## 📋 Prerequisites
+This is a working engine and editor, not yet a finished product. Here's where it stands:
 
-- **Node.js**: 18+ 
-- **Browser**: A browser that supports WebGPU which should be most major browsers at this current time. See [here](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status "WebGPU Implementation Status (wiki)") to look into current status.
-- **GPU**: Ideally a dedicated one, but you can probably get away with less.
+- **Browser support.** WebGPU is required and there's no Canvas/WebGL fallback. It runs in current Chrome, Edge and Safari; Firefox support depends on version and platform ([status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)).
+- **No viewport culling yet.** Every node is drawn every frame. Culling is disabled because hiding an off-screen node also hid edges that still had one end on screen.
+- **Missing editor basics:** undo/redo, multi-select, copy/paste, and saving or loading diagrams.
+- **Not published as a package.** You can use it inside this repo (see below), but there's no npm release or stable API yet.
 
-## Getting Started
+## Getting started
 
-### Installation
+Requires Node.js 18+ and a WebGPU-capable browser.
 
 ```bash
-# Clone the repository
 git clone https://github.com/javapak/webgpu-flow.git
 cd webgpu-flow
-
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
+npm run dev        # http://localhost:5173
 ```
 
-The editor will be available at `http://localhost:5173`
-
-### Basic Usage
-
-```typescript
-import { DiagramProvider, DiagramCanvas, Node, Edge } from './index';
-
-function App() {
-  return (
-    <DiagramProvider>
-      <DiagramCanvas width={800} height={600} />
-      
-      {/* Add nodes */}
-      <Node 
-        id="node1" 
-        type="process" 
-        position={{ x: 0, y: 0 }}
-        data={{ label: "Start" }}
-        visual={{ color: "#3b82f6", shape: "rectangle" }}
-      />
-
-      <Node 
-        id="node2" 
-        type="process" 
-        position={{ x: 200, y: 0 }}
-        data={{ label: "End" }}
-        visual={{ color: "#3b82f6", shape: "rectangle" }}
-      />
-      
-      {/* Add edges */}
-      <Edge 
-        id="edge1"
-        sourceNodeId="node1"
-        targetNodeId="node2"
-        userVertices={[]}
-        style={{ color: [1, 1, 1, 1], thickness: 2 }}
-      />
-    </DiagramProvider>
-  );
-}
-```
+`npm run build` produces a static site in `dist/` that can be deployed anywhere, e.g. Vercel, Netlify or GitHub Pages.
 
 ## Controls
 
-### Desktop
-- **Left Click**: Select node/edge
-- **Click + Drag**: Move selected node or pan viewport
-- **Mouse Wheel**: Zoom in/out
-- **E Key**: Toggle edge drawing mode
-- **Alt + Drag**: Disable grid snapping
-- **Escape**: Exit current mode
-- **Drag from Palette**: Add new nodes
+| Action | Mouse / keyboard | Touch |
+| --- | --- | --- |
+| Select | Click | Tap |
+| Move node / pan | Drag | Drag |
+| Zoom | Wheel, `+` / `-`, `0` for 100% | Pinch |
+| Fit graph to view | `F` | Toolbar |
+| Draw edge mode | `E` (toolbar) | Toolbar |
+| Select mode | `V` | Toolbar |
+| Auto layout | `L` | Toolbar |
+| Toggle grid snap | `G` (hold `Alt` to bypass while dragging) | Toolbar |
+| Delete selection or bend point | `Delete` / `Backspace` | — |
+| Cancel | `Esc` | — |
 
-### Mobile
-- **Tap**: Select node/edge
-- **Drag**: Move node or pan viewport
-- **Pinch**: Zoom in/out
-- **Show Palette**: Access node types
-- **Tap + Tap Canvas**: Place node
+## Using the components
 
-## Architecture
+Diagrams are built from `<Node>` and `<Edge>` elements inside a `DiagramProvider`. The renderer is a shared instance that has to be initialised once before rendering; see `src/main.tsx`.
+
+```tsx
+import { DiagramProvider } from './components/DiagramProvider';
+import { DiagramCanvas } from './components/DiagramCanvas';
+import { Node } from './components/Node';
+import { Edge } from './components/Edge';
+
+<DiagramProvider>
+  <DiagramCanvas
+    width={800}
+    height={600}
+    resolution={{ width: 1600, height: 1200 }}
+    setSupportedSampleCount={() => {}}
+  />
+
+  <Node id="a" type="process" position={{ x: 0, y: 0 }}
+        data={{ label: 'Start' }}
+        visual={{ shape: 'rectangle', color: '#3b82f6', size: { width: 120, height: 60 } }} />
+
+  <Node id="b" type="process" position={{ x: 260, y: 0 }}
+        data={{ label: 'End' }}
+        visual={{ shape: 'circle', color: '#22c55e', size: { width: 80, height: 80 } }} />
+
+  <Edge id="a-b" sourceNodeId="a" targetNodeId="b" userVertices={[]}
+        style={{ color: [255, 255, 255, 255], thickness: 2, targetMarker: 'arrow' }} />
+</DiagramProvider>
+```
+
+### SVG and emoji nodes
+
+Set `shape: 'none'` and pass `visualContent`. Edges attach to the drawn outline.
+
+```tsx
+<Node id="db" type="database" position={{ x: 200, y: -100 }}
+      data={{ label: 'Database' }}
+      visual={{
+        shape: 'none',
+        size: { width: 96, height: 96 },
+        visualContent: { type: 'svg', content: '<svg ...>...</svg>', size: { width: 96, height: 96 } },
+      }} />
+
+<Node id="launch" type="event" position={{ x: -200, y: -100 }}
+      data={{ label: 'Launch' }}
+      visual={{ visualContent: { type: 'emoji', content: '🚀', size: { width: 64, height: 64 } } }} />
+```
+
+### Adding a shape
+
+Shapes are SDF cases in the node shader in `src/renderers/WebGPURenderer.ts`. Add a distance function, give it a case number, and register the name in `SHAPE_TYPES` at the bottom of the same file. Unknown shapes fall back to a rectangle.
+
+## Project layout
 
 ```
 src/
-├── components/
-│   ├── DiagramCanvas.tsx      # Main canvas component
-│   ├── DiagramProvider.tsx    # State management
-│   ├── Node.tsx               # Node component
-│   ├── Edge.tsx               # Edge component
-│   └── NodePalette.tsx        # Node selection palette
-├── renderers/
-│   ├── WebGPURenderer.ts      # Main GPU renderer
-│   ├── LabelRenderer.ts       # Text rendering
-│   ├── FloatingEdgeRenderer.ts # Edge rendering
-│   └── VisualContentRenderer.ts # Custom content
-├── utils/
-│   ├── SpatialIndex.ts        # Quadtree spatial indexing
-│   ├── MouseInteractions.ts   # Input handling
-│   ├── GridSnapping.ts        # Grid snap utilities
-│   └── MobileUtils.ts         # Mobile optimization
-├── hooks/
-│   └── useSpatialIndex.ts     # Spatial index hook
+├── components/   DiagramProvider (state), DiagramCanvas (input), Toolbar, panels, Node/Edge
+├── renderers/    WebGPURenderer, FloatingEdgeRenderer, LabelRenderer, VisualContentRenderer,
+│                 FXAA/SMAA/supersampling passes, texture atlases
+├── compute/      GPU outline detection for SVG nodes
+├── layout/       ELK layout integration and settings store
+├── state/        Render settings
+├── utils/        Coordinates, spatial index, grid snapping, resize handles, GPU capability probing
 └── types/
-    └── index.ts               # TypeScript definitions
 ```
-
-## Configuration
-
-### Viewport Settings
-
-```typescript
-const viewport = {
-  x: 0,          // Center X position
-  y: 0,          // Center Y position
-  zoom: 1.0,     // Zoom level (0.1 - 5.0)
-  width: 800,    // Canvas width
-  height: 600,   // Canvas height
-};
-```
-
-### Performance Settings
-
-```typescript
-const spatialIndex = {
-  maxItems: 10,   // Max items per quadtree node
-  maxDepth: 8,    // Max quadtree depth
-  bounds: {       // World bounds
-    minX: -10000,
-    minY: -10000,
-    maxX: 10000,
-    maxY: 10000,
-  },
-};
-```
-
-## Customization
-
-### Custom Node Shapes:
-
-You have two options:
-
-1. Add your own shapes by extending the shape renderer:
-Pass shape key to shader in a template string. This occurs simply by passing to the component. By default if a key doesn't have its own case, you will end up with a rectangle. 
-```typescript
-// In WebGPURenderer.ts shader
-case 10: { // Custom shape
-  distance = sdCustomShape(p, vec2<f32>(0.95));
-}
-```
-
-
-2. Utilize visual.visualContent prop: visual.visualContent.content with type 'svg' and where the content prop is an svg string. Set visual.shape to 'none' in order for floating edges to use the correct borders with a compute shader approach. You can also use svg primitives through this method for defining simple shapes.
-```typescript
-<Node
-  id="svg-test-node" 
-  type="Database"
-  position={{ x: 200, y: -100 }} 
-  data={{ label: "Database svg test" }}
-  visual={{
-    shape: 'none',
-    size: { width: 130, height: 130 },
-    visualContent: { 
-      type: 'svg', 
-      content: `<svg width="130px" height="130px" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path fill-rule="evenodd" clip-rule="evenodd" d="M7.5 0C5.53411 0 3.73573 0.227063 2.41295 0.604819C1.75496 0.792725 1.18616 1.02584 0.770363 1.30649C0.372144 1.57528 0 1.96886 0 2.49866V12.4922C0 13.022 0.372144 13.4156 0.770363 13.6844C1.18616 13.965 1.75496 14.1981 2.41295 14.386C3.73573 14.7638 5.53411 14.9908 7.5 14.9908C9.46589 14.9908 11.2643 14.7638 12.587 14.386C13.245 14.1981 13.8138 13.965 14.2296 13.6844C14.6279 13.4156 15 13.022 15 12.4922V2.49866C15 1.96886 14.6279 1.57528 14.2296 1.30649C13.8138 1.02584 13.245 0.792725 12.587 0.604819C11.2643 0.227063 9.46589 0 7.5 0ZM1.26222 2.86383L1.71405 3.07795C2.84095 3.61197 4.98314 3.99872 7.49994 3.99872C10.0167 3.99872 12.1589 3.61197 13.2858 3.07795L13.7377 2.86383L14.1659 3.7675L13.7141 3.98162C12.3912 4.60852 10.0758 4.99872 7.49994 4.99872C4.92408 4.99872 2.60872 4.60852 1.28582 3.98162L0.833984 3.7675L1.26222 2.86383ZM1.71405 8.04816L1.26222 7.83405L0.833984 8.73771L1.28582 8.95183C2.60872 9.57873 4.92408 9.96894 7.49994 9.96894C10.0758 9.96894 12.3912 9.57873 13.7141 8.95183L14.1659 8.73771L13.7377 7.83405L13.2858 8.04816C12.1589 8.58218 10.0167 8.96894 7.49994 8.96894C4.98314 8.96894 2.84095 8.58218 1.71405 8.04816Z" fill="#00ff0dff"/>
-                </svg>`,
-      size: {width: 130, height: 130}
-
-    }
-  }} 
-/>
-```
-### Custom Visual Content
-
-```typescript
-<Node
-  id="emoji-test-node" 
-  type="Test"
-  position={{ x: -200, y: -100 }} 
-  data={{ label: "Test" }}
-  visual={{ 
-    visualContent: { 
-      type: 'emoji', 
-      content: '🚀', 
-      size: { width: 64, height: 64 }
-    }
-  }} 
-/>
-```
-
-## Known Issues
-- **MSAA**: Multisampling settings not yet functional (UI placeholder)
-- **Edge Labels**: Positioning may need adjustment for complex paths
-- **Mobile touch handling**: Interaction set is behind pointer/mouse implementation
 
 ## Roadmap
-- [x] **Full svg content support**: Define node shapes with an svg string or reference
-- [ ] **Edge markers**: Define edge marker by svg/canvas to texture or with primitive shape shaders provided
-- [ ] **Multi-selection**: Select and move multiple nodes
-- [ ] **Undo/Redo**: Full history management
-- [ ] **Export/Import**: JSON diagram serialization
-- [ ] **Themes**: Dark/light mode support
-- [ ] **Minimap**: Overview navigation
-- [ ] **Alignment Guides**: Smart alignment helpers
-- [ ] **Auto-layout**: Automatic diagram organization
-- [ ] **Collaborative Editing**: Real-time multi-user support
+
+- [x] SVG node shapes with outline-accurate edge attachment
+- [x] Edge markers (UML, ER, arrows)
+- [x] Auto-layout
+- [ ] Viewport culling that keeps edges visible
+- [ ] Undo/redo
+- [ ] Multi-select
+- [ ] JSON import/export
+- [ ] npm package with a stable API
+- [ ] Minimap and alignment guides
+- [ ] Light theme
 
 ## Contributing
 
-Contributions are welcome! 
-
-### Development Setup
-
-```bash
-# Install dependencies
-npm install
-
-# Run development server with hot reload
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
+Issues and pull requests are welcome: [github.com/javapak/webgpu-flow/issues](https://github.com/javapak/webgpu-flow/issues). If you'd like to take one of the roadmap items, open an issue first so we can agree on the approach.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT
 
-## Acknowledgments
-
-- **TypeGPU**
-- **Mantine**
-- **Fluent UI Icons**
-- **Vite**
-
-- **Issues**: [GitHub Issues](https://github.com/javapak/webgpu-flow/issues)
-
-
-
-If you find this project helpful, please consider giving it a star. Contributions are also encouraged!
-
----
-
-**Built with ❤️ using WebGPU and React**
+Built with [ELK](https://eclipse.dev/elk/), [Mantine](https://mantine.dev/), [Fluent UI Icons](https://github.com/microsoft/fluentui-system-icons), [Zustand](https://zustand.docs.pmnd.rs/) and [Vite](https://vite.dev/).

@@ -58,7 +58,6 @@ useEffect(() => {
                     setSupportedSampleCount={setSupportedSampleCount}
                     onNodeDropped={handleNodeDropped}
                     resolution={resolution}
-                    showDebugInfo
                     onNodeClick={() => {}}
             />}
           

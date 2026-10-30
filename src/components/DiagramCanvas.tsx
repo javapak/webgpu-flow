@@ -14,7 +14,6 @@ interface DiagramCanvasProps {
   /** Backing-store size. Changing it resizes the render target; on-screen size is unaffected. */
   resolution: { width: number; height: number };
   className?: string;
-  showDebugInfo?: boolean;
   onNodeClick?: (node: any) => void;
   onNodeDropped?: (nodeType: any, position: {x: number, y: number}) => void;
   onNodeDoubleClick?: (node: any) => void;
@@ -35,7 +34,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   width,
   height,
   className = '',
-  showDebugInfo = false,
   onNodeClick,
   onCanvasClick,
   resolution,
@@ -45,7 +43,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   setSupportedSampleCount
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
   const [currentCursor, setCurrentCursor] = useState<string>('grab');
   const initializationAttempted = useRef(false);
 
@@ -87,7 +84,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     screenToWorld,
     clientToCanvas,
     getRenderer,
-    getSpatialDebugInfo,
     initializeRenderer,
     isRendererInitialized,
     renderFrame,
@@ -166,17 +162,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [viewport.x, viewport.y, drawingState.isDrawing, drawingState.userVertices, 
       viewport.zoom, viewport.width, viewport.height, isRendererInitialized, 
       getRenderer, renderFrame]);
-
-  // Update debug info periodically
-  useEffect(() => {
-    if (showDebugInfo) {
-      const interval = setInterval(() => {
-        setDebugInfo(getSpatialDebugInfo());
-      }, 1000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [showDebugInfo, getSpatialDebugInfo]);
 
   useEffect(() => () => {
     if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current);
@@ -477,13 +462,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
   }, [screenToWorld, clientToCanvas, addNode, onNodeDropped]);
 
-    const getMaxDepth = (nodeInfo: any): number => {
-    if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
-    return Math.max(nodeInfo.depth, ...nodeInfo.children.map((child: any) => getMaxDepth(child)));
-  };
 
   return (
-    <div style={{ position: 'relative', width: `${width}px`, height: `${height}px`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className={className} style={{ position: 'relative', width: `${width}px`, height: `${height}px`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <canvas
         ref={canvasRef}
         width={initialResolution.width}
@@ -525,71 +506,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           Tap canvas to place {selectedNodeType.name}
         </div>
       )}
-
-      <div className={`canvas-debug ${className}`} style={{ position: 'absolute', top: 4, left: 8, fontSize: 11, pointerEvents: 'none' }}>
-        {showDebugInfo && (
-          <div>
-            <div>
-              Initialized: {isRendererInitialized() ? 'Yes' : 'No'}, 
-              Zoom: {viewport.zoom.toFixed(2)}x, 
-              Position: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)}), 
-              Canvas Size: {viewport.width}x{viewport.height}
-              <div>
-                Selected: {interaction.selectedNodes.length}, 
-                Dragging: {interaction.dragState.isDragging ? interaction.dragState.dragType : 'No'}
-                {debugInfo && (
-                  <span>, Spatial Items: {debugInfo.totalItems}, Max Depth: {getMaxDepth(debugInfo.quadTreeInfo)}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-    </div>
-  );
-};
-
-
-interface PerformanceMonitorProps {
-  className?: string;
-}
-
-export const DiagramPerformanceMonitor: React.FC<PerformanceMonitorProps> = ({
-  className = '',
-}) => {
-  const { getSpatialDebugInfo } = useDiagram();
-  const [stats, setStats] = useState<any>(null);
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStats(getSpatialDebugInfo());
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, [getSpatialDebugInfo]);
-
-  const getMaxDepth = (nodeInfo: any): number => {
-    if (!nodeInfo || !nodeInfo.children) return nodeInfo?.depth || 0;
-    
-    return Math.max(
-      nodeInfo.depth,
-      ...nodeInfo.children.map((child: any) => getMaxDepth(child))
-    );
-  };
-  
-  return (
-    <div className={`bg-gray-100 p-4 rounded ${className}`}>
-      <h3 className="text-lg font-semibold mb-2">Spatial Index Performance</h3>
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <span className="font-medium">Total Nodes:</span> {stats?.totalItems || 0}
-        </div>
-        <div>
-          <span className="font-medium">Max Depth:</span> {stats ? getMaxDepth(stats.quadTreeInfo) : 0}
-        </div>
-      </div>
-      
     </div>
   );
 };

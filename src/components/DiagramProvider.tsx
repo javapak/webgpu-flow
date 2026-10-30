@@ -486,7 +486,12 @@ const viewportRef = useRef<Viewport>({
     width: 800, height: 600,
 });
 
-const drawingStateRef = useRef<EdgeDrawingState>({isDrawing: false, sourceNodeId: null, userVertices: []});
+const drawingStateRef = useRef<EdgeDrawingState>(drawingState);
+// Frames read the ref (not state) so they never lag a render behind. A layout effect
+// syncs it before the canvas schedules the next frame, keeping the edge preview current.
+useLayoutEffect(() => {
+  drawingStateRef.current = drawingState;
+}, [drawingState]);
 
   useEffect(() => {
     stateRef.current = state;
@@ -1139,14 +1144,12 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
     });
   }, []);
 
-  // Keyboard shortcuts
+  // Delete and Escape. Mode shortcuts (V, E) belong to the Toolbar; handling them here
+  // too would toggle twice per keypress.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!focusedOnInput) {
-        if (e.key === 'e' || e.key === 'E') {
-          toggleMode();
-        }
-        else if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
           if (mode === InteractionMode.DRAW_EDGE) {
             cancelDrawing();
           }
@@ -1179,7 +1182,7 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleMode, exitDrawMode, cancelDrawing, state.interaction, focusedOnInput, removeEdge, removeNode]);
+  }, [mode, exitDrawMode, cancelDrawing, state.interaction, focusedOnInput, removeEdge, removeNode]);
 
 const selectEdge = useCallback((edge: DiagramEdge | null) => {
   dispatch({ type: 'SELECT_EDGE', edge });
@@ -1389,10 +1392,10 @@ useEffect(() => {
   scheduleRender();
 }, [setSampleCount, scheduleRender]);
 
-  const supersamplingOptions = [
+  const supersamplingOptions = useMemo(() => [
     'Disabled',
     ...supportedSupersamplingFactors.filter(f => f > 1).map(f => `${f}x`)
-  ];
+  ], [supportedSupersamplingFactors]);
 
   
   const setFXAAEnabled = useCallback((enabled: boolean) => {
@@ -1493,10 +1496,28 @@ useEffect(() => {
     
   }), [
     state,
+    interactionRef,
+    viewportRef,
+    fxaaEnabled,
+    setFXAAEnabled,
+    smaaEnabled,
+    setSMAAEnabled,
+    mode,
+    supersamplingOptions,
+    drawingState,
+    toggleMode,
+    setSampleCount,
+    exitDrawMode,
+    supportedSupersamplingFactors,
+    supersamplingWarnings,
+    startDrawing,
+    addControlPoint,
+    completeEdge,
+    cancelDrawing,
+    setAltKey,
     addNode,
     removeNode,
     updateNode,
-    selectEdgeVertex,
     addEdge,
     removeEdge,
     updateEdge,
@@ -1506,11 +1527,10 @@ useEffect(() => {
     setZoom,
     cancelViewportAnimation,
     setGridSnapping,
+    selectEdgeVertex,
     getVisibleNodes,
     hitTestPoint,
     hitTestWithHandles,
-    focusedOnInput,
-    setFocusedOnInput,
     setViewport,
     screenToWorld,
     clientToCanvas,
@@ -1520,11 +1540,25 @@ useEffect(() => {
     startDrag,
     updateDrag,
     endDrag,
+    addEdgeVertex,
+    updateEdgeVertex,
+    removeEdgeVertex,
+    hitTestEdge,
+    hitTestEdgeVertex,
+    selectEdge,
+    clearEdgeSelection,
+    clearVertexSelection,
     getRenderer,
     isRendererInitialized,
     initializeRenderer,
     renderFrame,
     getSpatialDebugInfo,
+    handleSampleCountChange,
+    handleSupersamplingChange,
+    sampleCount,
+    supersamplingValue,
+    focusedOnInput,
+    setFocusedOnInput,
   ]);
 
   return (

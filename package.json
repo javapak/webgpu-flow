@@ -18,7 +18,6 @@
     "elkjs": "^0.11.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "typegpu": "^0.7.1",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

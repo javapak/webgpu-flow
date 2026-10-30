@@ -1,6 +1,5 @@
 /// <reference types="@webgpu/types" />
 import type { DiagramEdge, DiagramNode, Viewport } from '../types';
-import tgpu from 'typegpu'
 import { LabelRenderer } from './LabelRenderer';
 import { VisualContentRenderer } from './VisualContentRenderer';
 import { Z_LAYERS } from '../utils/DepthConstants';
@@ -31,7 +30,6 @@ interface HandleInstanceData {
 }
 
 export class WebGPURenderer {
-  private root: any = null;
   private context: GPUCanvasContext | null = null;
   private static nodeRenderPipeline: GPURenderPipeline | null = null;
   private static handleRenderPipeline: GPURenderPipeline | null = null;
@@ -156,12 +154,15 @@ private recreateSizeDependentTextures(width: number, height: number) {
         return false;
       }
       
-      // Initialize TypeGPU
       try {
-        this.root = await tgpu.init();
-        WebGPURenderer.device = this.root.device;
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+          console.warn('No WebGPU adapter available');
+          return false;
+        }
+        WebGPURenderer.device = await adapter.requestDevice();
       } catch (error) {
-        console.error('Failed to initialize TypeGPU:', error);
+        console.error('Failed to acquire a WebGPU device:', error);
         return false;
       }
       
@@ -1408,12 +1409,11 @@ private createIntermediateTexture(width: number, height: number) {
       }
 
       // Edges, then visual content, then labels on top
-      if (this.labelRenderer && visibleNodes.some((node: DiagramNode) => node.data?.label)) {
-        try {
-          const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
-          const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
+      try {
+        const visualData = await this.visualRenderer?.prepareVisualData(visibleNodes);
 
-          await this.edgeRenderer!.render(
+        if (this.edgeRenderer) {
+          await this.edgeRenderer.render(
             renderPass,
             visibleEdges,
             visibleNodes,
@@ -1423,17 +1423,20 @@ private createIntermediateTexture(width: number, height: number) {
             selectedEdges,
             viewport
           );
+        }
 
-          if (visualData?.length) {
-            this.visualRenderer?.render(renderPass, visualData);
-          }
-          
+        if (visualData?.length) {
+          this.visualRenderer?.render(renderPass, visualData);
+        }
+
+        if (this.labelRenderer) {
+          const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
           if (labelData.length > 0) {
             this.labelRenderer.render(renderPass, labelData);
           }
-        } catch (error) {
-          console.error('Error rendering labels:', error);
         }
+      } catch (error) {
+        console.error('Error rendering edges, visuals or labels:', error);
       }
 
 
@@ -1614,7 +1617,6 @@ private createIntermediateTexture(width: number, height: number) {
         this.gridUniformBuffer = null;
       }
 
-      this.root = null;
       this.context = null;
       WebGPURenderer.nodeRenderPipeline = null;
       WebGPURenderer.handleRenderPipeline = null;

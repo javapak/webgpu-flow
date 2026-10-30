@@ -527,7 +527,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         </div>
       )}
 
-      <div className={className} style={{ position: 'absolute', top: 4, left: 8, fontSize: 11, pointerEvents: 'none' }}>
+      <div className={`canvas-debug ${className}`} style={{ position: 'absolute', top: 4, left: 8, fontSize: 11, pointerEvents: 'none' }}>
         {showDebugInfo && (
           <div>
             <div>

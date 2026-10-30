@@ -186,7 +186,9 @@ export class LabelRenderer {
       primitive: { topology: 'triangle-list' },
       depthStencil: {
         format: 'depth24plus',
-        depthWriteEnabled: true, 
+        // Labels share one z and are drawn last; writing depth would let one label's
+        // anti-aliased fringe clip any label it overlaps.
+        depthWriteEnabled: false,
         depthCompare: 'less',
       },
       multisample: {count: parseInt(this.sampleCount)}

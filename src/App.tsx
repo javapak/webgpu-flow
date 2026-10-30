@@ -1,155 +1,110 @@
-
 import React, { useState, useEffect, useCallback} from 'react';
 import "allotment/dist/style.css";
 import '@mantine/core/styles.css'
 import './App.css';
 import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import {Dismiss16Regular} from '@fluentui/react-icons';
 import { useDiagram } from './components/DiagramProvider';
 import PropertyEditorPanel from './components/PropertyEditorPanel';
 import { Allotment } from 'allotment';
-import "allotment/dist/style.css";
 import ERFlow from './components/ERFlow';
 import Toolbar from './components/Toolbar';
 import { RESOLUTION_OPTIONS, parseResolution, useRenderSettings } from './state/renderSettings';
 
-// Mobile detection utility
-const isMobileDevice = () => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-};
-
-
+// Below this width the split view doesn't fit (canvas pane min 400 + sidebar min 260),
+// so the canvas goes full screen and properties move into a bottom sheet.
+const COMPACT_QUERY = '(max-width: 768px)';
 
 export const DiagramDemo: React.FC = () => {
-  const [isMobile, setIsMobile] = useState(isMobileDevice());
-  //const [canvasSize, setCanvasSize] = useState(getOptimalCanvasSize());
+  const compact = useMediaQuery(COMPACT_QUERY, window.matchMedia(COMPACT_QUERY).matches, { getInitialValueInEffect: false });
   const [settingsOpen, setSettingsOpen] = useState(false);
-  //const [supportedSampleCount, setSupportedSampleCount] = useState<string[] | undefined>(['1']);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
   const resolution = useRenderSettings(s => s.resolution);
   const setResolution = useRenderSettings(s => s.setResolution);
 
   const { fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled } = useDiagram();
-  
 
-
-
-
-  // Mobile viewport setup
   useEffect(() => {
-    if (isMobile) {
-      // Set up mobile viewport
-      let viewport = document.querySelector('meta[name="viewport"]');
-      if (!viewport) {
-        viewport = document.createElement('meta');
-        viewport.setAttribute('name', 'viewport');
-        document.head.appendChild(viewport);
-      }
-      viewport.setAttribute(
-        'content',
-        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
-      );
-
-      // Prevent default touch behaviors
-      document.body.style.overscrollBehavior = 'contain';
-      document.body.style.touchAction = 'manipulation';
-    }
-  }, [isMobile]);
-
-    useEffect(() => {
-    const handleResize = () => {
-      const mobile = isMobileDevice();
-      setIsMobile(mobile);
-      //setCanvasSize(getOptimalCanvasSize());
-      
+    if (!settingsOpen && !propertiesOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (settingsOpen) setSettingsOpen(false);
+      else setPropertiesOpen(false);
     };
-    handleResize(); // Initial check
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  /*const handleNodeDropped = (nodeType: NodeType, position: { x: number; y: number }) => {
-    console.log(`Dropped ${nodeType.name} at position:`, position);
-    
-    // Provide haptic feedback on mobile
-    if (isMobile && navigator.vibrate) {
-      navigator.vibrate(100);
-    }
-  }; */
-
-  useEffect(() => {
-    if (!settingsOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettingsOpen(false); };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [settingsOpen]);
+  }, [settingsOpen, propertiesOpen]);
 
   const handleOpenSettingsMenu = useCallback(() => {
-     setSettingsOpen(!settingsOpen);
-  }, [settingsOpen, setSettingsOpen])
+     setSettingsOpen(open => !open);
+  }, [])
 
+  const toggleProperties = useCallback(() => setPropertiesOpen(open => !open), []);
+
+  const canvasArea = (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <Toolbar
+        onOpenSettings={handleOpenSettingsMenu}
+        compact={compact}
+        propertiesOpen={propertiesOpen}
+        onToggleProperties={compact ? toggleProperties : undefined}
+      />
+      <ERFlow/>
+
+      {/* Properties bottom sheet (phones). Overlays the canvas rather than shrinking it,
+          so opening it doesn't reconfigure the WebGPU render targets. */}
+      {compact && propertiesOpen && (
+        <div className="mobile-sheet" role="dialog" aria-label="Properties">
+          <div className="mobile-sheet-header">
+            <span>Properties</span>
+            <ActionIcon variant="subtle" color="gray" size={40} aria-label="Close properties" onClick={toggleProperties}><Dismiss16Regular/></ActionIcon>
+          </div>
+          <div className="mobile-sheet-body">
+            <PropertyEditorPanel />
+          </div>
+        </div>
+      )}
+
+      {/* Settings modal */}
+      {settingsOpen && (
+        <div className="settings-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) handleOpenSettingsMenu(); }}>
+          <div className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div className="settings-header">
+              <h2 id="settings-title">Settings</h2>
+              <ActionIcon variant="subtle" color="gray" size={compact ? 40 : 28} aria-label="Close settings" onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon>
+            </div>
+
+            <div className="settings-body">
+              <section className="settings-section">
+                <h3>Display</h3>
+                <NativeSelect label="Resolution" description="Render sharpness; on-screen size is unchanged" data={[...RESOLUTION_OPTIONS]} value={`${resolution.width}x${resolution.height}`} onChange={(e) => setResolution(parseResolution(e.currentTarget.value))} />
+              </section>
+
+              <section className="settings-section">
+                <h3>Anti-aliasing</h3>
+                <Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/>
+                <Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/>
+              </section>
+            </div>
+          </div>
+        </div>)}
+    </div>
+  );
+
+  // One tree for both layouts: switching (rotating a tablet, narrowing a window) only hides
+  // the sidebar, so the canvas isn't remounted and WebGPU isn't re-initialised.
   return (
-    <div style={{ width: '100vw', height: '100vh'}}>
+    <div className="app-root">
       <Allotment defaultSizes={[78, 22]}>
 
         {/* Main Canvas Area */}
-        <Allotment.Pane minSize={400}>
-        <div style={{display: 'relative', height: '100vh'}}>      
-
-          {/* Canvas Container */}
-
-          <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
-            <Toolbar onOpenSettings={handleOpenSettingsMenu} />
-            <ERFlow/>
-          </div>
-
-          {/* Mobile Instructions */}
-          {isMobile && (
-            <div style={{
-              padding: '12px 16px',
-              backgroundColor: '#404040ff',
-              borderTop: '1px solid #555',
-              color: '#cccccc',
-              fontSize: '12px',
-              textAlign: 'center'
-            }}>
-              <p style={{ margin: '0 0 4px 0' }}>
-                Touch to select • Drag to move • Pinch to zoom
-              </p>
-              <p style={{ margin: 0, opacity: 0.7 }}>
-                Tap "Show Palette" to add new nodes
-              </p>
-            </div>
-          )}
-
-          {/* Settings modal */}
-          {settingsOpen && (
-            <div className="settings-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) handleOpenSettingsMenu(); }}>
-              <div className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-                <div className="settings-header">
-                  <h2 id="settings-title">Settings</h2>
-                  <ActionIcon variant="subtle" color="gray" aria-label="Close settings" onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon>
-                </div>
-
-                <div className="settings-body">
-                  <section className="settings-section">
-                    <h3>Display</h3>
-                    <NativeSelect label="Resolution" description="Render sharpness; on-screen size is unchanged" data={[...RESOLUTION_OPTIONS]} value={`${resolution.width}x${resolution.height}`} onChange={(e) => setResolution(parseResolution(e.currentTarget.value))} />
-                  </section>
-
-                  <section className="settings-section">
-                    <h3>Anti-aliasing</h3>
-                    <Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/>
-                    <Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/>
-                  </section>
-                </div>
-              </div>
-            </div>)}
-      </div>
+        <Allotment.Pane minSize={compact ? 0 : 400}>
+          {canvasArea}
         </Allotment.Pane>
 
         {/* Sidebar: layout + properties */}
-        <Allotment.Pane minSize={260} maxSize={500} preferredSize={320}>
+        <Allotment.Pane visible={!compact} minSize={260} maxSize={500} preferredSize={320}>
           <PropertyEditorPanel />
         </Allotment.Pane>
     </Allotment>

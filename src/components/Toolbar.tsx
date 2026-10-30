@@ -5,6 +5,7 @@ import {
   DrawShape20Regular,
   Flowchart20Regular,
   Grid20Regular,
+  PanelBottom20Regular,
   Settings20Regular,
   ZoomFit20Regular,
   ZoomIn20Regular,
@@ -20,15 +21,17 @@ interface ToolButtonProps {
   shortcut?: string;
   active?: boolean;
   disabled?: boolean;
+  /** Larger hit area for touch screens. */
+  large?: boolean;
   onClick: () => void;
   children: ReactNode;
 }
 
-function ToolButton({ label, shortcut, active, disabled, onClick, children }: ToolButtonProps) {
+function ToolButton({ label, shortcut, active, disabled, large, onClick, children }: ToolButtonProps) {
   return (
     <Tooltip label={shortcut ? `${label} (${shortcut})` : label} openDelay={400} events={{ hover: true, focus: true, touch: false }}>
       <ActionIcon
-        size={34}
+        size={large ? 40 : 34}
         variant={active ? 'filled' : 'subtle'}
         aria-label={label}
         aria-pressed={active}
@@ -46,7 +49,16 @@ const isTyping = (target: EventTarget | null) => {
   return !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable);
 };
 
-export default function Toolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
+interface ToolbarProps {
+  onOpenSettings: () => void;
+  /** Phone layout: bigger buttons, and controls with a touch equivalent (pinch zoom) or a Settings equivalent are dropped. */
+  compact?: boolean;
+  /** Shown only when provided (the phone layout, where properties live in a bottom sheet). */
+  onToggleProperties?: () => void;
+  propertiesOpen?: boolean;
+}
+
+export default function Toolbar({ onOpenSettings, compact = false, onToggleProperties, propertiesOpen = false }: ToolbarProps) {
   const {
     nodes, viewport, mode, toggleMode, exitDrawMode, drawingState,
     fitToContent, zoomBy, setZoom,
@@ -93,11 +105,11 @@ export default function Toolbar({ onOpenSettings }: { onOpenSettings: () => void
       aria-label="Canvas tools"
       style={{
         position: 'absolute',
-        top: 12,
+        top: 'max(12px, calc(env(safe-area-inset-top) + 8px))',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 20,
-        maxWidth: 'calc(100% - 24px)',
+        maxWidth: 'calc(100% - 16px)',
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'center',
@@ -113,18 +125,19 @@ export default function Toolbar({ onOpenSettings }: { onOpenSettings: () => void
         touchAction: 'manipulation',
       }}
     >
-      <ToolButton label="Select and move" shortcut="V" active={!drawing} onClick={() => setDrawMode(false)}>
+      <ToolButton label="Select and move" shortcut="V" large={compact} active={!drawing} onClick={() => setDrawMode(false)}>
         <Cursor20Regular />
       </ToolButton>
-      <ToolButton label="Draw edge" shortcut="E" active={drawing} onClick={() => setDrawMode(true)}>
+      <ToolButton label="Draw edge" shortcut="E" large={compact} active={drawing} onClick={() => setDrawMode(true)}>
         <DrawShape20Regular />
       </ToolButton>
 
-      <Divider orientation="vertical" mx={4} />
+      {!compact && <Divider orientation="vertical" mx={4} />}
 
-      <ToolButton label="Fit graph to view" shortcut="F" disabled={empty} onClick={() => fitToContent()}>
+      <ToolButton label="Fit graph to view" shortcut="F" large={compact} disabled={empty} onClick={() => fitToContent()}>
         <ZoomFit20Regular />
       </ToolButton>
+      {!compact && (<>
       <ToolButton label="Zoom out" shortcut="-" onClick={() => zoomBy(1 / ZOOM_STEP)}>
         <ZoomOut20Regular />
       </ToolButton>
@@ -143,26 +156,35 @@ export default function Toolbar({ onOpenSettings }: { onOpenSettings: () => void
       <ToolButton label="Zoom in" shortcut="+" onClick={() => zoomBy(ZOOM_STEP)}>
         <ZoomIn20Regular />
       </ToolButton>
+      </>)}
 
-      <Divider orientation="vertical" mx={4} />
+      {!compact && <Divider orientation="vertical" mx={4} />}
 
-      <ToolButton label="Auto layout" shortcut="L" disabled={empty || layoutRunning} onClick={() => void runLayout()}>
+      <ToolButton label="Auto layout" shortcut="L" large={compact} disabled={empty || layoutRunning} onClick={() => void runLayout()}>
         {layoutRunning ? <Loader size={16} /> : <Flowchart20Regular />}
       </ToolButton>
-      <ToolButton label="Snap to grid (hold Alt to bypass)" shortcut="G" active={gridSnapping.enabled} onClick={() => setGridSnapping(!gridSnapping.enabled)}>
+      <ToolButton label="Snap to grid (hold Alt to bypass)" shortcut="G" large={compact} active={gridSnapping.enabled} onClick={() => setGridSnapping(!gridSnapping.enabled)}>
         <Grid20Regular />
       </ToolButton>
 
-      <Divider orientation="vertical" mx={4} />
+      {!compact && <Divider orientation="vertical" mx={4} />}
 
+      {!compact && (<>
       <Button size="compact-sm" variant={fxaaEnabled ? 'filled' : 'subtle'} color={fxaaEnabled ? undefined : 'gray'} aria-pressed={fxaaEnabled} onClick={() => setFXAAEnabled(!fxaaEnabled)}>
         FXAA
       </Button>
       <Button size="compact-sm" variant={smaaEnabled ? 'filled' : 'subtle'} color={smaaEnabled ? undefined : 'gray'} aria-pressed={smaaEnabled} onClick={() => setSMAAEnabled(!smaaEnabled)}>
         SMAA
       </Button>
+      </>)}
 
-      <ToolButton label="Settings" onClick={onOpenSettings}>
+      {onToggleProperties && (
+        <ToolButton label="Properties" large={compact} active={propertiesOpen} onClick={onToggleProperties}>
+          <PanelBottom20Regular />
+        </ToolButton>
+      )}
+
+      <ToolButton label="Settings" large={compact} onClick={onOpenSettings}>
         <Settings20Regular />
       </ToolButton>
     </div>

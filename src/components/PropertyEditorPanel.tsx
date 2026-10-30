@@ -7,7 +7,7 @@ export default function PropertyEditorPanel() {
     const { interaction } = useDiagram();
 
     return (
-        <div style={{ height: '100vh', overflowY: 'auto' }}>
+        <div style={{ height: '100%', overflowY: 'auto' }}>
             <LayoutPanel />
             <div style={{ padding: 12 }}>
                 <Text fw={600} mb={4}>Properties</Text>

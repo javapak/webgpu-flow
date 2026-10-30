@@ -392,7 +392,9 @@ body {
 /* App shell. dvh tracks the visible viewport on mobile browsers (100vh includes the
    area behind the address bar, which cuts off the bottom of the app). */
 .app-root {
-  width: 100%;
+  /* Viewport units, not %: #root is a shrink-to-fit flex item of body (index.css), so
+     100% would resolve to 0 and the canvas would never get a size. */
+  width: 100vw;
   height: 100vh;
   height: 100dvh;
 }

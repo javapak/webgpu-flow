@@ -4,6 +4,8 @@ A node-and-edge diagram editor whose canvas is drawn entirely on the GPU. Shapes
 
 ![WebGPU](https://img.shields.io/badge/WebGPU-native-005a9c) ![React](https://img.shields.io/badge/React-19-61dafb) ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6) ![License](https://img.shields.io/badge/license-MIT-green)
 
+![A dependency graph of the JavaScript ecosystem being re-laid out in the editor, with nodes animating into a radial arrangement](docs/demo.gif)
+
 Most web diagram tools (React Flow, JointJS, draw.io) build the canvas from HTML or SVG elements. That's easy to style, but each node and edge is a DOM element the browser has to lay out and paint. WebGPU Flow skips that layer: each node is one instance in a single instanced draw call, its shape is an anti-aliased signed distance function, and text comes from a glyph atlas.
 
 The demo opens on a dependency graph of the JavaScript ecosystem (77 nodes, 185 edges) that you can pan, zoom, rearrange and auto-lay-out.
@@ -27,6 +29,7 @@ The demo opens on a dependency graph of the JavaScript ecosystem (77 nodes, 185 
 ### Layout
 - **Automatic layout via [ELK](https://eclipse.dev/elk/):** layered (hierarchical), tree, radial, stress, force and box.
 - **Orthogonal, polyline or straight edge routing**, with adjustable direction and spacing. Results are framed to fit the view.
+- **Animated transitions.** Nodes travel to their new positions in a wave that follows the layout's direction. On by default, off by default when the OS asks for reduced motion.
 
 ### Interaction
 - Select, drag and resize nodes. Handles adapt to the shape and hide when a node is too small on screen to grab.

@@ -5,12 +5,12 @@ import { useRenderSettings } from '../state/renderSettings';
 
 const raw = await import('../assets/efta_webgpu_flow.json');
 
-// The demo file predates the diagram format and relied on the <Node>/<Edge>
-// component defaults; apply the same ones so it looks as it always has.
+// The demo file predates the diagram format. Its nodes carry an SVG and no shape,
+// so draw them as the SVG alone (shape 'none'), not on the <Node> default diamond.
 const demo = {
   nodes: raw.nodes.map(node => ({
     ...node,
-    visual: { labelFont: 'Arial', shape: 'diamond', ...node.visual },
+    visual: { labelFont: 'Arial', shape: 'none', ...node.visual },
   })),
   edges: raw.edges.map(edge => ({
     ...edge,

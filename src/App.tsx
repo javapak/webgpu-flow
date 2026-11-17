@@ -10,6 +10,7 @@ import PropertyEditorPanel from './components/PropertyEditorPanel';
 import { Allotment } from 'allotment';
 import ERFlow from './components/ERFlow';
 import Toolbar from './components/Toolbar';
+import FileMenu from './components/FileMenu';
 import { RESOLUTION_OPTIONS, parseResolution, useRenderSettings } from './state/renderSettings';
 
 // Below this width the split view doesn't fit (canvas pane min 400 + sidebar min 260),
@@ -50,6 +51,7 @@ export const DiagramDemo: React.FC = () => {
         propertiesOpen={propertiesOpen}
         onToggleProperties={compact ? toggleProperties : undefined}
       />
+      <FileMenu compact={compact} />
       <ERFlow/>
 
       {/* Properties bottom sheet (phones). Overlays the canvas rather than shrinking it,

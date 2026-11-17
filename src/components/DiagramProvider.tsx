@@ -14,7 +14,7 @@ import { canvasToWorld, clampZoom, clientToCanvas as clientToCanvasPoint, zoomAb
 import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutResult } from '../layout/graphLayout';
 import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
-import { createNodeFromTemplate, type NodeTemplate } from '../utils/NodeTemplates';
+import { createNodeFromTemplate, findFreeSpot, type NodeTemplate } from '../utils/NodeTemplates';
 import type { DiagramEdit, NodeChanges } from '../utils/DiagramEdits';
 
 export const InteractionMode = {
@@ -960,16 +960,9 @@ const scheduleRender = useCallback(() => {
 
   const addNodeFromTemplate = useCallback((template: NodeTemplate, position?: Point): DiagramNode => {
     const { nodes } = stateRef.current;
-    let at = position;
-    if (!at) {
-      // Centre of the view, stepping down-right past earlier nodes added the same way so they don't stack.
-      const { x, y, zoom } = viewportRef.current;
-      const step = 24 / zoom;
-      at = { x, y };
-      while (nodes.some(n => Math.abs(n.data.position.x - at!.x) < 1 && Math.abs(n.data.position.y - at!.y) < 1)) {
-        at = { x: at.x + step, y: at.y + step };
-      }
-    }
+    // Without a position, take the free spot nearest the centre of the view.
+    const { x, y } = viewportRef.current;
+    const at = position ?? findFreeSpot(nodes, { x, y }, template.visual.size);
     const node = createNodeFromTemplate(template, at, new Set(nodes.map(n => n.id)));
     // Keep stateRef current so a second add before the next render gets a fresh id.
     stateRef.current = { ...stateRef.current, nodes: [...stateRef.current.nodes, node] };
@@ -1113,12 +1106,12 @@ const endDrag = useCallback(() => {
   }, [spatial]);
 
   useEffect(() => {
-    if (state.interaction.selectedNodes.length > 0)
-        
-        (document.getElementById('title-ref') as HTMLTitleElement).textContent = ` WebGPU Flow | Selected node: ${state.interaction.selectedNodes[0].id}`;
-    else {
-      (document.getElementById('title-ref') as HTMLTitleElement).textContent = 'WebGPU Flow';
-    }
+    // The demo page names the selected node in its title; a host page without that element keeps its own title.
+    const title = document.getElementById('title-ref');
+    if (!title) return;
+    title.textContent = state.interaction.selectedNodes.length > 0
+      ? ` WebGPU Flow | Selected node: ${state.interaction.selectedNodes[0].id}`
+      : 'WebGPU Flow';
   }, [state.nodes, state.interaction.selectedNodes, state.interaction.dragState, state.viewport]);
 
   // Rebuild spatial index when nodes change
@@ -1344,7 +1337,10 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
   // too would toggle twice per keypress.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!focusedOnInput) {
+      // Keys typed into a field (here or anywhere in a host page) are text, not diagram commands.
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
+      if (!focusedOnInput && !typing) {
         if (e.key === 'Backspace' || e.key === 'Delete') {
           if (mode === InteractionMode.DRAW_EDGE) {
             cancelDrawing();

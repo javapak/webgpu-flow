@@ -60,3 +60,35 @@ export function createNodeFromTemplate(
     visual: { labelFont: 'Arial', ...visual, size: { ...size } },
   };
 }
+
+/**
+ * The spot nearest `center` where a node of `size` overlaps no existing node,
+ * searching outward in rings of grid cells one node size (plus `gap`) apart.
+ * Positions are node centres, as in `data.position`.
+ */
+export function findFreeSpot(
+  nodes: DiagramNode[],
+  center: { x: number; y: number },
+  size: { width: number; height: number },
+  gap = 24,
+): { x: number; y: number } {
+  const overlaps = (p: { x: number; y: number }) => nodes.some(n => {
+    const s = n.visual?.size ?? n.data.size ?? { width: 100, height: 60 };
+    return Math.abs(n.data.position.x - p.x) * 2 < s.width + size.width + gap * 2
+      && Math.abs(n.data.position.y - p.y) * 2 < s.height + size.height + gap * 2;
+  });
+  const stepX = size.width + gap, stepY = size.height + gap;
+  for (let ring = 0; ring <= 40; ring++) {
+    const cells: Array<{ x: number; y: number; d: number }> = [];
+    for (let i = -ring; i <= ring; i++) {
+      for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== ring) continue;
+        const p = { x: center.x + i * stepX, y: center.y + j * stepY };
+        cells.push({ ...p, d: Math.hypot(p.x - center.x, p.y - center.y) });
+      }
+    }
+    const spot = cells.sort((a, b) => a.d - b.d).find(p => !overlaps(p));
+    if (spot) return { x: spot.x, y: spot.y };
+  }
+  return center;
+}

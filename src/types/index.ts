@@ -3,6 +3,7 @@ import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
 import type { SHAPE_TYPES } from '../renderers/WebGPURenderer';
 import type { DiagramFont } from '../utils/FontLoadUtils';
 import type { ResizeHandle } from '../utils/MouseInteractions';
+import type { NodeTemplate } from '../utils/NodeTemplates';
 import type { Point, AABB } from './spatial-indexing/types';
 
 export const GPUBufferUsage = {
@@ -117,6 +118,8 @@ export interface InteractionState {
 export interface DiagramState {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
+  /** Node types the diagram offers; null means the editor's DEFAULT_PALETTE. */
+  palette: NodeTemplate[] | null;
   viewport: Viewport;
   interaction: InteractionState;
   gridSnapping: {

@@ -1,6 +1,7 @@
 import { Text } from "@mantine/core";
 import { useDiagram } from "./DiagramProvider";
 import LayoutPanel from "./LayoutPanel";
+import NodePalette from "./NodePalette";
 import VisualPropertyEditor from "./VisualPropertyEditor";
 
 export default function PropertyEditorPanel() {
@@ -8,6 +9,7 @@ export default function PropertyEditorPanel() {
 
     return (
         <div style={{ height: '100%', overflowY: 'auto' }}>
+            <NodePalette />
             <LayoutPanel />
             <div style={{ padding: 12 }}>
                 <Text fw={600} mb={4}>Properties</Text>

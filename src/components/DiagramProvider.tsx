@@ -14,6 +14,7 @@ import { canvasToWorld, clampZoom, clientToCanvas as clientToCanvasPoint, zoomAb
 import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutResult } from '../layout/graphLayout';
 import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
+import { createNodeFromTemplate, type NodeTemplate } from '../utils/NodeTemplates';
 
 export const InteractionMode = {
   SELECT: 0,
@@ -39,6 +40,8 @@ export interface DiagramContextValue extends DiagramState {
   loadDiagram: (json: unknown) => string[];
   /** The current diagram in the file format that `loadDiagram` reads. */
   serializeDiagram: () => DiagramDocument;
+  /** Adds and selects a node made from a palette template, at `position` or the centre of the view. */
+  addNodeFromTemplate: (template: NodeTemplate, position?: Point) => DiagramNode;
   interactionRef: React.RefObject<InteractionState>
   viewportRef: React.RefObject<Viewport>
   addEdge: (edge: DiagramEdge) => void;
@@ -133,7 +136,7 @@ const DiagramContext = createContext<DiagramContextValue | null>(null);
 
 type DiagramAction =
   | { type: 'ADD_NODE'; node: DiagramNode }
-  | { type: 'LOAD_DIAGRAM'; nodes: DiagramNode[]; edges: DiagramEdge[] }
+  | { type: 'LOAD_DIAGRAM'; nodes: DiagramNode[]; edges: DiagramEdge[]; palette: NodeTemplate[] | null }
   | { type: 'REMOVE_NODE'; nodeId: string }
   | { type: 'UPDATE_NODE'; node: DiagramNode }
   | { type: 'ADD_EDGE'; edge: DiagramEdge }
@@ -181,6 +184,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         ...state,
         nodes: action.nodes,
         edges: action.edges,
+        palette: action.palette,
         interaction: {
           ...state.interaction,
           selectedNodes: [],
@@ -459,6 +463,7 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const initialState: DiagramState = {
     nodes: [],
     edges: [],
+    palette: null,
     viewport: {
       x: 0,
       y: 0,
@@ -850,7 +855,7 @@ const scheduleRender = useCallback(() => {
   const loadDiagram = useCallback((json: unknown): string[] => {
     finishLayoutAnimation();
     const { document, problems } = parseDiagram(json);
-    dispatch({ type: 'LOAD_DIAGRAM', nodes: document.nodes, edges: document.edges });
+    dispatch({ type: 'LOAD_DIAGRAM', nodes: document.nodes, edges: document.edges, palette: document.palette ?? null });
     return problems;
   }, [finishLayoutAnimation]);
 
@@ -936,6 +941,26 @@ const scheduleRender = useCallback(() => {
   // Selection methods
   const selectNode = useCallback((node: DiagramNode | null) => {
     dispatch({ type: 'SELECT_NODE', node });
+  }, []);
+
+  const addNodeFromTemplate = useCallback((template: NodeTemplate, position?: Point): DiagramNode => {
+    const { nodes } = stateRef.current;
+    let at = position;
+    if (!at) {
+      // Centre of the view, stepping down-right past earlier nodes added the same way so they don't stack.
+      const { x, y, zoom } = viewportRef.current;
+      const step = 24 / zoom;
+      at = { x, y };
+      while (nodes.some(n => Math.abs(n.data.position.x - at!.x) < 1 && Math.abs(n.data.position.y - at!.y) < 1)) {
+        at = { x: at.x + step, y: at.y + step };
+      }
+    }
+    const node = createNodeFromTemplate(template, at, new Set(nodes.map(n => n.id)));
+    // Keep stateRef current so a second add before the next render gets a fresh id.
+    stateRef.current = { ...stateRef.current, nodes: [...stateRef.current.nodes, node] };
+    dispatch({ type: 'ADD_NODE', node });
+    dispatch({ type: 'SELECT_NODE', node });
+    return node;
   }, []);
 
   const clearSelection = useCallback(() => {
@@ -1560,6 +1585,7 @@ useEffect(() => {
     addNode,
     loadDiagram,
     serializeDiagram,
+    addNodeFromTemplate,
     removeNode,
     updateNode,
     // Edge methods  
@@ -1636,6 +1662,7 @@ useEffect(() => {
     addNode,
     loadDiagram,
     serializeDiagram,
+    addNodeFromTemplate,
     removeNode,
     updateNode,
     addEdge,

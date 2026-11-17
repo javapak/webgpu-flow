@@ -1,274 +1,109 @@
-import React from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
+import { useDiagram } from './DiagramProvider';
+import { DEFAULT_PALETTE, TEMPLATE_MIME, type NodeTemplate } from '../utils/NodeTemplates';
 
-export interface NodeType {
-  id: string;
-  name: string;
-  shape: 'rectangle' | 'circle' | 'diamond' | 'package' | 'roundedRectangle' | 'hexagon' | 'initialNode' | 'finalNode' | 'oval' | 'actor';
-  color: string;
-  width: number;
-  height: number;
-  icon?: string;
-}
+/** Above this many entries the palette gets a filter box. */
+const FILTER_THRESHOLD = 8;
 
-interface NodePaletteProps {
-  onNodeDragStart: (nodeType: NodeType, event: React.DragEvent) => void;
-  isMobile?: boolean;
-}
+/**
+ * The node types this diagram offers: the loaded file's palette, or the default one.
+ * Click (or tap) adds a node at the centre of the view; drag drops it where you let go.
+ */
+export default function NodePalette() {
+  const { palette, addNodeFromTemplate } = useDiagram();
+  const templates = palette ?? DEFAULT_PALETTE;
+  const [filter, setFilter] = useState('');
 
-export const NodePalette: React.FC<NodePaletteProps> = ({ 
-  onNodeDragStart, 
-  isMobile = false 
-}) => {
-  // Detect mobile if not explicitly provided
-  const isMobileDevice = isMobile || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-
-  const nodeTypes: NodeType[] = [
-    {
-      id: 'process',
-      name: 'Process',
-      shape: 'rectangle',
-      color: '#3b82f6',
-      width: isMobileDevice ? 100 : 120,
-      height: isMobileDevice ? 50 : 60,
-      icon: '⚙️'
-    },
-    {
-      id: 'decision',
-      name: 'Decision',
-      shape: 'diamond',
-      color: '#f59e0b',
-      width: isMobileDevice ? 80 : 100,
-      height: isMobileDevice ? 60 : 80,
-      icon: '❓'
-    },
-    {
-      id: 'database',
-      name: 'Database',
-      shape: 'circle',
-      color: '#10b981',
-      width: isMobileDevice ? 80 : 100,
-      height: isMobileDevice ? 80 : 100,
-      icon: '🗄️'
-    },
-    {
-      id: 'start',
-      name: 'Start',
-      shape: 'initialNode',
-      color: '#22c55e',
-      width: isMobileDevice ? 50 : 60,
-      height: isMobileDevice ? 50 : 60,
-      icon: '▶️'
-    },
-    {
-      id: 'end',
-      name: 'End',
-      shape: 'finalNode',
-      color: '#ef4444',
-      width: isMobileDevice ? 50 : 60,
-      height: isMobileDevice ? 50 : 60,
-      icon: '⏹️'
-    },
-    {
-      id: 'actor',
-      name: 'Actor',
-      shape: 'actor',
-      color: '#8b5cf6',
-      width: isMobileDevice ? 60 : 80,
-      height: isMobileDevice ? 80 : 100,
-      icon: '👤'
-    },
-    {
-      id: 'package',
-      name: 'Package',
-      shape: 'package',
-      color: '#06b6d4',
-      width: isMobileDevice ? 100 : 120,
-      height: isMobileDevice ? 60 : 80,
-      icon: '📦'
+  const groups = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const byGroup = new Map<string, NodeTemplate[]>();
+    for (const t of templates) {
+      if (q && !`${t.label} ${t.group ?? ''}`.toLowerCase().includes(q)) continue;
+      const key = t.group ?? '';
+      byGroup.set(key, [...(byGroup.get(key) ?? []), t]);
     }
-  ];
-
-  const handleDragStart = (nodeType: NodeType) => (event: React.DragEvent) => {
-    event.dataTransfer.setData('application/node-type', JSON.stringify(nodeType));
-    event.dataTransfer.effectAllowed = 'copy';
-    
-    const dragElement = event.currentTarget as HTMLElement;
-    const rect = dragElement.getBoundingClientRect();
-    event.dataTransfer.setDragImage(dragElement, rect.width / 2, rect.height / 2);
-    
-    onNodeDragStart(nodeType, event);
-  };
-
-  const handleTouchStart = (event: React.TouchEvent) => {
-    event.preventDefault();
-    if (isMobileDevice) {
-      // Haptic feedback on press
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }
-  };
+    return [...byGroup];
+  }, [templates, filter]);
 
   return (
-    <div style={{
-      width: isMobileDevice ? '100%' : '200px',
-      backgroundColor: isMobileDevice ? 'transparent' : '#f8f9fa',
-      border: isMobileDevice ? 'none' : '1px solid #e9ecef',
-      borderRadius: isMobileDevice ? 0 : '8px',
-      padding: isMobileDevice ? '12px 16px' : '16px',
-      marginRight: isMobileDevice ? 0 : '20px'
-    }}>
-
-      <h3 style={{ 
-        margin: '0 0 16px 0', 
-        fontSize: isMobileDevice ? '14px' : '16px', 
-        fontWeight: 'bold',
-        color: isMobileDevice ? '#ffffff' : '#495057'
-      }}>
-        Node Palette
-      </h3>
-      
-      <div style={{ 
-        display: isMobileDevice ? 'flex' : 'flex',
-        flexDirection: isMobileDevice ? 'row' : 'column',
-        flexWrap: isMobileDevice ? 'wrap' : 'nowrap',
-        gap: isMobileDevice ? '8px' : '8px',
-        overflowX: isMobileDevice ? 'auto' : 'visible',
-        // Add scroll behavior for mobile
-        ...(isMobileDevice && {
-          WebkitOverflowScrolling: 'touch',
-          scrollBehavior: 'smooth',
-          overscrollBehavior: 'contain'
-        })
-      }}>
-        {nodeTypes.map((nodeType) => (
-          <div
-            key={nodeType.id}
-            draggable={!isMobileDevice} // touch uses tap-to-place instead of HTML drag and drop
-            onDragStart={!isMobileDevice ? handleDragStart(nodeType) : undefined}
-            onTouchStart={handleTouchStart}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: isMobileDevice ? '6px' : '8px',
-              padding: isMobileDevice ? '8px 12px' : '12px',
-              backgroundColor: isMobileDevice ? '#555555' : '#ffffff',
-              border: `1px solid ${isMobileDevice ? '#777777' : '#dee2e6'}`,
-              borderRadius: '6px',
-              cursor: 'grab',
-              userSelect: 'none',
-              transition: 'all 0.2s ease',
-              minHeight: isMobileDevice ? '44px' : 'auto', // Apple's recommended touch target size
-              minWidth: isMobileDevice ? 'auto' : '100%',
-              flex: isMobileDevice ? '0 0 auto' : 'none',
-              // Mobile-specific touch optimizations
-              ...(isMobileDevice && {
-                WebkitTouchCallout: 'none',
-                WebkitUserSelect: 'none',
-                KhtmlUserSelect: 'none',
-                MozUserSelect: 'none',
-                msUserSelect: 'none',
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent'
-              })
-            }}
-            onMouseEnter={(e) => {
-              if (!isMobileDevice) {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-                e.currentTarget.style.borderColor = nodeType.color;
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isMobileDevice) {
-                e.currentTarget.style.backgroundColor = '#ffffff';
-                e.currentTarget.style.borderColor = '#dee2e6';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }
-            }}
-            onMouseDown={(e) => {
-              if (!isMobileDevice) {
-                e.currentTarget.style.cursor = 'grabbing';
-              }
-            }}
-            onMouseUp={(e) => {
-              if (!isMobileDevice) {
-                e.currentTarget.style.cursor = 'grab';
-              }
-            }}
-            // Add active state for mobile touch feedback
-            onTouchEnd={(e) => {
-              if (isMobileDevice) {
-                // Brief visual feedback
-                const element = e.currentTarget as HTMLElement;
-                const originalTransform = element.style.transform;
-                element.style.transform = 'scale(0.95)';
-                setTimeout(() => {
-                  element.style.transform = originalTransform;
-                }, 150);
-              }
-            }}
-          >
-            <div style={{
-              width: isMobileDevice ? '20px' : '24px',
-              height: isMobileDevice ? '20px' : '24px',
-              backgroundColor: nodeType.color,
-              borderRadius: nodeType.shape === 'circle' ? '50%' : 
-                           nodeType.shape === 'diamond' ? '0' : '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: isMobileDevice ? '10px' : '12px',
-              transform: nodeType.shape === 'diamond' ? 'rotate(45deg)' : 'none',
-              flexShrink: 0
-            }}>
-              {nodeType.shape === 'diamond' ? (
-                <span style={{ transform: 'rotate(-45deg)' }}>{nodeType.icon}</span>
-              ) : (
-                nodeType.icon
-              )}
-            </div>
-            
-            <div style={{ minWidth: 0 }}>
-              <div style={{ 
-                fontWeight: '500', 
-                fontSize: isMobileDevice ? '12px' : '14px',
-                color: isMobileDevice ? '#ffffff' : '#212529',
-                whiteSpace: isMobileDevice ? 'nowrap' : 'normal'
-              }}>
-                {nodeType.name}
-              </div>
-              {!isMobileDevice && (
-                <div style={{ 
-                  fontSize: '12px', 
-                  color: '#6c757d',
-                  textTransform: 'capitalize'
-                }}>
-                  {nodeType.shape.replace(/([A-Z])/g, ' $1').toLowerCase()}
-                </div>
-              )}
-            </div>
+    <div style={{ padding: 12, borderBottom: '1px solid #444' }}>
+      <Text fw={600} mb={4}>Add node</Text>
+      {templates.length > FILTER_THRESHOLD && (
+        <TextInput size="xs" mb={8} placeholder="Filter node types" value={filter} onChange={(e) => setFilter(e.currentTarget.value)} />
+      )}
+      {groups.length === 0 && <Text size="sm" c="dimmed">No node types match.</Text>}
+      {groups.map(([group, items]) => (
+        <div key={group} style={{ marginBottom: 8 }}>
+          {group && <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>{group}</Text>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 6 }}>
+            {items.map(t => (
+              <Tooltip key={t.id} label="Click to add, or drag onto the canvas" openDelay={600} events={{ hover: true, focus: false, touch: false }}>
+                <UnstyledButton
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(TEMPLATE_MIME, JSON.stringify(t));
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  onClick={() => addNodeFromTemplate(t)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                    padding: '8px 4px', minHeight: 64, borderRadius: 6,
+                    border: '1px solid #444', background: '#2a2a2a', cursor: 'grab',
+                  }}
+                >
+                  <TemplatePreview template={t} />
+                  <Text size="xs" ta="center" lineClamp={1} style={{ maxWidth: '100%' }}>{t.label}</Text>
+                </UnstyledButton>
+              </Tooltip>
+            ))}
           </div>
-        ))}
-      </div>
-
-      
-      <div style={{
-        marginTop: '16px',
-        padding: '12px',
-        backgroundColor: isMobileDevice ? '#404040ff' : '#e3f2fd',
-        borderRadius: '4px',
-        fontSize: isMobileDevice ? '11px' : '12px',
-        color: isMobileDevice ? '#cccccc' : '#1565c0'
-      }}>
-        {isMobileDevice ? (
-          <>💡 Tip: Tap nodes then tap on canvas to place them</>
-        ) : (
-          <>💡 Tip: Drag nodes onto the canvas to add them to your diagram</>
-        )}
-      </div>
+        </div>
+      ))}
     </div>
   );
-};
+}
+
+/** A small stand-in for how the node will look: its SVG, emoji, or outline shape. */
+function TemplatePreview({ template }: { template: NodeTemplate }) {
+  const { visual } = template;
+  const color = visual.color ?? '#3b82f6';
+  const box: CSSProperties = { width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+
+  const content = visual.visualContent;
+  if (content?.type === 'svg' || content?.type === 'image') {
+    // Like the canvas: an SVG that is the whole node takes the node colour when tinted,
+    // one drawn on a shape takes the icon colour, so it stays visible on the fill.
+    const ink = visual.shape === 'none' && content.colorizable ? color : (visual.iconColor ?? '#111111');
+    const svg = content.type === 'svg' ? content.content.replace(/currentColor/g, ink) : content.content;
+    const src = content.type === 'svg' ? `data:image/svg+xml;utf8,${encodeURIComponent(svg)}` : content.content;
+    return (
+      <div style={{ ...box, position: 'relative' }}>
+        {visual.shape !== 'none' && <ShapeSwatch shape={visual.shape} color={color} />}
+        <img src={src} alt="" draggable={false} style={{ position: 'absolute', width: 20, height: 20, objectFit: 'contain' }} />
+      </div>
+    );
+  }
+  if (visual.icon) return <div style={{ ...box, fontSize: 20 }}>{visual.icon}</div>;
+  return <div style={box}><ShapeSwatch shape={visual.shape} color={color} /></div>;
+}
+
+function ShapeSwatch({ shape = 'rectangle', color }: { shape?: string; color: string }) {
+  const base: CSSProperties = { width: 26, height: 18, background: color, borderRadius: 2 };
+  switch (shape) {
+    case 'circle': case 'initialNode': return <div style={{ ...base, width: 22, height: 22, borderRadius: '50%' }} />;
+    case 'finalNode': return <div style={{ ...base, width: 14, height: 14, borderRadius: '50%', outline: `2px solid ${color}`, outlineOffset: 3 }} />;
+    case 'oval': return <div style={{ ...base, borderRadius: '50%' }} />;
+    case 'diamond': return <div style={{ ...base, width: 18, height: 18, transform: 'rotate(45deg)' }} />;
+    case 'roundedRectangle': return <div style={{ ...base, borderRadius: 6 }} />;
+    case 'hexagon': return <div style={{ ...base, clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }} />;
+    case 'package': return <div style={{ ...base, clipPath: 'polygon(0 0, 45% 0, 45% 22%, 100% 22%, 100% 100%, 0 100%)' }} />;
+    case 'actor': return (
+      <svg width="18" height="24" viewBox="0 0 18 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round">
+        <circle cx="9" cy="5" r="3.5" /><path d="M9 9v7M3 12h12M9 16l-5 6M9 16l5 6" />
+      </svg>
+    );
+    case 'none': return null;
+    default: return <div style={base} />;
+  }
+}

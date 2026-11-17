@@ -1,5 +1,6 @@
 import type { DiagramEdge, DiagramNode } from '../types';
 import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
+import type { NodeTemplate } from './NodeTemplates';
 
 /**
  * The diagram file format: what `parseDiagram` loads and `serializeDiagram` saves.
@@ -16,6 +17,8 @@ export interface DiagramDocument {
   version: typeof DIAGRAM_FORMAT_VERSION;
   nodes: DiagramNode[];
   edges: DiagramEdge[];
+  /** Node types to offer in the palette. Absent means the editor's default palette. */
+  palette?: NodeTemplate[];
 }
 
 export interface ParseResult {
@@ -73,11 +76,23 @@ export function parseDiagram(json: unknown): ParseResult {
     doc.edges.push(edge);
   }
 
+  if (json.palette !== undefined) {
+    const templateIds = new Set<string>();
+    doc.palette = [];
+    for (const [i, raw] of arrayOf(json.palette, 'palette', problems).entries()) {
+      const template = parseTemplate(raw, `palette[${i}]`, problems);
+      if (!template) continue;
+      if (templateIds.has(template.id)) { problems.push(`palette[${i}]: duplicate id "${template.id}", dropped`); continue; }
+      templateIds.add(template.id);
+      doc.palette.push(template);
+    }
+  }
+
   return { document: doc, problems };
 }
 
 /** Writes the current diagram in the file format, without editor-only state such as selection. */
-export function serializeDiagram(diagram: { nodes: DiagramNode[]; edges: DiagramEdge[] }): DiagramDocument {
+export function serializeDiagram(diagram: { nodes: DiagramNode[]; edges: DiagramEdge[]; palette?: NodeTemplate[] | null }): DiagramDocument {
   return {
     format: DIAGRAM_FORMAT,
     version: DIAGRAM_FORMAT_VERSION,
@@ -97,6 +112,7 @@ export function serializeDiagram(diagram: { nodes: DiagramNode[]; edges: Diagram
       style: edge.style,
       ...(edge.data ? { data: edge.data } : {}),
     })),
+    ...(diagram.palette ? { palette: structuredClone(diagram.palette) } : {}),
   };
 }
 
@@ -124,6 +140,24 @@ function parseNode(raw: unknown, at: string, problems: string[]): DiagramNode | 
     type: typeof raw.type === 'string' ? raw.type : 'default',
     data: data as DiagramNode['data'],
     visual,
+  };
+}
+
+function parseTemplate(raw: unknown, at: string, problems: string[]): NodeTemplate | undefined {
+  if (!isObject(raw) || typeof raw.id !== 'string' || !raw.id || typeof raw.label !== 'string') {
+    problems.push(`${at}: needs string "id" and "label", dropped`);
+    return undefined;
+  }
+  const visual = isObject(raw.visual) ? { ...raw.visual } : {};
+  const size = dimensions(visual.size);
+  if (!size) problems.push(`${at} ("${raw.id}"): no visual.size, using ${DEFAULT_SIZE.width}x${DEFAULT_SIZE.height}`);
+  return {
+    id: raw.id,
+    label: raw.label,
+    ...(typeof raw.group === 'string' ? { group: raw.group } : {}),
+    type: typeof raw.type === 'string' ? raw.type : raw.id,
+    visual: { ...visual, size: size ?? { ...DEFAULT_SIZE } },
+    ...(isObject(raw.data) ? { data: raw.data } : {}),
   };
 }
 

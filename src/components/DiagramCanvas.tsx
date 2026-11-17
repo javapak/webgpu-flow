@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { InteractionMode, useDiagram } from './DiagramProvider';
 import { MouseInteractions, type ResizeHandle } from '../utils/MouseInteractions';
-import type { DiagramNode } from '../types';
+import { TEMPLATE_MIME, type NodeTemplate } from '../utils/NodeTemplates';
 import {
   clampZoom, distance, fitContain, midpoint, pinchView, wheelZoomFactor, zoomAbout,
   type Point, type View,
@@ -15,7 +15,7 @@ interface DiagramCanvasProps {
   resolution: { width: number; height: number };
   className?: string;
   onNodeClick?: (node: any) => void;
-  onNodeDropped?: (nodeType: any, position: {x: number, y: number}) => void;
+  onNodeDropped?: (template: NodeTemplate, position: {x: number, y: number}) => void;
   onNodeDoubleClick?: (node: any) => void;
   onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
   /** Palette item to place on the next tap. */
@@ -58,7 +58,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     viewport,
     viewportRef,
     interaction,
-    addNode,
+    addNodeFromTemplate,
     interactionRef,
     hitTestWithHandles,
     selectNode,
@@ -434,36 +434,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     e.preventDefault();
     if (!canvasRef.current) return;
 
+    const payload = e.dataTransfer.getData(TEMPLATE_MIME);
+    if (!payload) return;
     try {
-      const nodeTypeData = e.dataTransfer.getData('application/node-type');
-      if (!nodeTypeData) return;
-
-      const nodeType: any = JSON.parse(nodeTypeData);
+      const template = JSON.parse(payload) as NodeTemplate;
       const worldPos = screenToWorld(clientToCanvas(e.clientX, e.clientY));
-
-      const newNode: DiagramNode = {
-        id: `${nodeType.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-        type: nodeType.id,
-        data: { 
-          label: nodeType.name,
-          position: worldPos,
-          size: { width: nodeType.width, height: nodeType.height }
-        },
-        visual: {
-          labelFont: 'Arial',
-          color: nodeType.color,
-          shape: nodeType.shape,
-          selected: false,
-          size: { width: nodeType.width, height: nodeType.height }
-        }
-      };
-
-      addNode(newNode);
-      onNodeDropped?.(nodeType, worldPos);
+      addNodeFromTemplate(template, worldPos);
+      onNodeDropped?.(template, worldPos);
     } catch (error) {
       console.error('Drop error:', error);
     }
-  }, [screenToWorld, clientToCanvas, addNode, onNodeDropped]);
+  }, [screenToWorld, clientToCanvas, addNodeFromTemplate, onNodeDropped]);
 
 
   return (

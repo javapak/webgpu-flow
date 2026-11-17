@@ -15,6 +15,7 @@ import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, 
 import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
 import { createNodeFromTemplate, type NodeTemplate } from '../utils/NodeTemplates';
+import type { DiagramEdit, NodeChanges } from '../utils/DiagramEdits';
 
 export const InteractionMode = {
   SELECT: 0,
@@ -42,6 +43,8 @@ export interface DiagramContextValue extends DiagramState {
   serializeDiagram: () => DiagramDocument;
   /** Adds and selects a node made from a palette template, at `position` or the centre of the view. */
   addNodeFromTemplate: (template: NodeTemplate, position?: Point) => DiagramNode;
+  /** Applies a user's change from the properties panel and reports it through `onEdit`. */
+  editNode: (nodeId: string, changes: NodeChanges) => void;
   interactionRef: React.RefObject<InteractionState>
   viewportRef: React.RefObject<Viewport>
   addEdge: (edge: DiagramEdge) => void;
@@ -194,17 +197,22 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         },
       };
 
-    case 'REMOVE_NODE':
+    case 'REMOVE_NODE': {
+      // An edge can't outlive either of its nodes.
+      const attached = (edge: DiagramEdge) => edge.sourceNodeId === action.nodeId || edge.targetNodeId === action.nodeId;
       return {
         ...state,
         nodes: state.nodes.filter(node => node.id !== action.nodeId),
+        edges: state.edges.filter(edge => !attached(edge)),
         interaction: {
           ...state.interaction,
           selectedNodes: state.interaction.selectedNodes.filter(
             node => node.id !== action.nodeId
           ),
+          selectedEdges: state.interaction.selectedEdges.filter(edge => !attached(edge)),
         },
       };
+    }
 
     case 'UPDATE_NODE':
       return {
@@ -453,12 +461,15 @@ interface DiagramProviderProps {
   children: React.ReactNode;
   initialBounds?: AABB;
   initialViewport?: Partial<Viewport>;
+  /** Called for each change the user makes (see utils/DiagramEdits). */
+  onEdit?: (edit: DiagramEdit) => void;
 }
 
 export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   children,
   initialBounds = { minX: -10000, minY: -10000, maxX: 10000, maxY: 10000 },
   initialViewport = {},
+  onEdit,
 }) => {
   const initialState: DiagramState = {
     nodes: [],
@@ -497,6 +508,10 @@ export const DiagramProvider: React.FC<DiagramProviderProps> = ({
   const rendererRef = useRef<WebGPURenderer | null>(globalRenderer);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef(state);
+  // Read through a ref so a new onEdit doesn't rebuild every callback that reports edits.
+  const onEditRef = useRef(onEdit);
+  onEditRef.current = onEdit;
+  const emitEdit = useCallback((edit: DiagramEdit) => onEditRef.current?.(edit), []);
   const [supersamplingValue, setSuperSamplingValue] = useState('Disabled');
   const [supportedSupersamplingFactors, setSupportedSupersamplingFactors] = useState<number[]>([]);
   const [supersamplingWarnings, setSupersamplingWarnings] = useState<string[]>([]);
@@ -960,8 +975,22 @@ const scheduleRender = useCallback(() => {
     stateRef.current = { ...stateRef.current, nodes: [...stateRef.current.nodes, node] };
     dispatch({ type: 'ADD_NODE', node });
     dispatch({ type: 'SELECT_NODE', node });
+    emitEdit({ kind: 'node-added', node, template });
     return node;
-  }, []);
+  }, [emitEdit]);
+
+  const editNode = useCallback((nodeId: string, changes: NodeChanges) => {
+    const node = stateRef.current.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    const { label, ...visualChanges } = changes;
+    const updated: DiagramNode = {
+      ...node,
+      data: label === undefined ? node.data : { ...node.data, label },
+      visual: { ...node.visual, ...visualChanges },
+    };
+    dispatch({ type: 'UPDATE_NODE', node: updated });
+    emitEdit({ kind: 'node-changed', nodeId, changes });
+  }, [emitEdit]);
 
   const clearSelection = useCallback(() => {
     dispatch({ type: 'CLEAR_SELECTION' });
@@ -977,6 +1006,10 @@ const startDrag = useCallback((
     const selectedNode = stateRef.current.interaction.selectedNodes[0];
 
     let originalSize, originalPosition, originalVertexPosition;
+
+    if (type === 'node' && selectedNode) {
+        originalPosition = { ...selectedNode.data.position };
+    }
 
     if (type === 'resize' && selectedNode) {
         originalSize = selectedNode.data.size 
@@ -1035,12 +1068,34 @@ const endDrag = useCallback(() => {
             stored.data.position = GridSnapping.snapPointToGrid(stored.data.position, current.gridSnapping.gridSize);
         }
         dispatch({ type: 'UPDATE_NODE', node: { ...stored } });
+
+        // Report only real changes: a click without movement is not an edit.
+        const position = { ...stored.data.position };
+        const size = { ...(stored.visual?.size ?? stored.data.size ?? { width: 100, height: 60 }) };
+        const from = drag.originalPosition;
+        if (type === 'node' && from && (from.x !== position.x || from.y !== position.y)) {
+            emitEdit({ kind: 'node-moved', nodeId: stored.id, from, to: position });
+        } else if (type === 'resize' && from && drag.originalSize) {
+            const before = { position: from, size: drag.originalSize };
+            if (before.size.width !== size.width || before.size.height !== size.height || from.x !== position.x || from.y !== position.y) {
+                emitEdit({ kind: 'node-resized', nodeId: stored.id, from: before, to: { position, size } });
+            }
+        }
     } else if (type === 'edge-vertex' && edgeId) {
         const edge = current.edges.find(e => e.id === edgeId);
-        if (edge) dispatch({ type: 'UPDATE_EDGE', edge: { ...edge, userVertices: [...edge.userVertices] } });
+        if (edge) {
+            dispatch({ type: 'UPDATE_EDGE', edge: { ...edge, userVertices: [...edge.userVertices] } });
+            const i = drag.vertexIndex;
+            const was = drag.originalVertexPosition;
+            const now = i === undefined ? undefined : edge.userVertices[i];
+            if (i !== undefined && was && now && (was.x !== now.x || was.y !== now.y)) {
+                const from = edge.userVertices.map((v, j) => (j === i ? was : { ...v }));
+                emitEdit({ kind: 'edge-reshaped', edgeId, from, to: edge.userVertices.map(v => ({ ...v })) });
+            }
+        }
     }
     dispatch({ type: 'END_DRAG' });
-}, []);
+}, [emitEdit]);
   // Renderer methods
   const getRenderer = useCallback(() => rendererRef.current, []);
   
@@ -1273,8 +1328,9 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
       userVertices: []
     });
 
+    emitEdit({ kind: 'edge-added', edge: newEdge });
     return newEdge;
-  }, [drawingState]);
+  }, [drawingState, emitEdit]);
 
   const cancelDrawing = useCallback(() => {
     setDrawingState({
@@ -1295,22 +1351,29 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
           }
           else if (state.interaction.selectedEdges.length > 0) {
             if (state.interaction.selectedVertex) {
-              removeEdgeVertex(
-                state.interaction.selectedVertex.edgeId, 
-                state.interaction.selectedVertex.vertexIndex
-              );
+              const { edgeId, vertexIndex } = state.interaction.selectedVertex;
+              const edge = state.edges.find(ed => ed.id === edgeId);
+              removeEdgeVertex(edgeId, vertexIndex);
+              if (edge?.userVertices[vertexIndex]) {
+                emitEdit({ kind: 'edge-reshaped', edgeId, from: edge.userVertices.map(v => ({ ...v })), to: edge.userVertices.filter((_, i) => i !== vertexIndex).map(v => ({ ...v })) });
+              }
               clearVertexSelection();
               clearEdgeSelection();
               return;
             }
             state.interaction.selectedEdges.forEach(edge => {
               removeEdge(edge.id);
+              emitEdit({ kind: 'edge-removed', edge });
             });
           }
           
           else if (state.interaction.selectedNodes.length > 0) {
+            const reported = new Set<string>();
             state.interaction.selectedNodes.forEach(node => {
+              const edges = state.edges.filter(ed => (ed.sourceNodeId === node.id || ed.targetNodeId === node.id) && !reported.has(ed.id));
+              edges.forEach(ed => reported.add(ed.id));
               removeNode(node.id);
+              emitEdit({ kind: 'node-removed', node, edges });
             });
           }
 
@@ -1322,7 +1385,7 @@ const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mode, exitDrawMode, cancelDrawing, state.interaction, focusedOnInput, removeEdge, removeNode]);
+  }, [mode, exitDrawMode, cancelDrawing, state.interaction, state.edges, focusedOnInput, removeEdge, removeNode, emitEdit]);
 
 const selectEdge = useCallback((edge: DiagramEdge | null) => {
   dispatch({ type: 'SELECT_EDGE', edge });
@@ -1586,6 +1649,7 @@ useEffect(() => {
     loadDiagram,
     serializeDiagram,
     addNodeFromTemplate,
+    editNode,
     removeNode,
     updateNode,
     // Edge methods  
@@ -1663,6 +1727,7 @@ useEffect(() => {
     loadDiagram,
     serializeDiagram,
     addNodeFromTemplate,
+    editNode,
     removeNode,
     updateNode,
     addEdge,

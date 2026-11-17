@@ -1,13 +1,22 @@
 import { DiagramCanvas } from '../components/DiagramCanvas';
-import { Node } from '../components/Node';
-import { Edge } from '../components/Edge';
+import { useDiagram } from '../components/DiagramProvider';
 import { useEffect, useRef, useState } from 'react';
-import type { MarkerType } from '../renderers/FloatingEdgeRenderer';
 import { useRenderSettings } from '../state/renderSettings';
 
 const raw = await import('../assets/efta_webgpu_flow.json');
 
-const { nodes, edges } =  { nodes: raw.nodes, edges: raw.edges };
+// The demo file predates the diagram format and relied on the <Node>/<Edge>
+// component defaults; apply the same ones so it looks as it always has.
+const demo = {
+  nodes: raw.nodes.map(node => ({
+    ...node,
+    visual: { labelFont: 'Arial', shape: 'diamond', ...node.visual },
+  })),
+  edges: raw.edges.map(edge => ({
+    ...edge,
+    style: { ...edge.style, labelColor: '#ffffff', thickness: 3, color: [0, 0, 0, 255] },
+  })),
+};
 const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 };
@@ -26,14 +35,11 @@ export default function ERFlow() {
     // The canvas fills whatever pane it's placed in; measure it rather than guessing from the window.
     const containerRef = useRef<HTMLDivElement>(null);
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-    const [, setNodes] = useState<any>();
-    const [, setEdges ] = useState<any>();
+    const { loadDiagram } = useDiagram();
 
-
-    
 useEffect(() => {
-    setNodes(nodes);
-    setEdges(edges);
+    const problems = loadDiagram(demo);
+    if (problems.length) console.warn('Demo diagram:', problems);
 
     const container = containerRef.current;
     if (!container) return;
@@ -43,7 +49,7 @@ useEffect(() => {
     });
     observer.observe(container);
     return () => observer.disconnect();
-}, []);
+}, [loadDiagram]);
 
 
 
@@ -61,8 +67,6 @@ useEffect(() => {
                     onNodeClick={() => {}}
             />}
           
-        {<>{nodes.map((node) => <Node key={node.id} id={node.id} visual={node.visual} type={node.type} position={node.position} data={node.data} /> )} </>}
-        {<>{edges.map((edge) => <Edge key={edge.id} id={edge.id} sourceNodeId={edge.sourceNodeId} data={edge.data} targetNodeId={edge.targetNodeId} userVertices={edge.userVertices} style={{ targetMarker: edge.style.targetMarker as MarkerType, labelColor: "#ffffff", thickness: 3, color: [0,0,0,255] ,sourceMarker: edge.style.sourceMarker as MarkerType}} />)}</>}
  
             
         </div>

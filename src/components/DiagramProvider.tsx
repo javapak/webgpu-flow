@@ -13,6 +13,7 @@ import globalRenderer from '../renderers/gpuInstance'
 import { canvasToWorld, clampZoom, clientToCanvas as clientToCanvasPoint, zoomAbout, type View } from '../utils/CanvasCoords';
 import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutResult } from '../layout/graphLayout';
 import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
+import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
 
 export const InteractionMode = {
   SELECT: 0,
@@ -31,6 +32,13 @@ export interface EdgeDrawingState {
 
 export interface DiagramContextValue extends DiagramState {
   addNode: (node: DiagramNode) => void;
+  /**
+   * Replaces the whole diagram with one read from JSON (see utils/DiagramIO).
+   * Returns the problems found; invalid items are dropped, never thrown on.
+   */
+  loadDiagram: (json: unknown) => string[];
+  /** The current diagram in the file format that `loadDiagram` reads. */
+  serializeDiagram: () => DiagramDocument;
   interactionRef: React.RefObject<InteractionState>
   viewportRef: React.RefObject<Viewport>
   addEdge: (edge: DiagramEdge) => void;
@@ -125,6 +133,7 @@ const DiagramContext = createContext<DiagramContextValue | null>(null);
 
 type DiagramAction =
   | { type: 'ADD_NODE'; node: DiagramNode }
+  | { type: 'LOAD_DIAGRAM'; nodes: DiagramNode[]; edges: DiagramEdge[] }
   | { type: 'REMOVE_NODE'; nodeId: string }
   | { type: 'UPDATE_NODE'; node: DiagramNode }
   | { type: 'ADD_EDGE'; edge: DiagramEdge }
@@ -165,6 +174,20 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       return {
         ...state,
         nodes: [...state.nodes, action.node],
+      };
+
+    case 'LOAD_DIAGRAM':
+      return {
+        ...state,
+        nodes: action.nodes,
+        edges: action.edges,
+        interaction: {
+          ...state.interaction,
+          selectedNodes: [],
+          selectedEdges: [],
+          selectedVertex: null,
+          dragState: { isDragging: false, dragType: null, startPos: null, lastPos: null },
+        },
       };
 
     case 'REMOVE_NODE':
@@ -823,6 +846,18 @@ const scheduleRender = useCallback(() => {
   useEffect(() => () => {
     if (layoutAnimRef.current) cancelAnimationFrame(layoutAnimRef.current.raf);
   }, []);
+
+  const loadDiagram = useCallback((json: unknown): string[] => {
+    finishLayoutAnimation();
+    const { document, problems } = parseDiagram(json);
+    dispatch({ type: 'LOAD_DIAGRAM', nodes: document.nodes, edges: document.edges });
+    return problems;
+  }, [finishLayoutAnimation]);
+
+  const serializeDiagram = useCallback((): DiagramDocument => {
+    finishLayoutAnimation();
+    return toDiagramDocument(stateRef.current);
+  }, [finishLayoutAnimation]);
 
   const applyLayout = useCallback(async (options: Partial<LayoutOptions> = {}, { animate = false }: { animate?: boolean } = {}) => {
     finishLayoutAnimation();
@@ -1523,6 +1558,8 @@ useEffect(() => {
     setAltKey,
     // Node methods
     addNode,
+    loadDiagram,
+    serializeDiagram,
     removeNode,
     updateNode,
     // Edge methods  
@@ -1597,6 +1634,8 @@ useEffect(() => {
     cancelDrawing,
     setAltKey,
     addNode,
+    loadDiagram,
+    serializeDiagram,
     removeNode,
     updateNode,
     addEdge,

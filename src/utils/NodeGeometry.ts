@@ -52,7 +52,7 @@ export function boundaryPoint(node: DiagramNode, direction: Point): Point {
   // A row (see Nesting) is met at its left or right end, whichever faces the direction, so an
   // edge never runs over the rows above or below it.
   if (node.visual?.presentation === 'row') {
-    return { x: center.x + (dx < 0 ? -1 : 1) * hw * 0.95, y: center.y };
+    return { x: center.x + (dx < 0 ? -1 : 1) * hw, y: center.y };
   }
 
   const inside = insideTest(node);
@@ -137,26 +137,26 @@ function shapeDistance(shape: string, u: number, v: number, aspect: number): num
   switch (shape) {
     case 'circle':
     case 'initialNode':
-      return sdCircle(u, v, 0.95);
+      return sdCircle(u, v, 1);
     case 'finalNode':
-      return Math.max(sdCircle(u, v, 0.95), -sdCircle(u, v, 0.7));
+      return Math.max(sdCircle(u, v, 1), -sdCircle(u, v, 0.74));
     case 'diamond':
-      return sdDiamond(u, v, 0.95);
+      return sdDiamond(u, v, 1);
     case 'hexagon':
-      return sdHexagon(u, v, 0.9 * Math.sqrt(aspect));
+      return Math.max(Math.abs(v) - 1, (Math.abs(u) + 0.5 * Math.abs(v) - 1) * 0.894427);
     case 'package':
       return Math.min(
-        sdRoundedRectangle(px, py, aspect * 0.85, 0.75, 0.1),
-        sdRectangle(px, py + 0.85, aspect * 0.4, 0.1),
+        sdRoundedRectangle(px, py - 0.1, aspect, 0.9, 0.1),
+        sdRectangle(px, py + 0.9, aspect * 0.4, 0.1),
       );
     case 'roundedRectangle':
-      return sdRoundedRectangle(px, py, aspect * 0.95, 0.95, 0.1);
+      return sdRoundedRectangle(px, py, aspect, 1, 0.1);
     case 'oval':
-      return (px * px) / (aspect * 0.95) ** 2 + (py * py) / 0.85 ** 2 - 1;
+      return (px * px) / aspect ** 2 + py * py - 1;
     case 'actor':
       return Math.min(sdCircle(u, v + 0.4, 0.2), sdRectangle(u, v + 0.1, 0.15, 0.4));
     default:
-      return sdRectangle(px, py, aspect * 0.95, 0.95);
+      return sdRectangle(px, py, aspect, 1);
   }
 }
 
@@ -171,15 +171,6 @@ function sdCircle(x: number, y: number, r: number): number {
 
 function sdDiamond(x: number, y: number, h: number): number {
   return (Math.abs(x) + Math.abs(y) - h) / Math.SQRT2;
-}
-
-function sdHexagon(x: number, y: number, r: number): number {
-  const kx = -0.866025404, ky = 0.5, kz = 0.577350269;
-  const qx = Math.abs(x), qy = Math.abs(y);
-  const d = 2 * Math.min(qx * kx + qy * ky, 0);
-  const q2x = qx - d * kx, q2y = qy - d * ky;
-  const q3x = q2x - Math.min(Math.max(q2x, -kz * r), kz * r), q3y = q2y - r;
-  return Math.hypot(q3x, q3y) * Math.sign(q3y);
 }
 
 function sdRoundedRectangle(x: number, y: number, bx: number, by: number, r: number): number {

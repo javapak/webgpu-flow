@@ -539,14 +539,18 @@ private createIntermediateTexture(width: number, height: number) {
         
         let nodeSize = node.size;
         
+        // Shapes fill their box exactly (see NodeGeometry). The quad reaches a little past it, so the
+        // antialiased edge has room: a few pixels, or more for small nodes, whose edge blend is wider.
+        let margin = max(3.0 / max(uniforms.viewport.z, 0.0001), 0.05 * max(nodeSize.x, nodeSize.y));
+        let expand = (nodeSize + 2.0 * margin) / nodeSize;
         localPos.y = -localPos.y;
-        let worldPos = node.position + localPos * nodeSize * 0.5;
+        let worldPos = node.position + localPos * expand * nodeSize * 0.5;
         
         var output: VertexOutput;
         // Apply view-projection matrix
         output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, node.depth, 1.0);
         output.color = node.color;
-        output.uv = uvs[vertexIndex];
+        output.uv = localPos * expand;   // -1..1 across the box, +y down
         output.isSelected = node.isSelected;
         output.nodeSize = node.size;
         output.shapeType = node.shapeType;
@@ -601,7 +605,7 @@ private createIntermediateTexture(width: number, height: number) {
 
       @fragment
       fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-        let uv = input.uv * 2.0 - 1.0; // Convert to [-1, 1] range
+        let uv = input.uv; // -1..1 across the node's box, beyond it in the quad's margin
         let aspectRatio = input.nodeSize.x / input.nodeSize.y;
         
         // For shapes that should maintain aspect ratio, use different coordinates
@@ -612,37 +616,37 @@ private createIntermediateTexture(width: number, height: number) {
         let shapeType = i32(input.shapeType + 0.5); // Round to nearest integer
         
         switch (shapeType) {
+          // Every shape fills its box (-1..1 in uv), so what is drawn is what NodeGeometry computes.
           case 0: { // Rectangle
-            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95));
+            distance = sdRectangle(p, vec2<f32>(aspectRatio, 1.0));
           }
-          case 1: { // Circle
-            distance = sdCircle(p_square, 0.95);
+          case 1: { // Circle (an ellipse in a box that isn't square)
+            distance = sdCircle(p_square, 1.0);
           }
-          case 2: { // Diamond  
-            distance = sdDiamond(uv, vec2<f32>(0, 0.95));
+          case 2: { // Diamond
+            distance = sdDiamond(uv, vec2<f32>(0, 1.0));
           }
-          case 3: { // Hexagon
-            let avgRadius = 0.9 * sqrt(aspectRatio);
-            distance = sdHexagon(p_square, avgRadius);
+          case 3: { // Hexagon: points at the box's left and right, flat at its top and bottom
+            distance = max(abs(uv.y) - 1.0, (abs(uv.x) + 0.5 * abs(uv.y) - 1.0) * 0.894427);
           }
-          case 4: { // Package
-            let mainBody = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.85, 0.75), 0.1);
-            let tab = sdRectangle(p + vec2<f32>(0.0, 0.85), vec2<f32>(aspectRatio * 0.4, 0.1));
+          case 4: { // Package: a tab along the top, the body below it
+            let mainBody = sdRoundedRectangle(p - vec2<f32>(0.0, 0.1), vec2<f32>(aspectRatio, 0.9), 0.1);
+            let tab = sdRectangle(p + vec2<f32>(0.0, 0.9), vec2<f32>(aspectRatio * 0.4, 0.1));
             distance = min(mainBody, tab);
           }
           case 5: { // Rounded Rectangle
-            distance = sdRoundedRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95), 0.1);
+            distance = sdRoundedRectangle(p, vec2<f32>(aspectRatio, 1.0), 0.1);
           }
           case 6: { // Initial Node
-            distance = sdCircle(p_square, 0.95);
+            distance = sdCircle(p_square, 1.0);
           }
           case 7: { // Final Node (ring)
-            let outer = sdCircle(p_square, 0.95);
-            let inner = sdCircle(p_square, 0.7);
+            let outer = sdCircle(p_square, 1.0);
+            let inner = sdCircle(p_square, 0.74);
             distance = max(outer, -inner); // Ring shape
           }
           case 8: { // Oval
-            distance = sdOval(p, vec2<f32>(aspectRatio * 0.95, 0.85));
+            distance = sdOval(p, vec2<f32>(aspectRatio, 1.0));
           }
           case 9: { // Actor
             distance = sdActor(p_square);
@@ -654,7 +658,7 @@ private createIntermediateTexture(width: number, height: number) {
           }
 
           default: { // Default to rectangle
-            distance = sdRectangle(p, vec2<f32>(aspectRatio * 0.95, 0.95));
+            distance = sdRectangle(p, vec2<f32>(aspectRatio, 1.0));
           }
       }
 

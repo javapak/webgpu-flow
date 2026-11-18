@@ -169,6 +169,9 @@ type DiagramAction =
 
 
 
+/** The grid boxed nodes align to, or undefined when snapping is off. */
+const gridOf = (state: DiagramState) => (state.gridSnapping.enabled ? state.gridSnapping.gridSize : undefined);
+
 export const diagramReducer = (state: DiagramState, action: DiagramAction): DiagramState => {
   
   switch (action.type) {
@@ -190,7 +193,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
 
     case 'LOAD_DIAGRAM':
       // Containers arrange their children; nothing inside one has a place of its own.
-      arrangeContainers(action.nodes);
+      arrangeContainers(action.nodes, gridOf(state));
       return {
         ...state,
         nodes: action.nodes,
@@ -210,7 +213,7 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       const removed = new Set([action.nodeId, ...nestingOf(state.nodes).descendants(action.nodeId).map(n => n.id)]);
       const attached = (edge: DiagramEdge) => removed.has(edge.sourceNodeId) || removed.has(edge.targetNodeId);
       const nodes = state.nodes.filter(node => !removed.has(node.id));
-      arrangeContainers(nodes);   // closes the gap the node leaves in its container
+      arrangeContainers(nodes, gridOf(state));   // closes the gap the node leaves in its container
       return {
         ...state,
         nodes,
@@ -1092,11 +1095,16 @@ const endDrag = useCallback(() => {
         const stored = current.nodes.find(n => n.id === selected.id) ?? selected;
         const carried = drag.carried ?? [];
         const from = drag.originalPosition;
-        // Snap at the end of the gesture (not while dragging) unless Alt is held: a move snaps the
-        // node's centre, carrying the nested nodes the same distance; a resize snaps the edges it moved.
+        // Snap at the end of the gesture (not while dragging) unless Alt is held: a move puts the node's
+        // edges on grid lines, carrying the nested nodes the same distance; a resize snaps the edges it moved.
         const snap = current.gridSnapping.enabled && !current.interaction.altKeyPressed;
         if (type === 'node' && snap) {
-            const snapped = GridSnapping.snapPointToGrid(stored.data.position, current.gridSnapping.gridSize);
+            // The node's edges go on grid lines (its top-left corner on a grid point), as resizing does.
+            const grid = current.gridSnapping.gridSize, box = boxOf(stored);
+            const snapped = {
+                x: GridSnapping.snapToGrid(box.x - box.width / 2, grid) + box.width / 2,
+                y: GridSnapping.snapToGrid(box.y - box.height / 2, grid) + box.height / 2,
+            };
             const dx = snapped.x - stored.data.position.x, dy = snapped.y - stored.data.position.y;
             stored.data.position = snapped;
             for (const { node } of carried) node.data.position = { x: node.data.position.x + dx, y: node.data.position.y + dy };

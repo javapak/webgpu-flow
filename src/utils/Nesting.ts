@@ -158,10 +158,11 @@ type Size = { width: number; height: number };
 /**
  * Arranges every boxed node: its compartment under its header, its children
  * under that, and its size to hold them (at least its own width, for a
- * top-level node). Keeps each top-level node's centre where it is. Updates
- * the nodes in place.
+ * top-level node). Keeps each top-level node's centre where it is or, given a
+ * `grid` size, puts its edges on the nearest grid lines. Updates the nodes in
+ * place.
  */
-export function arrangeContainers(nodes: readonly DiagramNode[]): void {
+export function arrangeContainers(nodes: readonly DiagramNode[], grid?: number): void {
   const nesting = nestingOf(nodes);
   const sizes = new Map<string, Size>();
   const columns = new Map<string, DiagramNode[][]>();
@@ -207,24 +208,35 @@ export function arrangeContainers(nodes: readonly DiagramNode[]): void {
     const lines = compartmentOf(node).length;
     let left = x - width / 2 + NEST_PADDING;
     const top = y - size.height / 2 + NEST_HEADER + NEST_PADDING + (lines ? lines * LINE_HEIGHT + SECTION_GAP : 0);
-    for (const col of cols) {
-      const colWidth = Math.max(ROW_WIDTH, ...col.map(c => measure(c).width));
+    // The columns share whatever width the box has beyond them (its own width, a long property
+    // line, or a stretched box), so its children reach its inner edges.
+    const widths = cols.map(col => Math.max(ROW_WIDTH, ...col.map(c => measure(c).width)));
+    const spare = Math.max(0, width - 2 * NEST_PADDING - extentOf(cols, measure).width) / cols.length;
+    cols.forEach((col, i) => {
+      const colWidth = widths[i] + spare;
       let at = top;
       for (const child of col) {
-        const s = measure(child);
-        // Rows take the column's width; boxes keep theirs, at the column's left.
-        const w = isRow(child) ? colWidth : s.width;
-        place(child, left + w / 2, at + s.height / 2, w);
-        at += s.height + ROW_GAP;
+        // Rows and boxes alike take the column's width.
+        const h = measure(child).height;
+        place(child, left + colWidth / 2, at + h / 2, colWidth);
+        at += h + ROW_GAP;
       }
       left += colWidth + COLUMN_GAP;
-    }
+    });
   };
 
   for (const node of nodes) {
     if (nesting.depth(node.id) > 0 || !boxed(node)) continue;
-    const size = measure(node);
-    place(node, node.data.position.x, node.data.position.y, size.width);
+    let { x, y } = node.data.position;
+    let size = measure(node);
+    if (grid) {
+      // Its size can't be set by hand, so put its edges on grid lines: whole grid steps, corner on the grid.
+      size = { width: Math.ceil(size.width / grid) * grid, height: Math.ceil(size.height / grid) * grid };
+      sizes.set(node.id, size);
+      x = Math.round((x - size.width / 2) / grid) * grid + size.width / 2;
+      y = Math.round((y - size.height / 2) / grid) * grid + size.height / 2;
+    }
+    place(node, x, y, size.width);
   }
 }
 

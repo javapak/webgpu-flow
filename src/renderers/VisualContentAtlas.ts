@@ -25,6 +25,10 @@ export class VisualContentAtlas {
   
   // Atlas configuration
   private readonly ATLAS_SIZE = 4096;
+  /** Down to 1/16 scale: content stays smooth when zoomed out, and the entries' padding keeps neighbours apart. */
+  private readonly MIP_LEVELS = 5;
+  private mipPipeline: GPURenderPipeline | null = null;
+  private mipSampler: GPUSampler | null = null;
   private currentX = 0;
   private currentY = 0;
   private currentRowHeight = 0;
@@ -55,6 +59,7 @@ export class VisualContentAtlas {
     this.texture = this.device.createTexture({
       size: [this.ATLAS_SIZE, this.ATLAS_SIZE],
       format: 'rgba8unorm',
+      mipLevelCount: this.MIP_LEVELS,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       sampleCount: 1
     });
@@ -419,13 +424,80 @@ export class VisualContentAtlas {
   updateGPUTexture() {
     if (!this.needsUpdate || !this.texture) return;
 
+    // Premultiplied, so filtering and mipmaps don't pull in the (black) colour of transparent texels.
     this.device.queue.copyExternalImageToTexture(
       { source: this.canvas },
-      { texture: this.texture },
+      { texture: this.texture, premultipliedAlpha: true },
       { width: this.ATLAS_SIZE, height: this.ATLAS_SIZE }
     );
+    this.generateMipmaps(this.texture);
 
     this.needsUpdate = false;
+  }
+
+  /** Fills each mip level by filtering the one above it. */
+  private generateMipmaps(texture: GPUTexture) {
+    if (!this.mipPipeline) {
+      const module = this.device.createShaderModule({
+        label: 'visual-atlas-mipmaps',
+        code: /* wgsl */`
+          @group(0) @binding(0) var source: texture_2d<f32>;
+          @group(0) @binding(1) var sourceSampler: sampler;
+
+          struct VertexOutput {
+            @builtin(position) position: vec4<f32>,
+            @location(0) uv: vec2<f32>,
+          }
+
+          // One triangle covering the target level.
+          @vertex
+          fn vs_main(@builtin(vertex_index) i: u32) -> VertexOutput {
+            let uv = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
+            var output: VertexOutput;
+            output.position = vec4<f32>(uv * vec2<f32>(2.0, -2.0) + vec2<f32>(-1.0, 1.0), 0.0, 1.0);
+            output.uv = uv;
+            return output;
+          }
+
+          @fragment
+          fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+            return textureSample(source, sourceSampler, input.uv);
+          }
+        `,
+      });
+      this.mipPipeline = this.device.createRenderPipeline({
+        label: 'visual-atlas-mipmaps',
+        layout: 'auto',
+        vertex: { module, entryPoint: 'vs_main' },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format: texture.format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+      this.mipSampler = this.device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
+    }
+
+    const encoder = this.device.createCommandEncoder({ label: 'visual-atlas-mipmaps' });
+    for (let level = 1; level < texture.mipLevelCount; level++) {
+      const bindGroup = this.device.createBindGroup({
+        layout: this.mipPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: texture.createView({ baseMipLevel: level - 1, mipLevelCount: 1 }) },
+          { binding: 1, resource: this.mipSampler! },
+        ],
+      });
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: texture.createView({ baseMipLevel: level, mipLevelCount: 1 }),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        }],
+      });
+      pass.setPipeline(this.mipPipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3);
+      pass.end();
+    }
+    this.device.queue.submit([encoder.finish()]);
   }
 
   /** The alpha of a just-drawn region, or undefined when the canvas can't be read (a cross-origin image). */

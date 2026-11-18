@@ -551,6 +551,11 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         }
       }
 
+      // Outside the marker: write nothing, not even depth, or the quad's empty corners would hide
+      // whatever is drawn behind them later (a node's SVG or image content) and show the grid.
+      if (alpha < 0.01) {
+        discard;
+      }
       // Use premultiplied alpha.
       return vec4<f32>(color.rgb * alpha, alpha);
     }

@@ -3,6 +3,9 @@ import { VisualContentAtlas } from './VisualContentAtlas';
 import { Z_LAYERS } from '../utils/DepthConstants';
 import { setContentMask } from '../utils/NodeGeometry';
 
+/** World size of an icon drawn on a shape (a 64 px raster at 0.7 world units per pixel, as before). */
+const ICON_WORLD_SIZE = 44.8;
+
 export interface VisualInstanceData {
   texCoords: [number, number, number, number];
   color: [number, number, number, number];
@@ -117,8 +120,9 @@ export class VisualContentRenderer {
         @location(0) uv: vec2<f32>,
         @location(1) color: vec4<f32>
       ) -> @location(0) vec4<f32> {
+        // The atlas is premultiplied: tint the colour, and scale everything by the tint's alpha.
         let visualSample = textureSample(visualAtlas, visualSampler, uv);
-        let finalColor = visualSample * color;
+        let finalColor = vec4<f32>(visualSample.rgb * color.rgb, visualSample.a) * color.a;
         
         
         if (finalColor.a < 0.01) {
@@ -174,7 +178,7 @@ export class VisualContentRenderer {
           format: navigator.gpu.getPreferredCanvasFormat(),
           blend: {
             color: {
-              srcFactor: 'src-alpha',
+              srcFactor: 'one',   // premultiplied atlas
               dstFactor: 'one-minus-src-alpha',
               operation: 'add',
             },
@@ -205,6 +209,7 @@ export class VisualContentRenderer {
     const visualSampler = this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
+      mipmapFilter: 'linear',
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge'
     });
@@ -289,9 +294,10 @@ export class VisualContentRenderer {
         }
 
         // Content drawn instead of a shape is the node: it fills the node's box (the quad also
-        // covers the entry's padding), and its mask gives the outline. Otherwise it's an icon.
-        let visualWorldWidth = iconSize * 0.7;
-        let visualWorldHeight = iconSize * 0.7;
+        // covers the entry's padding), and its mask gives the outline. Otherwise it's an icon of
+        // a fixed size, whatever resolution it was rasterised at.
+        let visualWorldWidth = ICON_WORLD_SIZE;
+        let visualWorldHeight = ICON_WORLD_SIZE;
         const visualContent = node.visual?.visualContent;
         if (visualContent && node.visual?.shape === 'none' && node.visual.size) {
           const scale = atlasEntry.width / (atlasEntry.width - 2 * atlasEntry.padding);

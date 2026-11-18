@@ -8,12 +8,21 @@
 
 /** Text size (em), in CSS px, at an apparent scale of 1; labels track the content while it's inside the clamp. */
 export const LABEL_WORLD_EM = 14;
-/** Smallest text we'll draw. Below this, labels stop shrinking and start being dropped by declutter(). */
-export const LABEL_MIN_EM_PX = 9;
-/** Largest text we'll draw, so zooming in doesn't make labels huge. */
-export const LABEL_MAX_EM_PX = 18;
+/**
+ * Smallest text we'll draw. Below this, labels stop shrinking and start being dropped by declutter().
+ * Between the two limits text scales with the diagram, so it keeps fitting the rows and boxes laid
+ * out for it (labels are MSDF glyphs, sharp at any size).
+ */
+export const LABEL_MIN_EM_PX = 8;
+/**
+ * Largest text we'll draw, so zooming in doesn't make labels huge. At most half the canvas atlas's
+ * raster size, so fallback text stays sharp on 2x screens too.
+ */
+export const LABEL_MAX_EM_PX = 32;
 /** Size the atlas is rasterised at (canvas px); close to the largest size drawn to avoid blurry upscaling. */
 export const LABEL_ATLAS_FONT_SIZE = 64;
+/** A label's box height in ems: the line plus the room the canvas atlas leaves around it (declutter's height). */
+export const LABEL_BOX_EM = 1.5;
 
 /** Em size in canvas px for the given zoom: follows the content, clamped to a readable range on screen. */
 export function labelEmPx(zoom: number, pixelRatio = 1): number {

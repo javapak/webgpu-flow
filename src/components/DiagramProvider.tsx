@@ -710,6 +710,7 @@ const scheduleRender = useCallback(() => {
       device?.pushErrorScope('out-of-memory');
         const s = stateRef.current;
         const vp = viewportRef.current;
+        renderer.gridSize = s.gridSnapping.gridSize;
         try {
             renderer.render(
                 s.nodes,

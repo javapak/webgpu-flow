@@ -38,6 +38,8 @@ export class WebGPURenderer {
   private handleBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer | null = null;
   private gridUniformBuffer: GPUBuffer | null = null;
+  /** Spacing of the drawn grid's finest lines, in world units: the snapping grid's. */
+  gridSize = GridSnapping.getDefaultGridSize();
   private nodeBindGroup: GPUBindGroup | null = null;
   private handleBindGroup: GPUBindGroup | null = null;
   private gridBindGroup: GPUBindGroup | null = null;
@@ -472,7 +474,7 @@ private createIntermediateTexture(width: number, height: number) {
 
     // Grid uniforms also carry the canvas size
     this.gridUniformBuffer = WebGPURenderer.device.createBuffer({
-      size: 96, // mat4x4 (64 bytes) + vec4 viewport (16 bytes) + vec4 canvas size (16 bytes)
+      size: 96, // mat4x4 (64 bytes) + vec4 viewport (16 bytes) + vec4 canvas size, grid size, pixel ratio (16 bytes)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -699,97 +701,74 @@ private createIntermediateTexture(width: number, height: number) {
       }
     `;
 
-    // Grid shader: line quads are generated in the vertex shader from the visible bounds.
+    // Grid shader: one quad over the view; each pixel works out its distance to the nearest
+    // grid line in screen pixels, so every line is an evenly anti-aliased 1px line wherever it
+    // falls. Levels every GRID_STEP cells fade with how close their lines are on screen: minor
+    // lines fade out as they crowd together and coarser ones take over, so there is always a
+    // readable grid, and nothing pops, since a line's strength depends only on its spacing.
     const gridShaderCode = /* wgsl */`
       struct Uniforms {
         viewProjection: mat4x4<f32>,
         viewport: vec4<f32>, // x, y, zoom, aspect
-        canvasSize: vec4<f32>, // width, height, padding, padding
+        canvasSize: vec4<f32>, // width, height, grid size (world units), canvas px per CSS px
       }
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
+      const GRID_STEP = 5.0;       // cells per line of the next coarser level
+      const FADE_FROM_PX = 6.0;    // a level's lines vanish when this close (CSS px)...
+      const FULL_FROM_PX = 48.0;   // ...and are fully drawn from this far apart
+      const LINE_WIDTH_PX = 1.0;   // CSS px
+      const GRID_ALPHA = 0.22;
+
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
-        @location(0) color: vec4<f32>,
+        @location(0) world: vec2<f32>,
       }
 
       @vertex
       fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-        // Grid configuration
-        let gridSize = ${GridSnapping.getDefaultGridSize()}.0; // Grid spacing in world units
-        let lineWidth = max(1.0 / uniforms.viewport.z, 0.5); // Adaptive line width
-        
-        // Get actual canvas dimensions from uniform
-        let canvasWidth = uniforms.canvasSize.x;
-        let canvasHeight = uniforms.canvasSize.y;
-        
-        // Calculate visible world bounds based on current viewport and zoom
-        let worldWidth = canvasWidth / uniforms.viewport.z;
-        let worldHeight = canvasHeight / uniforms.viewport.z;
-        let left = uniforms.viewport.x - worldWidth / 2.0;
-        let right = uniforms.viewport.x + worldWidth / 2.0;
-        let top = uniforms.viewport.y - worldHeight / 2.0;
-        let bottom = uniforms.viewport.y + worldHeight / 2.0;
-        
-        let margin = gridSize * 2.0;
-        let gridLeft = floor((left - margin) / gridSize) * gridSize;
-        let gridRight = ceil((right + margin) / gridSize) * gridSize;
-        let gridTop = floor((top - margin) / gridSize) * gridSize;
-        let gridBottom = ceil((bottom + margin) / gridSize) * gridSize;
-        
-        let numVerticalLines = i32((gridRight - gridLeft) / gridSize) + 1;
-        let numHorizontalLines = i32((gridBottom - gridTop) / gridSize) + 1;
-        let verticesPerLine = 6; // 2 triangles per line
-        
-        // Determine which line and which vertex within that line
-        let lineIndex = vertexIndex / u32(verticesPerLine);
-        let vertexInLine = vertexIndex % u32(verticesPerLine);
-        
-        var worldPos: vec2<f32>;
-        
-        if (lineIndex < u32(numVerticalLines)) {
-          // Vertical line
-          let x = gridLeft + f32(lineIndex) * gridSize;
-          switch (vertexInLine) {
-            case 0u: { worldPos = vec2<f32>(x - lineWidth/2.0, gridTop); }
-            case 1u: { worldPos = vec2<f32>(x + lineWidth/2.0, gridTop); }
-            case 2u: { worldPos = vec2<f32>(x - lineWidth/2.0, gridBottom); }
-            case 3u: { worldPos = vec2<f32>(x + lineWidth/2.0, gridTop); }
-            case 4u: { worldPos = vec2<f32>(x + lineWidth/2.0, gridBottom); }
-            case 5u: { worldPos = vec2<f32>(x - lineWidth/2.0, gridBottom); }
-            default: { worldPos = vec2<f32>(x, gridTop); }
-          }
-        } else {
-          // Horizontal line
-          let lineIdx = lineIndex - u32(numVerticalLines);
-          let y = gridTop + f32(lineIdx) * gridSize;
-          switch (vertexInLine) {
-            case 0u: { worldPos = vec2<f32>(gridLeft, y - lineWidth/2.0); }
-            case 1u: { worldPos = vec2<f32>(gridRight, y - lineWidth/2.0); }
-            case 2u: { worldPos = vec2<f32>(gridLeft, y + lineWidth/2.0); }
-            case 3u: { worldPos = vec2<f32>(gridRight, y - lineWidth/2.0); }
-            case 4u: { worldPos = vec2<f32>(gridRight, y + lineWidth/2.0); }
-            case 5u: { worldPos = vec2<f32>(gridLeft, y + lineWidth/2.0); }
-            default: { worldPos = vec2<f32>(gridLeft, y); }
-          }
-        }
-        
+        let corners = array<vec2<f32>, 6>(
+          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+          vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0)
+        );
+        let ndc = corners[vertexIndex];
+        // The view's world rectangle (y grows downwards; ndc y = 1 is the top).
+        let halfSize = uniforms.canvasSize.xy / (2.0 * uniforms.viewport.z);
+        let world = vec2<f32>(uniforms.viewport.x + ndc.x * halfSize.x, uniforms.viewport.y - ndc.y * halfSize.y);
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.BACKGROUND}, 1.0);
-        
-        // Grid color - adaptive opacity based on zoom
-        let baseAlpha = 0.25;
-        let zoomFactor = uniforms.viewport.z;
-        let alpha = clamp(baseAlpha * min(zoomFactor * 0.8, 1.2), 0.08, 0.4);
-        output.color = vec4<f32>(0.7, 0.7, 0.7, alpha);
-        
+        output.position = uniforms.viewProjection * vec4<f32>(world, ${Z_LAYERS.BACKGROUND}, 1.0);
+        output.world = world;
         return output;
       }
 
+      // How much of this pixel a line of a grid with cells this wide covers (box-filtered).
+      fn coverage(world: vec2<f32>, cell: f32, pxPerWorld: f32, widthPx: f32) -> f32 {
+        let distancePx = abs(fract(world / cell + 0.5) - 0.5) * cell * pxPerWorld;
+        let c = clamp(vec2<f32>(widthPx * 0.5 + 0.5) - distancePx, vec2<f32>(0.0), vec2<f32>(1.0));
+        return max(c.x, c.y);
+      }
+
       @fragment
-      fn fs_main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {
-        return color;
+      fn fs_main(@location(0) world: vec2<f32>) -> @location(0) vec4<f32> {
+        let pxPerWorld = uniforms.viewport.z;
+        let pixelRatio = max(uniforms.canvasSize.w, 1.0);
+        let gridSize = uniforms.canvasSize.z;
+        let fadeFrom = FADE_FROM_PX * pixelRatio;
+        // The finest level whose lines aren't closer than the fade-out spacing.
+        let level = max(0.0, ceil(log(fadeFrom / (gridSize * pxPerWorld)) / log(GRID_STEP)));
+        var alpha = 0.0;
+        // A line on a coarser level is on the finer ones too; it takes its strongest level's strength.
+        for (var i = 0.0; i < 3.0; i += 1.0) {
+          let cell = gridSize * pow(GRID_STEP, level + i);
+          let spacing = cell * pxPerWorld;
+          let strength = clamp(log(spacing / fadeFrom) / log(FULL_FROM_PX / FADE_FROM_PX), 0.0, 1.0);
+          alpha = max(alpha, coverage(world, cell, pxPerWorld, LINE_WIDTH_PX * pixelRatio) * strength);
+        }
+        if (alpha < 0.003) {
+          discard;
+        }
+        return vec4<f32>(0.7, 0.7, 0.7, alpha * GRID_ALPHA);
       }
     `;
 
@@ -884,9 +863,8 @@ private createIntermediateTexture(width: number, height: number) {
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.VERTEX,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' as const }
-
         }
       ]
     });
@@ -1232,7 +1210,7 @@ private createIntermediateTexture(width: number, height: number) {
         new Float32Array([
           ...viewProjectionMatrix,
           viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height,
-          canvasSize.width, canvasSize.height, 0, 0
+          canvasSize.width, canvasSize.height, this.gridSize, viewport.pixelRatio ?? 1
         ])
       );
 
@@ -1351,7 +1329,7 @@ private createIntermediateTexture(width: number, height: number) {
       });
 
       // Render grid
-      this.renderGrid(renderPass, viewport, canvasSize);
+      this.renderGrid(renderPass);
 
       // Render nodes if we have data
       if (nodeData.length > 0) {
@@ -1528,36 +1506,12 @@ private createIntermediateTexture(width: number, height: number) {
     return this.labelRenderer?.getDebugCanvas() || null;
   }
 
-  /** Draws the grid; the vertex count follows the visible area. */
-  private renderGrid(renderPass: GPURenderPassEncoder, viewport: Viewport, canvasSize: { width: number; height: number }) {
+  /** Draws the grid: one quad over the view (see the grid shader). */
+  private renderGrid(renderPass: GPURenderPassEncoder) {
     if (!WebGPURenderer.gridRenderPipeline) return;
-
-    // Calculate grid vertices dynamically based on current viewport and canvas size
-    const gridSize = 50.0;
-    const worldWidth = canvasSize.width / viewport.zoom;
-    const worldHeight = canvasSize.height / viewport.zoom;
-    const left = viewport.x - worldWidth / 2;
-    const right = viewport.x + worldWidth / 2;
-    const top = viewport.y - worldHeight / 2;
-    const bottom = viewport.y + worldHeight / 2;
-    
-    // Add margin and snap to grid
-    const margin = gridSize * 2;
-    const gridLeft = Math.floor((left - margin) / gridSize) * gridSize;
-    const gridRight = Math.ceil((right + margin) / gridSize) * gridSize;
-    const gridTop = Math.floor((top - margin) / gridSize) * gridSize;
-    const gridBottom = Math.ceil((bottom + margin) / gridSize) * gridSize;
-    
-    const numVerticalLines = Math.floor((gridRight - gridLeft) / gridSize) + 1;
-    const numHorizontalLines = Math.floor((gridBottom - gridTop) / gridSize) + 1;
-    const totalVertices = (numVerticalLines + numHorizontalLines) * 6; // 6 vertices per line
-
-
-    if (totalVertices > 0) {
-      renderPass.setPipeline(WebGPURenderer.gridRenderPipeline);
-      renderPass.setBindGroup(0, this.gridBindGroup!);
-      renderPass.draw(totalVertices, 1);
-    }
+    renderPass.setPipeline(WebGPURenderer.gridRenderPipeline);
+    renderPass.setBindGroup(0, this.gridBindGroup!);
+    renderPass.draw(6, 1);
   }
 
   private createViewProjectionMatrix(viewport: Viewport, canvasSize: { width: number; height: number }): number[] {

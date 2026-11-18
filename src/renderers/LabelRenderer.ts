@@ -2,19 +2,34 @@ import { TextureAtlas } from './TextureAtlas';
 import type { DiagramEdge, DiagramNode, Viewport } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
 import type { DiagramFont } from '../utils/FontLoadUtils';
-import { declutter, labelWorldScale, LABEL_ATLAS_FONT_SIZE, type LabelCandidate } from './LabelScaling';
+import { declutter, labelWorldScale, LABEL_ATLAS_FONT_SIZE, LABEL_BOX_EM, type LabelCandidate } from './LabelScaling';
 import { NEST_HEADER, boxLayout, compartmentOf, headerIcon, isBoxed, isRow, rowLayout } from '../utils/Nesting';
 import { boundaryPoint } from '../utils/NodeGeometry';
+import { MsdfFont } from './MsdfFont';
+import { INTER_MSDF } from '../assets/fonts/interMsdf';
+
+/**
+ * The font labels use unless a node picks another: drawn from its MSDF atlas, so it's sharp at any
+ * zoom. Other fonts, and text with characters the atlas lacks, are rasterised into the canvas atlas.
+ */
+const DEFAULT_LABEL_FONT: DiagramFont = 'Inter';
+/** Floats per instance: texCoords, color, position and size, then params (see the shader). */
+const INSTANCE_FLOATS = 16;
 
 /** How far an end label sits along the edge from the node, and off to its side. */
 const END_LABEL_ALONG = 18;
 const END_LABEL_ASIDE = 10;
 
+/**
+ * One quad: a whole label from the canvas atlas, or one glyph from the MSDF atlas.
+ * `msdf` holds the glyph atlas's distance range over its size (u and v); absent for canvas quads.
+ */
 export interface LabelInstanceData {
   texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
   color: [number, number, number, number];     // Text color
-  position: [number, number]; // World position
-  size: [number, number]; // Label size in world units
+  position: [number, number]; // World position (centre)
+  size: [number, number]; // Size in world units
+  msdf?: [number, number];
 }
 
 export class LabelRenderer {
@@ -25,6 +40,11 @@ export class LabelRenderer {
   private labelBuffer: GPUBuffer | null = null;
   private uniformBuffer: GPUBuffer;
   private sampleCount: string;
+  private readonly msdfFont = new MsdfFont(INTER_MSDF);
+  /** The MSDF atlas once loaded; until then every label goes through the canvas atlas. */
+  private msdfTexture: GPUTexture | null = null;
+  /** Bound in the MSDF atlas's place until it loads. */
+  private placeholderTexture: GPUTexture | null = null;
   
   constructor(device: GPUDevice, uniformBuffer: GPUBuffer, sampleCount = '1') {
     this.device = device;
@@ -40,13 +60,18 @@ export class LabelRenderer {
     catch (e) {
       return false;
     }
+    // Not awaited: labels draw from the canvas atlas until the glyph atlas is ready.
+    this.msdfFont.createTexture(this.device).then(texture => {
+      this.msdfTexture = texture;
+      this.updateBindGroup();
+    }).catch(error => console.warn('MSDF label font failed to load; using canvas text', error));
     return true;
   }
 
   private async setupLabelRenderPipeline() {
-    // Per-label instance data: 12 floats (48 bytes) each
+    // Per-quad instance data: INSTANCE_FLOATS floats each
     this.labelBuffer = this.device.createBuffer({
-      size: 1000 * 48, 
+      size: 4000 * INSTANCE_FLOATS * 4, 
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -64,17 +89,21 @@ export class LabelRenderer {
         
         @align(8) position: vec2<f32>,
         @align(8) size: vec2<f32>,
+        // x: 1 for an MSDF glyph, 0 for a canvas quad; yz: the glyph atlas's distance range / its size
+        @align(16) params: vec4<f32>,
       }
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
       @group(0) @binding(1) var<storage, read> labelData: array<LabelData>;
       @group(0) @binding(2) var textSampler: sampler;
       @group(0) @binding(3) var textAtlas: texture_2d<f32>;
+      @group(0) @binding(4) var msdfAtlas: texture_2d<f32>;
 
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
         @location(0) uv: vec2<f32>,
         @location(1) color: vec4<f32>,
+        @location(2) @interpolate(flat) params: vec4<f32>,
       }
 
       @vertex
@@ -106,21 +135,36 @@ export class LabelRenderer {
         output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.LABELS} , 1.0);
         output.uv = atlasUV;
         output.color = label.color;
+        output.params = label.params;
         
         return output;
+      }
+
+      fn median(r: f32, g: f32, b: f32) -> f32 {
+        return max(min(r, g), min(max(r, g), b));
       }
 
       @fragment
       fn fs_main(
         @location(0) uv: vec2<f32>,
-        @location(1) color: vec4<f32>
+        @location(1) color: vec4<f32>,
+        @location(2) @interpolate(flat) params: vec4<f32>
       ) -> @location(0) vec4<f32> {
-        let textSample = textureSample(textAtlas, textSampler, uv);
-          if (textSample.a < 0.01) {
-            discard;
-          }
-        // The atlas holds coverage in alpha; tint it with the label colour.
-        return vec4<f32>(color.rgb, textSample.a * color.a);
+        // Both atlases are sampled (and derivatives taken) before choosing, as WGSL wants them
+        // in uniform control flow.
+        let canvasSample = textureSample(textAtlas, textSampler, uv);
+        let field = textureSample(msdfAtlas, textSampler, uv).rgb;
+        // How many screen pixels the field's distance range covers here: the edge is
+        // anti-aliased over one screen pixel whatever the zoom.
+        let screenTexSize = vec2<f32>(1.0) / fwidth(uv);
+        let screenPxRange = max(0.5 * dot(params.yz, screenTexSize), 1.0);
+        let glyphAlpha = clamp(screenPxRange * (median(field.r, field.g, field.b) - 0.5) + 0.5, 0.0, 1.0);
+        // The canvas atlas holds coverage in alpha; either way, tint it with the label colour.
+        let coverage = select(canvasSample.a, glyphAlpha, params.x > 0.5);
+        if (coverage < 0.01) {
+          discard;
+        }
+        return vec4<f32>(color.rgb, coverage * color.a);
       }
     `;
 
@@ -145,6 +189,11 @@ export class LabelRenderer {
         },
         {
           binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {}
+        },
+        {
+          binding: 4,
           visibility: GPUShaderStage.FRAGMENT,
           texture: {}
         }
@@ -199,6 +248,9 @@ export class LabelRenderer {
 
   private updateBindGroup() {
     if (!this.labelRenderPipeline || !this.textAtlas.getTexture()) return;
+    this.placeholderTexture ??= this.device.createTexture({
+      label: 'msdf-atlas-placeholder', size: [1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING,
+    });
 
     const textSampler = this.device.createSampler({
       magFilter: 'linear',
@@ -213,7 +265,8 @@ export class LabelRenderer {
         { binding: 0, resource: { buffer: this.uniformBuffer } },
         { binding: 1, resource: { buffer: this.labelBuffer! } },
         { binding: 2, resource: textSampler },
-        { binding: 3, resource: this.textAtlas.getTexture()!.createView() }
+        { binding: 3, resource: this.textAtlas.getTexture()!.createView() },
+        { binding: 4, resource: (this.msdfTexture ?? this.placeholderTexture).createView() }
       ]
     });
   }
@@ -254,7 +307,11 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
   const nodesById = new Map(visibleNodes.map(n => [n.id, n]));
 
   const candidates: LabelCandidate[] = [];
-  const instances = new Map<string, LabelInstanceData>();
+  const instances = new Map<string, LabelInstanceData[]>();
+  const font = this.msdfFont, msdf = this.msdfTexture !== null;
+  // World units per glyph-atlas pixel, and the glyph atlas's distance range over its size.
+  const glyphScale = labelWorldScale(zoom, pixelRatio, font.data.size);
+  const range: [number, number] = [font.data.distanceRange / font.data.width, font.data.distanceRange / font.data.height];
 
   /**
    * `x` is the label's centre, or its left or right end for those anchors; `alpha` fades it.
@@ -264,21 +321,40 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     anchor: 'center' | 'left' | 'right' = 'center', alpha = 1, spaced = false) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     try {
+      const rgba = this.hexToRgba(color);
+      rgba.a *= alpha;
+      const tint: [number, number, number, number] = [rgba.r, rgba.g, rgba.b, rgba.a];
+      if (fontFamily === DEFAULT_LABEL_FONT && msdf && font.covers(text)) {
+        // A quad per glyph, on a line whose box is centred on y (the canvas atlas's box height, for declutter).
+        const line = font.layout(text);
+        const width = line.width * glyphScale;
+        const height = LABEL_BOX_EM * font.data.size * glyphScale;
+        const left = anchor === 'left' ? x : anchor === 'right' ? x - width : x - width / 2;
+        const top = y - (font.data.lineHeight * glyphScale) / 2;
+        candidates.push({ id, priority, x: left + width / 2, y, width, height, ...(spaced ? { padding: 0 } : {}) });
+        instances.set(id, line.glyphs.map(({ glyph, left: gx, top: gy }) => ({
+          texCoords: [glyph.x / font.data.width, glyph.y / font.data.height,
+            (glyph.x + glyph.width) / font.data.width, (glyph.y + glyph.height) / font.data.height],
+          color: tint,
+          position: [left + (gx + glyph.width / 2) * glyphScale, top + (gy + glyph.height / 2) * glyphScale],
+          size: [glyph.width * glyphScale, glyph.height * glyphScale],
+          msdf: range,
+        })));
+        return;
+      }
       const entry = this.textAtlas.addText(text, LABEL_ATLAS_FONT_SIZE, color, fontFamily);
       if (!entry) return;
       const width = entry.width * scale;
       const height = entry.height * scale;
       if (anchor === 'left') x += width / 2;
       else if (anchor === 'right') x -= width / 2;
-      const rgba = this.hexToRgba(color);
-      rgba.a *= alpha;
       candidates.push({ id, priority, x, y, width, height, ...(spaced ? { padding: 0 } : {}) });
-      instances.set(id, {
+      instances.set(id, [{
         texCoords: [entry.x / atlasSize, entry.y / atlasSize, (entry.x + entry.width) / atlasSize, (entry.y + entry.height) / atlasSize],
-        color: [rgba.r, rgba.g, rgba.b, rgba.a],
+        color: tint,
         position: [x, y],
         size: [width, height],
-      });
+      }]);
     } catch (error) {
       console.error('Error preparing label:', text, error);
     }
@@ -292,13 +368,13 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     let { x, y } = node.data.position;
     const size = node.visual?.size;
     const color = node.visual?.labelColor || '#ffffffff';
-    const font = (node.visual?.labelFont || 'Arial') as DiagramFont;
+    const nodeFont = (node.visual?.labelFont || DEFAULT_LABEL_FONT) as DiagramFont;
     if (isRow(node)) {
       // After the icon; the detail (e.g. the kind) faded at the right end, dropped first when they collide.
       const row = rowLayout(node);
-      add(`n:${node.id}`, priority, label, color, font, row.labelLeft, y, 'left', 1, true);
+      add(`n:${node.id}`, priority, label, color, nodeFont, row.labelLeft, y, 'left', 1, true);
       const detail = typeof node.visual?.detail === 'string' ? node.visual.detail.trim() : '';
-      if (detail) add(`d:${node.id}`, priority - 0.5, detail, color, font, row.detailRight, y, 'right', 0.55, true);
+      if (detail) add(`d:${node.id}`, priority - 0.5, detail, color, nodeFont, row.detailRight, y, 'right', 0.55, true);
       continue;
     }
     if (size && isBoxed(node)) {
@@ -307,10 +383,10 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       if (headerIcon(node)) x += NEST_HEADER / 2;
       const box = boxLayout(node);
       compartmentOf(node).forEach((line, i) => {
-        add(`c:${node.id}:${i}`, priority - 0.5, line, color, font, box.textLeft, box.lines[i], 'left', 0.85, true);
+        add(`c:${node.id}:${i}`, priority - 0.5, line, color, nodeFont, box.textLeft, box.lines[i], 'left', 0.85, true);
       });
     }
-    add(`n:${node.id}`, priority, label, color, font, x, y);
+    add(`n:${node.id}`, priority, label, color, nodeFont, x, y);
   }
 
   for (const edge of visibleEdges) {
@@ -328,7 +404,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       // To the line's left or right, whichever is up (or left, for a vertical line).
       let side = { x: d.y, y: -d.x };
       if (side.y > 0 || (side.y === 0 && side.x > 0)) side = { x: -side.x, y: -side.y };
-      add(`${end}:${edge.id}`, -0.5, text.trim(), edge.style.labelColor || '#ffffff', 'Arial',
+      add(`${end}:${edge.id}`, -0.5, text.trim(), edge.style.labelColor || '#ffffff', DEFAULT_LABEL_FONT,
         at.x + d.x * END_LABEL_ALONG + side.x * END_LABEL_ASIDE, at.y + d.y * END_LABEL_ALONG + side.y * END_LABEL_ASIDE);
     }
 
@@ -344,11 +420,11 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       y = (source.data.position.y + target.data.position.y) / 2;
     }
     // Below every node label, so edge labels only appear where there's room.
-    add(`e:${edge.id}`, -1, label, edge.style.labelColor || '#ffffff', 'Arial', x, y);
+    add(`e:${edge.id}`, -1, label, edge.style.labelColor || '#ffffff', DEFAULT_LABEL_FONT, x, y);
   }
 
   const keep = declutter(candidates, zoom, 4 * pixelRatio);
-  return candidates.filter(c => keep.has(c.id)).map(c => instances.get(c.id)!);
+  return candidates.filter(c => keep.has(c.id)).flatMap(c => instances.get(c.id)!);
 }
 
 
@@ -360,9 +436,9 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     this.textAtlas.updateGPUTexture();
 
     // Prepare batched label data for GPU
-    const flatLabelData = new Float32Array(labelData.length * 12); // 12 floats per label
+    const flatLabelData = new Float32Array(labelData.length * INSTANCE_FLOATS);
     labelData.forEach((label, i) => {
-      const offset = i * 12;
+      const offset = i * INSTANCE_FLOATS;
       // texCoords: vec4<f32>
       flatLabelData[offset + 0] = label.texCoords[0];
       flatLabelData[offset + 1] = label.texCoords[1];
@@ -379,10 +455,14 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       // size: vec2<f32>
       flatLabelData[offset + 10] = label.size[0];
       flatLabelData[offset + 11] = label.size[1];
+      // params: vec4<f32>
+      flatLabelData[offset + 12] = label.msdf ? 1 : 0;
+      flatLabelData[offset + 13] = label.msdf?.[0] ?? 0;
+      flatLabelData[offset + 14] = label.msdf?.[1] ?? 0;
     });
 
     // Resize label buffer if needed
-    const requiredSize = labelData.length * 48; // 12 floats * 4 bytes = 48 bytes per label
+    const requiredSize = labelData.length * INSTANCE_FLOATS * 4;
     if (requiredSize > this.labelBuffer.size) {
       this.labelBuffer.destroy();
       this.labelBuffer = this.device.createBuffer({
@@ -424,6 +504,9 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       this.labelBuffer.destroy();
       this.labelBuffer = null;
     }
+    this.msdfTexture?.destroy();
+    this.placeholderTexture?.destroy();
+    this.msdfTexture = this.placeholderTexture = null;
 
     this.labelRenderPipeline = null;
     this.labelBindGroup = null;

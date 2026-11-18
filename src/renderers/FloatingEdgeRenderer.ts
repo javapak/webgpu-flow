@@ -1,11 +1,12 @@
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { DiagramEdge, DiagramNode } from '../types';
 import { Z_LAYERS, edgeZ, markerZ } from '../utils/DepthConstants';
-import { boxOf, isRow, nestingOf } from '../utils/Nesting';
+import { boxOf, isBoxed, isRow, nestingOf } from '../utils/Nesting';
 
 type Point = { x: number; y: number };
 /** An edge's spread ends, and how far apart the ends on their sides are (which limits marker size). */
-type Ports = { source?: Point; target?: Point; sourceRoom?: number; targetRoom?: number };
+type Side = 'left' | 'right' | 'top' | 'bottom';
+type Ports = { source?: Point; target?: Point; sourceRoom?: number; targetRoom?: number; sourceSide?: Side; targetSide?: Side };
 /** Closest that ends on one side of a node may sit (a marker is 14 across), and how far from its corners. */
 const PORT_GAP = 16;
 const PORT_INSET = 4;
@@ -13,6 +14,60 @@ const PORT_INSET = 4;
 const HOP_RADIUS = 6;
 const HOP_STEPS = 8;
 const MAX_HOP_SEGMENTS = 3000;
+/** A marker's half-size, at most (they shrink on crowded sides). */
+const MARKER_SIZE = 7;
+/** Shapes whose outline is their box, so edges can meet them square on. */
+const SQUARE_SHAPES = new Set(['rectangle', 'roundedRectangle', 'package']);
+
+/**
+ * How far each marker shape reaches in front of its centre and behind it, in its quad's units
+ * (the quad spans -0.5..0.5, and a marker is 2 * size across), and whether it is hollow. Markers
+ * sit with their front on the node's outline; the line stops at the back of a hollow one, so it
+ * doesn't show through, at the centre of a filled one, and runs to the tip of an open arrow.
+ */
+const MARKER_EXTENT: Record<number, { front: number; back: number; trim: 'none' | 'centre' | 'back' }> = {
+  1: { front: 0.4, back: 0.4, trim: 'centre' },     // arrow
+  2: { front: 0.4, back: 0.4, trim: 'none' },       // open arrow (two strokes)
+  3: { front: 0.4, back: 0.4, trim: 'centre' },     // filled arrow
+  4: { front: 0.45, back: 0.45, trim: 'back' },     // diamond
+  5: { front: 0.45, back: 0.45, trim: 'centre' },   // filled diamond
+  6: { front: 0.4, back: 0.4, trim: 'back' },       // circle
+  11: { front: 0.4, back: 0.4, trim: 'back' },      // one-optional circle
+  12: { front: 0.4, back: 0.4, trim: 'back' },      // inheritance: hollow triangle
+  13: { front: 0.4, back: 0.4, trim: 'centre' },    // double arrow
+  15: { front: 0.2, back: 0.2, trim: 'centre' },    // dot
+  16: { front: 0.4, back: 0.4, trim: 'back' },      // square
+  17: { front: 0.4, back: 0.4, trim: 'centre' },    // filled square
+};
+
+/** The parts of a line `pattern` (dash, gap, dash, ...) draws, carried on from one segment to the next. */
+function dashed(points: Point[], pattern: number[]): Point[][] {
+  const total = pattern.reduce((a, b) => a + b, 0);
+  if (points.length < 2 || pattern.length === 0 || total <= 0) return [points];
+  const pieces: Point[][] = [];
+  let k = 0, left = pattern[0], on = true;
+  let piece: Point[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    let a = points[i - 1];
+    const b = points[i];
+    let length = Math.hypot(b.x - a.x, b.y - a.y);
+    while (length > left) {
+      const t = left / length;
+      const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      if (on) { piece.push(p); pieces.push(piece); }
+      piece = [p];
+      on = !on;
+      length -= left;
+      a = p;
+      k = (k + 1) % pattern.length;
+      left = pattern[k];
+    }
+    left -= length;
+    if (on) piece.push(b);
+  }
+  if (on && piece.length > 1) pieces.push(piece);
+  return pieces;
+}
 
 /** Where segments ab and cd cross, as fractions along each, strictly inside both; null if they don't. */
 function crossing(a: Point, b: Point, c: Point, d: Point): { t: number; u: number } | null {
@@ -476,7 +531,17 @@ private createMarkerPipeline(format: GPUTextureFormat) {
           let inXBounds = centered.x >= baseX && centered.x <= tipX;
           alpha = select(0.0, 1.0, inXBounds && inYBounds);
         }
-        case 2, 12: { // open-arrow / inheritance
+        case 2: { // open-arrow: two strokes meeting at the tip
+          let tip = vec2<f32>(0.4, 0.0);
+          let half = 0.09;
+          let a = centered - tip;
+          let up = vec2<f32>(-0.8, 0.4);
+          let down = vec2<f32>(-0.8, -0.4);
+          let d1 = length(a - up * clamp(dot(a, up) / dot(up, up), 0.0, 1.0));
+          let d2 = length(a - down * clamp(dot(a, down) / dot(down, down), 0.0, 1.0));
+          alpha = select(0.0, 1.0, min(d1, d2) < half);
+        }
+        case 12: { // inheritance: hollow triangle
           let tipX = 0.4;
           let baseX = -0.4;
           let baseHalfHeight = 0.4;
@@ -711,17 +776,58 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     const first = edge.userVertices[0], last = edge.userVertices[edge.userVertices.length - 1];
     const towards = (node: DiagramNode, p: { x: number; y: number }) =>
       boundaryPoint(node, { x: p.x - node.data.position.x, y: p.y - node.data.position.y });
+    // A bend point beside a box (above, below, left or right of it) is met square on, not aimed at
+    // the centre, so a routed edge's last stretch stays straight.
+    const square = (node: DiagramNode, p: { x: number; y: number }) => {
+      // Rows meet edges at their ends (see NodeGeometry); other shapes at their outline.
+      if (isRow(node) || (!isBoxed(node) && !SQUARE_SHAPES.has(node.visual?.shape ?? ''))) return towards(node, p);
+      const b = boxOf(node), left = b.x - b.width / 2, right = b.x + b.width / 2, top = b.y - b.height / 2, bottom = b.y + b.height / 2;
+      if (p.x > left + PORT_INSET && p.x < right - PORT_INSET && (p.y < top || p.y > bottom)) return { x: p.x, y: p.y < top ? top : bottom };
+      if (p.y > top + PORT_INSET && p.y < bottom - PORT_INSET && (p.x < left || p.x > right)) return { x: p.x < left ? left : right, y: p.y };
+      return towards(node, p);
+    };
     if (!sourceNode || (!targetNode && !first)) return null;
     if (!targetNode) return { sourceNode, sourcePoint: towards(sourceNode, first) };
 
-    let sourcePoint = towards(sourceNode, first ?? targetNode.data.position);
-    let targetPoint = towards(targetNode, last ?? sourceNode.data.position);
+    let sourcePoint = first ? square(sourceNode, first) : towards(sourceNode, targetNode.data.position);
+    let targetPoint = last ? square(targetNode, last) : towards(targetNode, sourceNode.data.position);
     if (!first) {
       if (isRow(sourceNode) && !isRow(targetNode)) targetPoint = towards(targetNode, sourcePoint);
       else if (isRow(targetNode) && !isRow(sourceNode)) sourcePoint = towards(sourceNode, targetPoint);
     }
     const port = this.ports.get(edge.id);
     return { sourceNode, targetNode, sourcePoint: port?.source ?? sourcePoint, targetPoint: port?.target ?? targetPoint };
+  }
+
+  /**
+   * The points an edge is drawn through: its ends, and its bend points between. A routed edge
+   * (one with bend points) whose end was moved along a side to make room (see spreadEnds) gets an
+   * elbow there, so its last stretch still meets the side square on rather than at a slant.
+   */
+  private pathOf(edge: FloatingEdge, nodes: DiagramNode[]): Point[] | null {
+    const e = this.endpoints(edge, nodes);
+    if (!e) return null;
+    const points: Point[] = [e.sourcePoint, ...edge.userVertices, ...(e.targetPoint ? [e.targetPoint] : [])];
+    const port = this.ports.get(edge.id);
+    if (!port || edge.userVertices.length === 0 || points.length < 3) return points;
+    const elbow = (end: Point, next: Point, side: Side | undefined): Point | undefined => {
+      // Only when the route comes from outside that side; otherwise the corner could be inside the node.
+      const outside = side === 'top' ? next.y < end.y : side === 'bottom' ? next.y > end.y
+        : side === 'left' ? next.x < end.x : next.x > end.x;
+      if (!side || !outside) return undefined;
+      const across = side === 'top' || side === 'bottom';   // the last stretch runs up or down
+      const corner = across ? { x: end.x, y: next.y } : { x: next.x, y: end.y };
+      return Math.abs(corner.x - next.x) + Math.abs(corner.y - next.y) > 0.5 ? corner : undefined;
+    };
+    if (e.targetPoint && port.target) {
+      const corner = elbow(points[points.length - 1], points[points.length - 2], port.targetSide);
+      if (corner) points.splice(points.length - 1, 0, corner);
+    }
+    if (port.source) {
+      const corner = elbow(points[0], points[1], port.sourceSide);
+      if (corner) points.splice(1, 0, corner);
+    }
+    return points;
   }
 
   /**
@@ -733,8 +839,8 @@ private createMarkerPipeline(format: GPUTextureFormat) {
   private findHops(edges: FloatingEdge[], nodes: DiagramNode[]): Map<string, Point[]> {
     const lines: Array<{ id: string; points: Point[] }> = [];
     for (const edge of edges) {
-      const e = this.endpoints(edge, nodes);
-      if (e?.targetPoint) lines.push({ id: edge.id, points: [e.sourcePoint, ...edge.userVertices, e.targetPoint] });
+      const points = this.endpoints(edge, nodes)?.targetPoint ? this.pathOf(edge, nodes) : null;
+      if (points) lines.push({ id: edge.id, points });
     }
     const segments = lines.flatMap((line, l) => line.points.slice(1).map((b, i) => ({ l, i, a: line.points[i], b })));
     const hops = new Map<string, Point[]>();
@@ -797,7 +903,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
    */
   private spreadEnds(edges: FloatingEdge[], nodes: DiagramNode[]): Map<string, Ports> {
     type End = { edge: string; end: 'source' | 'target'; at: Point; from: Point };
-    const groups = new Map<string, { node: DiagramNode; side: 'left' | 'right' | 'top' | 'bottom'; ends: End[] }>();
+    const groups = new Map<string, { node: DiagramNode; side: Side; ends: End[] }>();
     for (const edge of edges) {
       const e = this.endpoints(edge, nodes);
       if (!e?.targetNode || !e.targetPoint) continue;
@@ -841,6 +947,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         const port = ports.get(end.edge) ?? ports.set(end.edge, {}).get(end.edge)!;
         port[end.end] = at;
         port[end.end === 'source' ? 'sourceRoom' : 'targetRoom'] = step;
+        port[end.end === 'source' ? 'sourceSide' : 'targetSide'] = side;
       });
     }
     return ports;
@@ -853,12 +960,35 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     const ends = this.endpoints(edge, nodes);
     if (!ends) return new Float32Array(0);
     const { sourceNode, targetNode, sourcePoint, targetPoint } = ends;
-    const allVertices = this.hops.get(edge.id) ?? [sourcePoint, ...edge.userVertices, ...(targetPoint ? [targetPoint] : [])];
+    const allVertices = [...(this.hops.get(edge.id) ?? this.pathOf(edge, nodes) ?? [sourcePoint, ...edge.userVertices, ...(targetPoint ? [targetPoint] : [])])];
+
+    // Stop short of hollow markers, so the line doesn't show through them.
+    const port = this.ports.get(edge.id);
+    const trim = (points: Point[], type: MarkerType | undefined, room?: number) => {
+      const extent = type && type !== 'none' ? MARKER_EXTENT[this.getMarkerTypeValue(type)] : undefined;
+      if (!extent || extent.trim === 'none' || points.length < 2) return;
+      const size = Math.min(MARKER_SIZE, (room ?? Infinity) / 2);
+      const cut = 2 * size * (extent.trim === 'back' ? extent.front + extent.back : extent.front);
+      const [end, next] = [points[points.length - 1], points[points.length - 2]];
+      const length = Math.hypot(end.x - next.x, end.y - next.y);
+      if (length <= cut) return;
+      const t = cut / length;
+      points[points.length - 1] = { x: end.x + (next.x - end.x) * t, y: end.y + (next.y - end.y) * t };
+    };
+    if (targetPoint) trim(allVertices, edge.style.targetMarker, port?.targetRoom);
+    allVertices.reverse();
+    trim(allVertices, edge.style.sourceMarker, port?.sourceRoom);
+    allVertices.reverse();
 
     const nesting = nestingOf(nodes);
     const sourceDepth = nesting.depth(sourceNode.id);
     const depth = edgeZ(sourceDepth, targetNode ? nesting.depth(targetNode.id) : sourceDepth);
-    return this.generateLineStripGeometry(allVertices, edge.style, depth);
+    const pieces = edge.style.dashPattern?.length ? dashed(allVertices, edge.style.dashPattern) : [allVertices];
+    const parts = pieces.map(piece => this.generateLineStripGeometry(piece, edge.style, depth));
+    const out = new Float32Array(parts.reduce((n, part) => n + part.length, 0));
+    let offset = 0;
+    for (const part of parts) { out.set(part, offset); offset += part.length; }
+    return out;
   }
   
   private generateMarkerData(
@@ -886,30 +1016,33 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     const { sourceNode, targetNode, sourcePoint, targetPoint } = ends;
     const nesting = nestingOf(nodes);
 
-    const markerSize = 7;
     const port = this.ports.get(edge.id);
-    // A marker sits where the line meets the node, pointing along the line's last stretch into it.
-    // On a side too crowded to space ends a marker apart (a row's end, say), markers shrink to fit.
+    // A marker sits where the line meets the node, its front on the outline, pointing along the
+    // line's last stretch into it. On a side too crowded to space ends a marker apart (a row's end,
+    // say), markers shrink to fit.
     const add = (type: MarkerType, node: DiagramNode, at: { x: number; y: number }, from: { x: number; y: number }, room = Infinity) => {
       const dx = at.x - from.x, dy = at.y - from.y;
       const length = Math.hypot(dx, dy);
       if (length === 0) return;
+      const size = Math.min(MARKER_SIZE, room / 2);
+      const front = 2 * size * (MARKER_EXTENT[this.getMarkerTypeValue(type)]?.front ?? 0);
       markers.push({
-        position: [at.x, at.y],
+        position: [at.x - (dx / length) * front, at.y - (dy / length) * front],
         direction: [dx / length, dy / length],
-        size: Math.min(markerSize, room / 2),
+        size,
         markerType: this.getMarkerTypeValue(type),
         depth: markerZ(nesting.depth(node.id)),
         color: edge.style.color
       });
     };
 
+    const path = this.pathOf(edge, nodes);
     if (edge.style.sourceMarker && edge.style.sourceMarker !== 'none') {
-      const next = edge.userVertices[0] ?? targetPoint;
+      const next = path?.[1] ?? edge.userVertices[0] ?? targetPoint;
       if (next) add(edge.style.sourceMarker, sourceNode, sourcePoint, next, port?.sourceRoom);
     }
     if (targetNode && targetPoint && edge.style.targetMarker && edge.style.targetMarker !== 'none') {
-      const previous = edge.userVertices[edge.userVertices.length - 1] ?? sourcePoint;
+      const previous = path?.[path.length - 2] ?? edge.userVertices[edge.userVertices.length - 1] ?? sourcePoint;
       add(edge.style.targetMarker, targetNode, targetPoint, previous, port?.targetRoom);
     }
 

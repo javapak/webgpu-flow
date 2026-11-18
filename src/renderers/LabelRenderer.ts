@@ -4,6 +4,11 @@ import { Z_LAYERS } from '../utils/DepthConstants';
 import type { DiagramFont } from '../utils/FontLoadUtils';
 import { declutter, labelWorldScale, LABEL_ATLAS_FONT_SIZE, type LabelCandidate } from './LabelScaling';
 import { NEST_HEADER, boxLayout, compartmentOf, headerIcon, isBoxed, isRow, rowLayout } from '../utils/Nesting';
+import { boundaryPoint } from '../utils/NodeGeometry';
+
+/** How far an end label sits along the edge from the node, and off to its side. */
+const END_LABEL_ALONG = 18;
+const END_LABEL_ASIDE = 10;
 
 export interface LabelInstanceData {
   texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
@@ -309,6 +314,24 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
   }
 
   for (const edge of visibleEdges) {
+    // Text at the ends (a role and its multiplicity, say): near the node, beside the line.
+    const source = nodesById.get(edge.sourceNodeId), target = nodesById.get(edge.targetNodeId);
+    const ends: Array<[string, DiagramNode | undefined, { x: number; y: number } | undefined, unknown]> = [
+      ['s', source, edge.userVertices[0] ?? target?.data.position, edge.data?.sourceLabel],
+      ['t', target, edge.userVertices[edge.userVertices.length - 1] ?? source?.data.position, edge.data?.targetLabel],
+    ];
+    for (const [end, node, toward, text] of ends) {
+      if (!node || !toward || typeof text !== 'string' || !text.trim()) continue;
+      const at = boundaryPoint(node, { x: toward.x - node.data.position.x, y: toward.y - node.data.position.y });
+      const length = Math.hypot(toward.x - at.x, toward.y - at.y) || 1;
+      const d = { x: (toward.x - at.x) / length, y: (toward.y - at.y) / length };
+      // To the line's left or right, whichever is up (or left, for a vertical line).
+      let side = { x: d.y, y: -d.x };
+      if (side.y > 0 || (side.y === 0 && side.x > 0)) side = { x: -side.x, y: -side.y };
+      add(`${end}:${edge.id}`, -0.5, text.trim(), edge.style.labelColor || '#ffffff', 'Arial',
+        at.x + d.x * END_LABEL_ALONG + side.x * END_LABEL_ASIDE, at.y + d.y * END_LABEL_ALONG + side.y * END_LABEL_ASIDE);
+    }
+
     const label = edge.data?.label?.trim();
     if (!label) continue;
     let x: number, y: number;
@@ -316,7 +339,6 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       const mid = edge.userVertices[Math.floor(edge.userVertices.length / 2)];
       x = mid.x; y = mid.y;
     } else {
-      const source = nodesById.get(edge.sourceNodeId), target = nodesById.get(edge.targetNodeId);
       if (!source || !target) continue;
       x = (source.data.position.x + target.data.position.x) / 2;
       y = (source.data.position.y + target.data.position.y) / 2;

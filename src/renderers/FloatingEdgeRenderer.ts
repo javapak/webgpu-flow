@@ -1,7 +1,14 @@
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { DiagramEdge, DiagramNode } from '../types';
 import { Z_LAYERS, edgeZ, markerZ } from '../utils/DepthConstants';
-import { isRow, nestingOf } from '../utils/Nesting';
+import { boxOf, isRow, nestingOf } from '../utils/Nesting';
+
+type Point = { x: number; y: number };
+/** An edge's spread ends, and how far apart the ends on their sides are (which limits marker size). */
+type Ports = { source?: Point; target?: Point; sourceRoom?: number; targetRoom?: number };
+/** Closest that ends on one side of a node may sit (a marker is 14 across), and how far from its corners. */
+const PORT_GAP = 16;
+const PORT_INSET = 4;
 import { boundaryPoint } from '../utils/NodeGeometry';
 
 // Marker type definitions
@@ -54,6 +61,8 @@ export interface FloatingEdge {
 }
 
 export class FloatingEdgeRenderer {
+  /** Spread edge ends this frame, by edge ID (see spreadEnds). */
+  private ports = new Map<string, Ports>();
   private device!: GPUDevice;
   private edgeBuffer!: GPUBuffer;
   private markerBuffer!: GPUBuffer;
@@ -695,7 +704,64 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       if (isRow(sourceNode) && !isRow(targetNode)) targetPoint = towards(targetNode, sourcePoint);
       else if (isRow(targetNode) && !isRow(sourceNode)) sourcePoint = towards(sourceNode, targetPoint);
     }
-    return { sourceNode, targetNode, sourcePoint, targetPoint };
+    const port = this.ports.get(edge.id);
+    return { sourceNode, targetNode, sourcePoint: port?.source ?? sourcePoint, targetPoint: port?.target ?? targetPoint };
+  }
+
+  /**
+   * Ends that meet a node on the same side too close together for their markers, spread along
+   * that side (see render). They keep the order their edges arrive in, so the lines don't
+   * cross, and stay as close to where they met as the side allows. Ends with room keep their place.
+   */
+  private spreadEnds(edges: FloatingEdge[], nodes: DiagramNode[]): Map<string, Ports> {
+    type End = { edge: string; end: 'source' | 'target'; at: Point; from: Point };
+    const groups = new Map<string, { node: DiagramNode; side: 'left' | 'right' | 'top' | 'bottom'; ends: End[] }>();
+    for (const edge of edges) {
+      const e = this.endpoints(edge, nodes);
+      if (!e?.targetNode || !e.targetPoint) continue;
+      const next = edge.userVertices[0] ?? e.targetPoint;
+      const previous = edge.userVertices[edge.userVertices.length - 1] ?? e.sourcePoint;
+      const ends: Array<[DiagramNode, End]> = [
+        [e.sourceNode, { edge: edge.id, end: 'source', at: e.sourcePoint, from: next }],
+        [e.targetNode, { edge: edge.id, end: 'target', at: e.targetPoint, from: previous }],
+      ];
+      for (const [node, end] of ends) {
+        const box = boxOf(node);
+        const dx = (end.at.x - box.x) / (box.width / 2), dy = (end.at.y - box.y) / (box.height / 2);
+        const side = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'top' : 'bottom');
+        const key = `${node.id}:${side}`;
+        (groups.get(key) ?? groups.set(key, { node, side, ends: [] }).get(key)!).ends.push(end);
+      }
+    }
+
+    const ports = new Map<string, Ports>();
+    for (const { node, side, ends } of groups.values()) {
+      const vertical = side === 'left' || side === 'right';   // the side runs up and down: spread along y
+      const along = (p: Point) => (vertical ? p.y : p.x);
+      const met = ends.map(e => along(e.at)).sort((a, b) => a - b);
+      if (met.every((v, i) => i === 0 || v - met[i - 1] >= PORT_GAP)) continue;
+
+      const box = boxOf(node);
+      const centre = vertical ? box.y : box.x;
+      const half = Math.max(0, (vertical ? box.height : box.width) / 2 - PORT_INSET);
+      const step = Math.min(PORT_GAP, (2 * half) / (ends.length - 1));
+      const span = step * (ends.length - 1);
+      const mean = met.reduce((a, b) => a + b, 0) / met.length;
+      const first = Math.min(Math.max(mean - span / 2, centre - half), centre + half - span);
+      const edgeLine = side === 'left' ? box.x - box.width / 2 : side === 'right' ? box.x + box.width / 2
+        : side === 'top' ? box.y - box.height / 2 : box.y + box.height / 2;
+
+      [...ends].sort((a, b) => along(a.from) - along(b.from)).forEach((end, i) => {
+        const s = first + i * step;
+        const toward = vertical ? { x: edgeLine, y: s } : { x: s, y: edgeLine };
+        // On the side of the box, then on the node's outline in that direction (a circle's, say).
+        const at = isRow(node) ? toward : boundaryPoint(node, { x: toward.x - box.x, y: toward.y - box.y });
+        const port = ports.get(end.edge) ?? ports.set(end.edge, {}).get(end.edge)!;
+        port[end.end] = at;
+        port[end.end === 'source' ? 'sourceRoom' : 'targetRoom'] = step;
+      });
+    }
+    return ports;
   }
 
   async generateEdgeGeometry(
@@ -739,15 +805,17 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     const nesting = nestingOf(nodes);
 
     const markerSize = 7;
+    const port = this.ports.get(edge.id);
     // A marker sits where the line meets the node, pointing along the line's last stretch into it.
-    const add = (type: MarkerType, node: DiagramNode, at: { x: number; y: number }, from: { x: number; y: number }) => {
+    // On a side too crowded to space ends a marker apart (a row's end, say), markers shrink to fit.
+    const add = (type: MarkerType, node: DiagramNode, at: { x: number; y: number }, from: { x: number; y: number }, room = Infinity) => {
       const dx = at.x - from.x, dy = at.y - from.y;
       const length = Math.hypot(dx, dy);
       if (length === 0) return;
       markers.push({
         position: [at.x, at.y],
         direction: [dx / length, dy / length],
-        size: markerSize,
+        size: Math.min(markerSize, room / 2),
         markerType: this.getMarkerTypeValue(type),
         depth: markerZ(nesting.depth(node.id)),
         color: edge.style.color
@@ -756,11 +824,11 @@ private createMarkerPipeline(format: GPUTextureFormat) {
 
     if (edge.style.sourceMarker && edge.style.sourceMarker !== 'none') {
       const next = edge.userVertices[0] ?? targetPoint;
-      if (next) add(edge.style.sourceMarker, sourceNode, sourcePoint, next);
+      if (next) add(edge.style.sourceMarker, sourceNode, sourcePoint, next, port?.sourceRoom);
     }
     if (targetNode && targetPoint && edge.style.targetMarker && edge.style.targetMarker !== 'none') {
       const previous = edge.userVertices[edge.userVertices.length - 1] ?? sourcePoint;
-      add(edge.style.targetMarker, targetNode, targetPoint, previous);
+      add(edge.style.targetMarker, targetNode, targetPoint, previous, port?.targetRoom);
     }
 
     return markers;
@@ -782,6 +850,11 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     let bufferOffset = 0;
     let totalVertices = 0;
     const allMarkers: Array<any> = [];
+
+    // Edge ends that would crowd one spot on a node's side get their own places on it, so markers
+    // (an arrow and a diamond, say) don't overlap. Worked out once per frame, from the plain ends.
+    this.ports = new Map();
+    this.ports = this.spreadEnds(edges, nodes);
     
     // Render regular edges
     for (const edge of edges) {

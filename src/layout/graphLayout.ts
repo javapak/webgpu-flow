@@ -1,6 +1,7 @@
 import ELK, { type ElkNode, type ElkExtendedEdge, type LayoutOptions as ElkOptions } from 'elkjs/lib/elk-api';
 import type { DiagramNode, DiagramEdge } from '../types';
 import { nestingOf } from '../utils/Nesting';
+import { routeEdges, type RouteNode } from './edgeRouter';
 
 export type LayoutAlgorithm = 'layered' | 'tree' | 'radial' | 'stress' | 'force' | 'box';
 export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
@@ -350,7 +351,23 @@ export async function computeLayout(
     if (to) positions.set(n.id, { x: n.data.position.x + to.x - r.data.position.x, y: n.data.position.y + to.y - r.data.position.y });
   }
   const edgeVertices = new Map<string, Point2D[]>(edges.map(e => [e.id, direct.includes(e) ? flat.edgeVertices.get(e.id) ?? [] : []]));
+  // Edges into containers: route them now that what's inside is in place too.
+  if (options.edgeRouting !== 'STRAIGHT') {
+    const placed = routeNodes(nodes, positions);
+    const nested = edges.filter(e => !direct.includes(e) && e.sourceNodeId !== e.targetNodeId);
+    for (const [id, vertices] of routeEdges(placed, nested.map(e => ({ id: e.id, source: e.sourceNodeId, target: e.targetNodeId })))) {
+      edgeVertices.set(id, vertices);
+    }
+  }
   return { positions, edgeVertices };
+}
+
+/** Nodes as the edge router sees them: their boxes where the layout put them. */
+function routeNodes(nodes: DiagramNode[], positions: Map<string, Point2D>): RouteNode[] {
+  return nodes.flatMap(n => {
+    const p = positions.get(n.id);
+    return p ? [{ id: n.id, ...p, ...sizeOf(n), parentId: n.parentId, row: n.visual?.presentation === 'row' }] : [];
+  });
 }
 
 async function computeFlatLayout(
@@ -415,6 +432,13 @@ async function computeFlatLayout(
   const ox = (minX + maxX) / 2, oy = (minY + maxY) / 2;
   const toWorld = (p: Point2D): Point2D => ({ x: p.x - ox, y: p.y - oy });
   positions = new Map([...positions].map(([id, p]) => [id, toWorld(p)]));
+
+  // Only layered routes its edges; route the others' around the nodes.
+  if (options.algorithm !== 'layered' && options.edgeRouting !== 'STRAIGHT') {
+    const placed = routeNodes(nodes, positions);
+    const edgeRoutes = routeEdges(placed, usableEdges.map(e => ({ id: e.id, source: e.sourceNodeId, target: e.targetNodeId })));
+    for (const [id, vertices] of edgeRoutes) edgeVertices.set(id, vertices);
+  }
 
   const edgesById = new Map(usableEdges.map(e => [e.id, e]));
   for (const [id, route] of routes) {

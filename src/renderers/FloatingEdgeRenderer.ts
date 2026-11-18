@@ -9,6 +9,20 @@ type Ports = { source?: Point; target?: Point; sourceRoom?: number; targetRoom?:
 /** Closest that ends on one side of a node may sit (a marker is 14 across), and how far from its corners. */
 const PORT_GAP = 16;
 const PORT_INSET = 4;
+/** A hop's half-width (and height), the segments its arc is drawn with, and where finding them stops. */
+const HOP_RADIUS = 6;
+const HOP_STEPS = 8;
+const MAX_HOP_SEGMENTS = 3000;
+
+/** Where segments ab and cd cross, as fractions along each, strictly inside both; null if they don't. */
+function crossing(a: Point, b: Point, c: Point, d: Point): { t: number; u: number } | null {
+  const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+  const denom = rx * sy - ry * sx;
+  if (Math.abs(denom) < 1e-9) return null;   // parallel
+  const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / denom;
+  const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / denom;
+  return t > 0 && t < 1 && u > 0 && u < 1 ? { t, u } : null;
+}
 import { boundaryPoint } from '../utils/NodeGeometry';
 
 // Marker type definitions
@@ -61,6 +75,8 @@ export interface FloatingEdge {
 }
 
 export class FloatingEdgeRenderer {
+  /** Lines with hops this frame, by edge ID (see findHops). */
+  private hops = new Map<string, Point[]>();
   /** Spread edge ends this frame, by edge ID (see spreadEnds). */
   private ports = new Map<string, Ports>();
   private device!: GPUDevice;
@@ -709,6 +725,72 @@ private createMarkerPipeline(format: GPUTextureFormat) {
   }
 
   /**
+   * Where edges cross, one hops over the other with a small arc, as in circuit diagrams, so a
+   * crossing never reads as a junction. The more horizontal line hops (the later edge, if they're
+   * as steep); the arc bulges up, or to the same side on slanted lines. Crossings near a corner or
+   * an end are left alone. Returns the lines of the edges that hop, with their arcs, by edge ID.
+   */
+  private findHops(edges: FloatingEdge[], nodes: DiagramNode[]): Map<string, Point[]> {
+    const lines: Array<{ id: string; points: Point[] }> = [];
+    for (const edge of edges) {
+      const e = this.endpoints(edge, nodes);
+      if (e?.targetPoint) lines.push({ id: edge.id, points: [e.sourcePoint, ...edge.userVertices, e.targetPoint] });
+    }
+    const segments = lines.flatMap((line, l) => line.points.slice(1).map((b, i) => ({ l, i, a: line.points[i], b })));
+    const hops = new Map<string, Point[]>();
+    if (segments.length > MAX_HOP_SEGMENTS) return hops;
+
+    // Where along each hopping segment (0..1) its hops are, by line and segment.
+    const at = new Map<string, number[]>();
+    for (let s = 0; s < segments.length; s++) {
+      for (let k = s + 1; k < segments.length; k++) {
+        const p = segments[s], q = segments[k];
+        if (p.l === q.l) continue;
+        const cross = crossing(p.a, p.b, q.a, q.b);
+        if (!cross) continue;
+        const steep = (g: typeof p) => Math.abs(g.b.y - g.a.y) / (Math.abs(g.b.x - g.a.x) + Math.abs(g.b.y - g.a.y));
+        const hopper = steep(p) < steep(q) ? { g: p, t: cross.t } : { g: q, t: cross.u };
+        const length = Math.hypot(hopper.g.b.x - hopper.g.a.x, hopper.g.b.y - hopper.g.a.y);
+        // Not where the hop would run into a corner or an end.
+        if (hopper.t * length < 2 * HOP_RADIUS || (1 - hopper.t) * length < 2 * HOP_RADIUS) continue;
+        const key = `${hopper.g.l}:${hopper.g.i}`;
+        (at.get(key) ?? at.set(key, []).get(key)!).push(hopper.t);
+      }
+    }
+    if (at.size === 0) return hops;
+
+    lines.forEach((line, l) => {
+      if (![...at.keys()].some(k => k.startsWith(`${l}:`))) return;
+      const out: Point[] = [line.points[0]];
+      for (let i = 1; i < line.points.length; i++) {
+        const a = line.points[i - 1], b = line.points[i];
+        const length = Math.hypot(b.x - a.x, b.y - a.y);
+        const d = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+        // The side the arc bulges to: up, or for a vertical line, left.
+        let normal = { x: d.y, y: -d.x };
+        if (normal.y > 0 || (normal.y === 0 && normal.x > 0)) normal = { x: -normal.x, y: -normal.y };
+        let last = -Infinity;
+        for (const t of (at.get(`${l}:${i - 1}`) ?? []).sort((x, y) => x - y)) {
+          const s = t * length;
+          if (s - last < 2.5 * HOP_RADIUS) continue;   // too close to the previous hop: one is enough
+          last = s;
+          const c = { x: a.x + d.x * s, y: a.y + d.y * s };
+          for (let j = 0; j <= HOP_STEPS; j++) {
+            const phi = (Math.PI * j) / HOP_STEPS;
+            out.push({
+              x: c.x - d.x * HOP_RADIUS * Math.cos(phi) + normal.x * HOP_RADIUS * Math.sin(phi),
+              y: c.y - d.y * HOP_RADIUS * Math.cos(phi) + normal.y * HOP_RADIUS * Math.sin(phi),
+            });
+          }
+        }
+        out.push(b);
+      }
+      hops.set(line.id, out);
+    });
+    return hops;
+  }
+
+  /**
    * Ends that meet a node on the same side too close together for their markers, spread along
    * that side (see render). They keep the order their edges arrive in, so the lines don't
    * cross, and stay as close to where they met as the side allows. Ends with room keep their place.
@@ -771,7 +853,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     const ends = this.endpoints(edge, nodes);
     if (!ends) return new Float32Array(0);
     const { sourceNode, targetNode, sourcePoint, targetPoint } = ends;
-    const allVertices = [sourcePoint, ...edge.userVertices, ...(targetPoint ? [targetPoint] : [])];
+    const allVertices = this.hops.get(edge.id) ?? [sourcePoint, ...edge.userVertices, ...(targetPoint ? [targetPoint] : [])];
 
     const nesting = nestingOf(nodes);
     const sourceDepth = nesting.depth(sourceNode.id);
@@ -855,6 +937,9 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     // (an arrow and a diamond, say) don't overlap. Worked out once per frame, from the plain ends.
     this.ports = new Map();
     this.ports = this.spreadEnds(edges, nodes);
+    // Then crossings: the lines that hop over others, drawn with their arcs.
+    this.hops = new Map();
+    this.hops = this.findHops(edges, nodes);
     
     // Render regular edges
     for (const edge of edges) {

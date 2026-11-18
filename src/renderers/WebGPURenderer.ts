@@ -2,7 +2,8 @@
 import type { DiagramEdge, DiagramNode, Viewport } from '../types';
 import { LabelRenderer } from './LabelRenderer';
 import { VisualContentRenderer } from './VisualContentRenderer';
-import { Z_LAYERS } from '../utils/DepthConstants';
+import { Z_LAYERS, nodeZ } from '../utils/DepthConstants';
+import { ROW_ICON, boxLayout, boxShapeOf, headerIcon, isBoxed, isRow, nestingOf, rowLayout } from '../utils/Nesting';
 import { FloatingEdgeRenderer } from './FloatingEdgeRenderer';
 import { resizeHandles } from '../utils/NodeGeometry';
 import GPUCapabilities from '../utils/GPUCapabilities';
@@ -19,7 +20,7 @@ interface NodeInstanceData {
   color: [number, number, number, number];
   isSelected: number; // 0 or 1
   shapeType: number;
-  padding: [number, number, number]; // padding for alignment
+  depth: number;      // z, from the node's nesting depth
 }
 
 interface HandleInstanceData {
@@ -501,7 +502,8 @@ private createIntermediateTexture(width: number, height: number) {
         color: vec4<f32>,
         isSelected: f32,
         shapeType: f32,
-        padding: vec3<f32>,
+        depth: f32,               // z of the node's nesting band
+        padding: vec2<f32>,
       }
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -542,7 +544,7 @@ private createIntermediateTexture(width: number, height: number) {
         
         var output: VertexOutput;
         // Apply view-projection matrix
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.NODES}, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, node.depth, 1.0);
         output.color = node.color;
         output.uv = uvs[vertexIndex];
         output.isSelected = node.isSelected;
@@ -1232,32 +1234,92 @@ private createIntermediateTexture(width: number, height: number) {
 
       // Prepare node instance data
       const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
-      const nodeData: NodeInstanceData[] = visibleNodes.map(node => {
+      // Containers first, so a child's antialiased edge blends over its container, not the grid.
+      const nesting = nestingOf(visibleNodes);
+      const byDepth = [...visibleNodes].sort((a, b) => nesting.depth(a.id) - nesting.depth(b.id));
+      const nodeData: NodeInstanceData[] = byDepth.flatMap((node): NodeInstanceData[] => {
         if (!node.data || !node.data.position) {
           console.warn('Invalid node structure:', node);
-          return null;
+          return [];
         }
         
         let color = this.hexToRgba(node.visual?.color || '#3b82f6');
         const size = node.visual?.size || { width: 100, height: 60 };
+        const depth = nodeZ(nesting.depth(node.id));
+        const isSelected = selectedNodeIds.has(node.id) ? 1 : 0;
         
+        if (isRow(node)) {
+          // A faint bar in the kind's colour, and the kind's shape as an icon at its left
+          // (SVG, image and emoji icons are drawn by the visual renderer instead).
+          const bar: NodeInstanceData = {
+            position: [node.data.position.x, node.data.position.y],
+            size: [size.width, size.height],
+            color: [color.r, color.g, color.b, color.a * 0.2],
+            shapeType: SHAPE_TYPES.roundedRectangle,
+            isSelected,
+            depth,
+          };
+          const shapeType = SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES];
+          const drawsVisual = node.visual?.visualContent || node.visual?.icon || node.data?.emoji || node.data?.icon;
+          if (shapeType === undefined || node.visual?.shape === 'none' || drawsVisual) return [bar];
+          const { icon } = rowLayout(node);
+          return [bar, {
+            position: [icon.x, icon.y],
+            size: [ROW_ICON, ROW_ICON],
+            color: [color.r, color.g, color.b, color.a],
+            shapeType,
+            isSelected: 0,
+            depth: depth + 0.001,   // over the bar, under the band's visual content
+          }];
+        }
+
+        if (isBoxed(node)) {
+          // A box in the kind's colour, divided under the header (and between compartment and
+          // children); a kind shape that isn't a box is drawn small at the header's left.
+          const body: NodeInstanceData = {
+            position: [node.data.position.x, node.data.position.y],
+            size: [size.width, size.height],
+            color: [color.r, color.g, color.b, color.a],
+            shapeType: SHAPE_TYPES[boxShapeOf(node.visual?.shape) as keyof typeof SHAPE_TYPES],
+            isSelected,
+            depth,
+          };
+          const layout = boxLayout(node);
+          const dividers = layout.dividers.map((y): NodeInstanceData => ({
+            position: [node.data.position.x, y],
+            size: [size.width, 1.5],
+            color: [0, 0, 0, 0.25],
+            shapeType: SHAPE_TYPES.rectangle,
+            isSelected: 0,
+            depth: depth + 0.001,
+          }));
+          if (headerIcon(node) !== 'shape') return [body, ...dividers];
+          const ink = this.hexToRgba(node.visual?.labelColor || '#ffffff');
+          return [body, ...dividers, {
+            position: [layout.icon.x, layout.icon.y],
+            size: [ROW_ICON, ROW_ICON],
+            color: [ink.r, ink.g, ink.b, ink.a],
+            shapeType: SHAPE_TYPES[node.visual!.shape as keyof typeof SHAPE_TYPES] ?? 0,
+            isSelected: 0,
+            depth: depth + 0.001,
+          }];
+        }
+
         let shapeType = SHAPE_TYPES[node.visual?.shape as keyof typeof SHAPE_TYPES] ?? 0;
         if (node.visual?.shape === 'none') {
           color = this.hexToRgba('#00000000');
           shapeType = 10;
         }
 
-        const isSelected = selectedNodeIds.has(node.id) ? 1 : 0;
-        
-        return {
+        return [{
           position: [node.data.position.x, node.data.position.y],
           size: [size.width, size.height],
           color: [color.r, color.g, color.b, color.a],
           shapeType,
           isSelected,
-          padding: [0, 0, 0],
-        };
-      }).filter(Boolean) as NodeInstanceData[];
+          depth,
+        }];
+      });
 
       const commandEncoder = WebGPURenderer.device.createCommandEncoder();
 
@@ -1320,9 +1382,9 @@ private createIntermediateTexture(width: number, height: number) {
           flatNodeData[offset + 7] = node.color[3];
           flatNodeData[offset + 8] = node.isSelected;
           flatNodeData[offset + 9] = node.shapeType;
-          flatNodeData[offset + 10] = node.padding[0];
-          flatNodeData[offset + 11] = node.padding[1];
-          flatNodeData[offset + 12] = node.padding[2];
+          flatNodeData[offset + 10] = node.depth;
+          flatNodeData[offset + 11] = 0;
+          flatNodeData[offset + 12] = 0;
           flatNodeData[offset + 13] = 0;
           flatNodeData[offset + 14] = 0;
           flatNodeData[offset + 15] = 0;

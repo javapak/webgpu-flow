@@ -1,17 +1,24 @@
 import type { DiagramNode } from '../types';
 import { VisualContentAtlas } from './VisualContentAtlas';
-import { Z_LAYERS } from '../utils/DepthConstants';
+import { visualZ } from '../utils/DepthConstants';
 import { setContentMask } from '../utils/NodeGeometry';
+import { NEST_HEADER, ROW_ICON, boxLayout, isBoxed, isRow, nestingOf, rowLayout } from '../utils/Nesting';
 
 /** World size of an icon drawn on a shape (a 64 px raster at 0.7 world units per pixel, as before). */
 const ICON_WORLD_SIZE = 44.8;
+/** An icon in a container's header; the quad includes the atlas entry's padding. */
+const HEADER_ICON_WORLD_SIZE = NEST_HEADER * 0.9;
 
 export interface VisualInstanceData {
   texCoords: [number, number, number, number];
   color: [number, number, number, number];
   position: [number, number];
   size: [number, number];
+  depth: number;      // z, from the node's nesting depth
 }
+
+/** 16 floats (64 bytes) per instance, matching VisualData in the shader. */
+const FLOATS_PER_VISUAL = 16;
 
 export class VisualContentRenderer {
   private device: GPUDevice;
@@ -57,7 +64,7 @@ export class VisualContentRenderer {
 
   private async setupVisualRenderPipeline() {
     this.visualBuffer = this.device.createBuffer({
-      size: 1000 * 48,
+      size: 1000 * FLOATS_PER_VISUAL * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -72,6 +79,7 @@ export class VisualContentRenderer {
         @align(16) color: vec4<f32>,
         @align(8) position: vec2<f32>,
         @align(8) size: vec2<f32>,
+        depth: f32,               // z of the node's nesting band
       }
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -108,7 +116,7 @@ export class VisualContentRenderer {
         let atlasUV = mix(visual.texCoords.xy, visual.texCoords.zw, uv);
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${Z_LAYERS.VISUALS}, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, visual.depth, 1.0);
         output.uv = atlasUV;
         output.color = visual.color;
         
@@ -229,12 +237,14 @@ export class VisualContentRenderer {
 
   async prepareVisualData(visibleNodes: DiagramNode[]): Promise<VisualInstanceData[]> {
     
+    // Shallowest first, like the node bodies, so nested content blends over its container's.
+    const nesting = nestingOf(visibleNodes);
     const nodesWithVisuals = visibleNodes.filter(node => 
       node.visual?.visualContent || 
       node.visual?.icon || 
       node.data?.emoji || 
       node.data?.icon
-    );
+    ).sort((a, b) => nesting.depth(a.id) - nesting.depth(b.id));
 
 
     if (nodesWithVisuals.length === 0) {
@@ -298,16 +308,28 @@ export class VisualContentRenderer {
         // a fixed size, whatever resolution it was rasterised at.
         let visualWorldWidth = ICON_WORLD_SIZE;
         let visualWorldHeight = ICON_WORLD_SIZE;
+        let visualX = node.data.position.x;
+        let visualY = node.data.position.y;
         const visualContent = node.visual?.visualContent;
-        if (visualContent && node.visual?.shape === 'none' && node.visual.size) {
+        if (isRow(node)) {
+          // A row shows its content as the icon at its left (see Nesting).
+          const { icon } = rowLayout(node);
+          const scale = atlasEntry.width / (atlasEntry.width - 2 * atlasEntry.padding);
+          visualWorldWidth = visualWorldHeight = ROW_ICON * scale;
+          visualX = icon.x;
+          visualY = icon.y;
+        } else if (isBoxed(node)) {
+          // A boxed node's icon goes in its header, left of the label, clear of what's below.
+          const { icon } = boxLayout(node);
+          visualWorldWidth = visualWorldHeight = HEADER_ICON_WORLD_SIZE;
+          visualX = icon.x;
+          visualY = icon.y;
+        } else if (visualContent && node.visual?.shape === 'none' && node.visual.size) {
           const scale = atlasEntry.width / (atlasEntry.width - 2 * atlasEntry.padding);
           visualWorldWidth = node.visual.size.width * scale;
           visualWorldHeight = node.visual.size.height * scale;
           if (atlasEntry.mask) setContentMask(visualContent, atlasEntry.mask);
         }
-
-        const visualX = node.data.position.x;
-        const visualY = node.data.position.y;
 
         const atlasSize = this.visualAtlas.getAtlasSize();
         const u1 = atlasEntry.x / atlasSize;
@@ -319,7 +341,8 @@ export class VisualContentRenderer {
           texCoords: [u1, v1, u2, v2],
           color: tintColor as [number, number, number, number],
           position: [visualX, visualY],
-          size: [visualWorldWidth, visualWorldHeight]
+          size: [visualWorldWidth, visualWorldHeight],
+          depth: visualZ(nesting.depth(node.id)),
         });
 
 
@@ -341,9 +364,9 @@ export class VisualContentRenderer {
     this.updateBindGroup();
 
 
-    const flatVisualData = new Float32Array(visualData.length * 12);
+    const flatVisualData = new Float32Array(visualData.length * FLOATS_PER_VISUAL);
     visualData.forEach((visual, i) => {
-      const offset = i * 12;
+      const offset = i * FLOATS_PER_VISUAL;
       flatVisualData[offset + 0] = visual.texCoords[0];
       flatVisualData[offset + 1] = visual.texCoords[1];
       flatVisualData[offset + 2] = visual.texCoords[2];
@@ -356,9 +379,10 @@ export class VisualContentRenderer {
       flatVisualData[offset + 9] = visual.position[1];
       flatVisualData[offset + 10] = visual.size[0];
       flatVisualData[offset + 11] = visual.size[1];
+      flatVisualData[offset + 12] = visual.depth;
     });
 
-    const requiredSize = visualData.length * 48;
+    const requiredSize = flatVisualData.byteLength;
     if (requiredSize > this.visualBuffer.size) {
       this.visualBuffer.destroy();
       this.visualBuffer = this.device.createBuffer({

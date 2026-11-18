@@ -10,6 +10,7 @@
  */
 import type { DiagramNode } from '../types';
 import type { ResizeHandle } from './MouseInteractions';
+import { boxShapeOf, isBoxed } from './Nesting';
 
 type Point = { x: number; y: number };
 
@@ -48,6 +49,12 @@ export function boundaryPoint(node: DiagramNode, direction: Point): Point {
   const exit = Math.min(dx === 0 ? Infinity : hw / Math.abs(dx), dy === 0 ? Infinity : hh / Math.abs(dy));
   const at = (t: number) => ({ x: center.x + dx * t, y: center.y + dy * t });
 
+  // A row (see Nesting) is met at its left or right end, whichever faces the direction, so an
+  // edge never runs over the rows above or below it.
+  if (node.visual?.presentation === 'row') {
+    return { x: center.x + (dx < 0 ? -1 : 1) * hw * 0.95, y: center.y };
+  }
+
   const inside = insideTest(node);
   if (!inside) return at(exit);
   const hit = (t: number) => inside((dx * t) / hw, (dy * t) / hh);
@@ -73,8 +80,9 @@ const HANDLE_DIRECTIONS: Array<{ handle: Exclude<ResizeHandle, 'none'>; sx: numb
   { handle: 'sw', sx: -1, sy: 1 }, { handle: 'w', sx: -1, sy: 0 },
 ];
 
-/** Resize handles on the node's outline, one per direction. */
+/** Resize handles on the node's outline, one per direction; none for a node sized by its container or contents. */
 export function resizeHandles(node: DiagramNode): Array<{ handle: Exclude<ResizeHandle, 'none'>; x: number; y: number }> {
+  if (node.visual?.resizable === false) return [];
   const { width, height } = sizeOf(node);
   return HANDLE_DIRECTIONS.map(({ handle, sx, sy }) => ({
     handle,
@@ -86,9 +94,20 @@ function sizeOf(node: DiagramNode): { width: number; height: number } {
   return node.visual?.size ?? node.data.size ?? { width: 100, height: 60 };
 }
 
+/**
+ * The shape the node's body is drawn with: its own, except that a row (see
+ * Nesting) is a rounded bar and a boxed node a box, which show their shape
+ * as an icon.
+ */
+export function bodyShape(node: DiagramNode): string {
+  if (node.visual?.presentation === 'row') return 'roundedRectangle';
+  if (isBoxed(node)) return boxShapeOf(node.visual?.shape);
+  return node.visual?.shape ?? 'rectangle';
+}
+
 /** The node's inside test, or null when it fills its box. */
 function insideTest(node: DiagramNode): Inside | null {
-  const shape = node.visual?.shape ?? 'rectangle';
+  const shape = bodyShape(node);
   if (shape === 'none') {
     const content = node.visual?.visualContent;
     const mask = content && masks.get(maskKey(content));

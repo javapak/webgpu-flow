@@ -15,6 +15,9 @@ export { DiagramProvider, useDiagram, type DiagramContextValue } from './compone
 export { DiagramCanvas } from './components/DiagramCanvas';
 export { useRenderSettings, type Resolution } from './state/renderSettings';
 
+// Automatic layout (DiagramProvider's applyLayout)
+export { setLayoutWorker, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutAlgorithm, type LayoutDirection, type EdgeRouting } from './layout/graphLayout';
+
 // Palette
 export { default as NodePalette } from './components/NodePalette';
 export { DEFAULT_PALETTE, createNodeFromTemplate, type NodeTemplate } from './utils/NodeTemplates';

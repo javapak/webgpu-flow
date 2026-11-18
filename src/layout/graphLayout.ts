@@ -1,5 +1,6 @@
 import ELK, { type ElkNode, type ElkExtendedEdge, type LayoutOptions as ElkOptions } from 'elkjs/lib/elk-api';
 import type { DiagramNode, DiagramEdge } from '../types';
+import { nestingOf } from '../utils/Nesting';
 
 export type LayoutAlgorithm = 'layered' | 'tree' | 'radial' | 'stress' | 'force' | 'box';
 export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
@@ -38,11 +39,20 @@ const COMPONENT_GAP = 200;
 
 // Created lazily so importing this module (e.g. from tests) doesn't spawn a worker.
 let elk: InstanceType<typeof ELK> | null = null;
-const getElk = () =>
-  (elk ??= new ELK({
-    workerFactory: () =>
-      new Worker(new URL('elkjs/lib/elk-worker.min.js', import.meta.url)),
-  }));
+// ELK's worker as Vite bundles it.
+let workerFactory = () => new Worker(new URL('elkjs/lib/elk-worker.min.js', import.meta.url));
+const getElk = () => (elk ??= new ELK({ workerFactory: () => workerFactory() }));
+
+/**
+ * Where layouts run, for hosts that don't bundle with Vite or only allow some
+ * workers (a VS Code webview allows `blob:` ones): a factory for a worker
+ * running elkjs/lib/elk-worker.min.js. Takes effect from the next layout.
+ */
+export function setLayoutWorker(factory: () => Worker): void {
+  workerFactory = factory;
+  elk?.terminateWorker();
+  elk = null;
+}
 
 const ALGORITHM_IDS: Record<LayoutAlgorithm, string> = {
   layered: 'layered',
@@ -307,10 +317,46 @@ function removeOverlaps(positions: Map<string, Point2D>, sizes: Map<string, Size
   }
 }
 
+/**
+ * Lays out the top-level nodes; a container's nodes keep their places in it
+ * and move with it (see utils/Nesting). Edges into containers count as edges
+ * of the top-level nodes holding their ends, and lose their bend points.
+ */
 export async function computeLayout(
   nodes: DiagramNode[],
   edges: DiagramEdge[],
   options: LayoutOptions = DEFAULT_LAYOUT_OPTIONS,
+): Promise<LayoutResult> {
+  const nesting = nestingOf(nodes);
+  if (!nodes.some(n => nesting.depth(n.id) > 0)) return computeFlatLayout(nodes, edges, options);
+
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const root = (id: string): string => {
+    let node = byId.get(id);
+    for (let p = node && nesting.parent(node.id); p; p = nesting.parent(p.id)) node = p;
+    return node?.id ?? id;
+  };
+  const topLevel = nodes.filter(n => nesting.depth(n.id) === 0);
+  const direct = edges.filter(e => root(e.sourceNodeId) === e.sourceNodeId && root(e.targetNodeId) === e.targetNodeId);
+  const lifted = edges.filter(e => !direct.includes(e))
+    .map(e => ({ ...e, id: `${e.id} (lifted)`, sourceNodeId: root(e.sourceNodeId), targetNodeId: root(e.targetNodeId), userVertices: [] }))
+    .filter(e => e.sourceNodeId !== e.targetNodeId);
+  const flat = await computeFlatLayout(topLevel, [...direct, ...lifted], options);
+
+  const positions = new Map(flat.positions);
+  for (const n of nodes) {
+    if (positions.has(n.id)) continue;
+    const r = byId.get(root(n.id))!, to = flat.positions.get(r.id);
+    if (to) positions.set(n.id, { x: n.data.position.x + to.x - r.data.position.x, y: n.data.position.y + to.y - r.data.position.y });
+  }
+  const edgeVertices = new Map<string, Point2D[]>(edges.map(e => [e.id, direct.includes(e) ? flat.edgeVertices.get(e.id) ?? [] : []]));
+  return { positions, edgeVertices };
+}
+
+async function computeFlatLayout(
+  nodes: DiagramNode[],
+  edges: DiagramEdge[],
+  options: LayoutOptions,
 ): Promise<LayoutResult> {
   const edgeVertices = new Map<string, Point2D[]>(edges.map(e => [e.id, []]));
   if (nodes.length === 0) return { positions: new Map(), edgeVertices };

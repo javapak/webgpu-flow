@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { InteractionMode, useDiagram } from './DiagramProvider';
 import { MouseInteractions, type ResizeHandle } from '../utils/MouseInteractions';
 import { TEMPLATE_MIME, type NodeTemplate } from '../utils/NodeTemplates';
+import type { DiagramNode } from '../types';
 import {
   clampZoom, distance, fitContain, midpoint, pinchView, wheelZoomFactor, zoomAbout,
   type Point, type View,
@@ -212,8 +213,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     resizeHandle?: ResizeHandle,
     edgeId?: string,
     vertexIndex?: number,
+    node?: DiagramNode,
   ) => {
-    startDrag(type, pos, resizeHandle, edgeId, vertexIndex);
+    startDrag(type, pos, resizeHandle, edgeId, vertexIndex, node);
     dragPointerRef.current = pointerId;
     pendingRef.current = type === 'viewport'
       ? null
@@ -315,7 +317,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         clearSelection();
         selectNode(topNode);
       }
-      beginDrag('node', pos, e.pointerId, e.pointerType);
+      // Pass the node: if this press selected it, the selection isn't committed yet.
+      beginDrag('node', pos, e.pointerId, e.pointerType, undefined, undefined, undefined, topNode);
       onNodeClick?.(topNode);
       return;
     }

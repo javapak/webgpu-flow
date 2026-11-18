@@ -35,6 +35,8 @@ export interface LabelCandidate {
   y: number;
   width: number;
   height: number;
+  /** Space kept around it in CSS px, instead of declutter's; 0 for text the layout already spaces (compartment lines). */
+  padding?: number;
 }
 
 /**
@@ -53,8 +55,9 @@ export function declutter(candidates: LabelCandidate[], zoom: number, paddingPx 
 
   for (const { c } of order) {
     // Glyph quads include vertical padding; collide on roughly the visible text height.
-    const halfW = (c.width * zoom) / 2 + paddingPx;
-    const halfH = (c.height * zoom * 0.6) / 2 + paddingPx;
+    const pad = c.padding ?? paddingPx;
+    const halfW = (c.width * zoom) / 2 + pad;
+    const halfH = (c.height * zoom * 0.6) / 2 + pad;
     const box = { x0: c.x * zoom - halfW, y0: c.y * zoom - halfH, x1: c.x * zoom + halfW, y1: c.y * zoom + halfH };
 
     const cx0 = Math.floor(box.x0 / CELL), cx1 = Math.floor(box.x1 / CELL);

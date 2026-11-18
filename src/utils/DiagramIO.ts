@@ -65,6 +65,13 @@ export function parseDiagram(json: unknown): ParseResult {
     doc.nodes.push(node);
   }
 
+  for (const node of doc.nodes) {
+    if (node.parentId && !ids.has(node.parentId)) {
+      problems.push(`node "${node.id}": unknown parentId "${node.parentId}", drawn at the top level`);
+      delete node.parentId;
+    }
+  }
+
   const edgeIds = new Set<string>();
   for (const [i, raw] of arrayOf(json.edges, 'edges', problems).entries()) {
     const edge = parseEdge(raw, `edges[${i}]`, problems);
@@ -102,7 +109,7 @@ export function serializeDiagram(diagram: { nodes: DiagramNode[]; edges: Diagram
       const { velocity, ...data } = node.data;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { selected, cacheKey, ...visual } = node.visual ?? {};
-      return structuredClone({ id: node.id, type: node.type, data, visual });
+      return structuredClone({ id: node.id, type: node.type, ...(node.parentId ? { parentId: node.parentId } : {}), data, visual });
     }),
     edges: diagram.edges.map(edge => structuredClone({
       id: edge.id,
@@ -138,6 +145,7 @@ function parseNode(raw: unknown, at: string, problems: string[]): DiagramNode | 
   return {
     id: raw.id,
     type: typeof raw.type === 'string' ? raw.type : 'default',
+    ...(typeof raw.parentId === 'string' && raw.parentId ? { parentId: raw.parentId } : {}),
     data: data as DiagramNode['data'],
     visual,
   };

@@ -46,6 +46,8 @@ export const GPUColorWrite = {
 export interface DiagramNode {
   id: string;
   type: string;
+  /** The node this one is drawn inside (see utils/Nesting). */
+  parentId?: string;
   data: {
     position: { x: number; y: number };
     size?: { width: number; height: number };
@@ -107,6 +109,10 @@ export interface InteractionState {
     resizeHandle?: ResizeHandle;
     originalSize?: { width: number; height: number };
     originalPosition?: { x: number; y: number };
+    /** The node being moved or resized. */
+    node?: DiagramNode;
+    /** Nodes inside the dragged one, which move with it, and where they started. */
+    carried?: Array<{ node: DiagramNode; from: Point }>;
     // Edge vertex drag properties
     edgeId?: string;
     vertexIndex?: number;

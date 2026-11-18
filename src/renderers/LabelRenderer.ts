@@ -3,6 +3,7 @@ import type { DiagramEdge, DiagramNode, Viewport } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
 import type { DiagramFont } from '../utils/FontLoadUtils';
 import { declutter, labelWorldScale, LABEL_ATLAS_FONT_SIZE, type LabelCandidate } from './LabelScaling';
+import { NEST_HEADER, boxLayout, compartmentOf, headerIcon, isBoxed, isRow, rowLayout } from '../utils/Nesting';
 
 export interface LabelInstanceData {
   texCoords: [number, number, number, number]; // UV coordinates in atlas (u1, v1, u2, v2)
@@ -250,15 +251,23 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
   const candidates: LabelCandidate[] = [];
   const instances = new Map<string, LabelInstanceData>();
 
-  const add = (id: string, priority: number, text: string, color: string, fontFamily: DiagramFont, x: number, y: number) => {
+  /**
+   * `x` is the label's centre, or its left or right end for those anchors; `alpha` fades it.
+   * `spaced` text is laid out on its own lines (rows, compartments), so it needs no padding to keep apart.
+   */
+  const add = (id: string, priority: number, text: string, color: string, fontFamily: DiagramFont, x: number, y: number,
+    anchor: 'center' | 'left' | 'right' = 'center', alpha = 1, spaced = false) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     try {
       const entry = this.textAtlas.addText(text, LABEL_ATLAS_FONT_SIZE, color, fontFamily);
       if (!entry) return;
       const width = entry.width * scale;
       const height = entry.height * scale;
+      if (anchor === 'left') x += width / 2;
+      else if (anchor === 'right') x -= width / 2;
       const rgba = this.hexToRgba(color);
-      candidates.push({ id, priority, x, y, width, height });
+      rgba.a *= alpha;
+      candidates.push({ id, priority, x, y, width, height, ...(spaced ? { padding: 0 } : {}) });
       instances.set(id, {
         texCoords: [entry.x / atlasSize, entry.y / atlasSize, (entry.x + entry.width) / atlasSize, (entry.y + entry.height) / atlasSize],
         color: [rgba.r, rgba.g, rgba.b, rgba.a],
@@ -275,8 +284,28 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
     if (!label) continue;
     // Selected nodes always win; otherwise well-connected nodes are the ones worth naming.
     const priority = (node.visual?.selected ? 1e6 : 0) + (degree.get(node.id) ?? 0);
-    add(`n:${node.id}`, priority, label, node.visual?.labelColor || '#ffffffff', (node.visual?.labelFont || 'Arial') as DiagramFont,
-      node.data.position.x, node.data.position.y);
+    let { x, y } = node.data.position;
+    const size = node.visual?.size;
+    const color = node.visual?.labelColor || '#ffffffff';
+    const font = (node.visual?.labelFont || 'Arial') as DiagramFont;
+    if (isRow(node)) {
+      // After the icon; the detail (e.g. the kind) faded at the right end, dropped first when they collide.
+      const row = rowLayout(node);
+      add(`n:${node.id}`, priority, label, color, font, row.labelLeft, y, 'left', 1, true);
+      const detail = typeof node.visual?.detail === 'string' ? node.visual.detail.trim() : '';
+      if (detail) add(`d:${node.id}`, priority - 0.5, detail, color, font, row.detailRight, y, 'right', 0.55, true);
+      continue;
+    }
+    if (size && isBoxed(node)) {
+      // In the header strip (right of a header icon, if any), and the compartment's lines under it.
+      y += -size.height / 2 + NEST_HEADER / 2;
+      if (headerIcon(node)) x += NEST_HEADER / 2;
+      const box = boxLayout(node);
+      compartmentOf(node).forEach((line, i) => {
+        add(`c:${node.id}:${i}`, priority - 0.5, line, color, font, box.textLeft, box.lines[i], 'left', 0.85, true);
+      });
+    }
+    add(`n:${node.id}`, priority, label, color, font, x, y);
   }
 
   for (const edge of visibleEdges) {

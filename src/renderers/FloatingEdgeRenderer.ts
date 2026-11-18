@@ -1,6 +1,7 @@
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import type { DiagramEdge, DiagramNode } from '../types';
-import { Z_LAYERS } from '../utils/DepthConstants';
+import { Z_LAYERS, edgeZ, markerZ } from '../utils/DepthConstants';
+import { isRow, nestingOf } from '../utils/Nesting';
 import { boundaryPoint } from '../utils/NodeGeometry';
 
 // Marker type definitions
@@ -282,7 +283,7 @@ export class FloatingEdgeRenderer {
         struct VertexInput {
           @location(0) position: vec2<f32>,
           @location(1) color: vec4<f32>,
-          @location(2) uv: vec2<f32>,
+          @location(2) depth: f32,     // z of the edge's nesting band (see DepthConstants.edgeZ)
         }
         
         struct VertexOutput {
@@ -300,9 +301,9 @@ export class FloatingEdgeRenderer {
         @vertex
         fn vs_main(input: VertexInput) -> VertexOutput {
           var output: VertexOutput;
-          output.position = uniforms.viewProjection * vec4<f32>(input.position, ${Z_LAYERS.EDGES}, 1.0);
+          output.position = uniforms.viewProjection * vec4<f32>(input.position, input.depth, 1.0);
           output.color = input.color;
-          output.uv = input.uv;
+          output.uv = vec2<f32>(0.0, 0.0);
           return output;
         }
         
@@ -325,7 +326,7 @@ export class FloatingEdgeRenderer {
           attributes: [
             { shaderLocation: 0, offset: 0, format: 'float32x2' },
             { shaderLocation: 1, offset: 8, format: 'float32x4' },
-            { shaderLocation: 2, offset: 24, format: 'float32x2' },
+            { shaderLocation: 2, offset: 24, format: 'float32' },   // then one float of padding
           ]
         }]
       },
@@ -359,7 +360,6 @@ export class FloatingEdgeRenderer {
   }
   
 private createMarkerPipeline(format: GPUTextureFormat) {
-    const markerDepth = Math.max(Z_LAYERS.NODES, Z_LAYERS.EDGES) + 0.1;
 
     const markerShaderCode = `
       struct Uniforms {
@@ -371,7 +371,8 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         direction: vec2<f32>,     // offset 8-16
         size: f32,                // offset 16-20
         markerType: f32,          // offset 20-24
-        padding1: vec2<f32>,      // offset 24-32 (padding to align next vec4)
+        depth: f32,               // offset 24-28: z, over the node it touches
+        padding1: f32,            // offset 28-32 (padding to align next vec4)
         color: vec4<f32>,         // offset 32-48 (16-byte aligned)
         padding2: vec2<f32>,      // offset 48-56
         padding3: vec2<f32>,      // offset 56-64 -> make total struct size 64 bytes (16 floats)
@@ -419,7 +420,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         let worldPos = marker.position + rotated * marker.size;
         
         var output: VertexOutput;
-        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, ${markerDepth}, 1.0);
+        output.position = uniforms.viewProjection * vec4<f32>(worldPos.x, worldPos.y, marker.depth, 1.0);
         output.color = marker.color;
         output.uv = uvs[vertexIndex];
         output.markerType = marker.markerType;
@@ -633,9 +634,11 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     return markerMap[type] || 0;
   }
   
+  /** Two triangles per segment; 8 floats per vertex: position, colour, depth, padding. */
   private generateLineStripGeometry(
     vertices: Array<{x: number, y: number}>, 
-    style: EdgeStyle
+    style: EdgeStyle,
+    depth: number
   ): Float32Array {
     if (vertices.length < 2) return new Float32Array(0);
     
@@ -657,13 +660,13 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       const ny = dx / length * thickness * 0.5;
       
       const segmentVerts = [
-        p1.x + nx, p1.y + ny, ...color, 0, 0,
-        p1.x - nx, p1.y - ny, ...color, 0, 1,
-        p2.x + nx, p2.y + ny, ...color, 1, 0,
+        p1.x + nx, p1.y + ny, ...color, depth, 0,
+        p1.x - nx, p1.y - ny, ...color, depth, 0,
+        p2.x + nx, p2.y + ny, ...color, depth, 0,
         
-        p1.x - nx, p1.y - ny, ...color, 0, 1,
-        p2.x - nx, p2.y - ny, ...color, 1, 1,
-        p2.x + nx, p2.y + ny, ...color, 1, 0,
+        p1.x - nx, p1.y - ny, ...color, depth, 0,
+        p2.x - nx, p2.y - ny, ...color, depth, 0,
+        p2.x + nx, p2.y + ny, ...color, depth, 0,
       ];
       
       geometry.push(...segmentVerts);
@@ -672,58 +675,42 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     return new Float32Array(geometry);
   }
 
+  /**
+   * Where the edge leaves its source and meets its target, on their outlines. Each end aims at
+   * the next point along the edge. A row's end is at its left or right side (see NodeGeometry),
+   * so without bend points the other end aims at that side rather than at the row's centre.
+   */
+  private endpoints(edge: FloatingEdge, nodes: DiagramNode[]) {
+    const sourceNode = nodes.find(node => node.id === edge.sourceNodeId);
+    const targetNode = nodes.find(node => node.id === edge.targetNodeId);
+    const first = edge.userVertices[0], last = edge.userVertices[edge.userVertices.length - 1];
+    const towards = (node: DiagramNode, p: { x: number; y: number }) =>
+      boundaryPoint(node, { x: p.x - node.data.position.x, y: p.y - node.data.position.y });
+    if (!sourceNode || (!targetNode && !first)) return null;
+    if (!targetNode) return { sourceNode, sourcePoint: towards(sourceNode, first) };
+
+    let sourcePoint = towards(sourceNode, first ?? targetNode.data.position);
+    let targetPoint = towards(targetNode, last ?? sourceNode.data.position);
+    if (!first) {
+      if (isRow(sourceNode) && !isRow(targetNode)) targetPoint = towards(targetNode, sourcePoint);
+      else if (isRow(targetNode) && !isRow(sourceNode)) sourcePoint = towards(sourceNode, targetPoint);
+    }
+    return { sourceNode, targetNode, sourcePoint, targetPoint };
+  }
+
   async generateEdgeGeometry(
-    edge: FloatingEdge, 
+    edge: FloatingEdge,
     nodes: DiagramNode[],
   ): Promise<Float32Array> {
-    const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
-    
-    if (!sourceNode) {  
-      return new Float32Array(0);
-    }
+    const ends = this.endpoints(edge, nodes);
+    if (!ends) return new Float32Array(0);
+    const { sourceNode, targetNode, sourcePoint, targetPoint } = ends;
+    const allVertices = [sourcePoint, ...edge.userVertices, ...(targetPoint ? [targetPoint] : [])];
 
-    const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
-    
-    const allVertices: Array<{x: number, y: number}> = [];
-
-    let firstDirection: {x: number, y: number};
-    
-    if (edge.userVertices.length > 0) {
-      firstDirection = {
-        x: edge.userVertices[0].x - sourceNode.data.position.x,
-        y: edge.userVertices[0].y - sourceNode.data.position.y
-      };
-    } else if (targetNode) {
-      firstDirection = {
-        x: targetNode.data.position.x - sourceNode.data.position.x,
-        y: targetNode.data.position.y - sourceNode.data.position.y
-      };
-    } else {
-      return new Float32Array(0);
-    }
-    
-    const sourcePoint = boundaryPoint(sourceNode, firstDirection);
-    
-    allVertices.push(sourcePoint);
-    allVertices.push(...edge.userVertices);
-    
-    if (targetNode) {
-      const lastDirection = edge.userVertices.length > 0
-        ? {
-            x: targetNode.data.position.x - edge.userVertices[edge.userVertices.length - 1].x,
-            y: targetNode.data.position.y - edge.userVertices[edge.userVertices.length - 1].y
-          }
-        : {
-            x: targetNode.data.position.x - sourceNode.data.position.x,
-            y: targetNode.data.position.y - sourceNode.data.position.y
-          };
-      
-      const targetPoint = boundaryPoint(targetNode, { x: -lastDirection.x, y: -lastDirection.y });
-      
-      allVertices.push(targetPoint);
-    }
-    
-    return this.generateLineStripGeometry(allVertices, edge.style);
+    const nesting = nestingOf(nodes);
+    const sourceDepth = nesting.depth(sourceNode.id);
+    const depth = edgeZ(sourceDepth, targetNode ? nesting.depth(targetNode.id) : sourceDepth);
+    return this.generateLineStripGeometry(allVertices, edge.style, depth);
   }
   
   private generateMarkerData(
@@ -734,6 +721,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     direction: [number, number],
     size: number,
     markerType: number,
+    depth: number,
     color: [number, number, number, number]
   }> {
     const markers: Array<{
@@ -741,77 +729,40 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       direction: [number, number],
       size: number,
       markerType: number,
+      depth: number,
       color: [number, number, number, number]
     }> = [];
     
-    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
-    const targetNode = nodes.find(n => n.id === edge.targetNodeId);
-    
+    const ends = this.endpoints(edge, nodes);
+    if (!ends) return markers;
+    const { sourceNode, targetNode, sourcePoint, targetPoint } = ends;
+    const nesting = nestingOf(nodes);
+
     const markerSize = 7;
-    
-    // Source marker
+    // A marker sits where the line meets the node, pointing along the line's last stretch into it.
+    const add = (type: MarkerType, node: DiagramNode, at: { x: number; y: number }, from: { x: number; y: number }) => {
+      const dx = at.x - from.x, dy = at.y - from.y;
+      const length = Math.hypot(dx, dy);
+      if (length === 0) return;
+      markers.push({
+        position: [at.x, at.y],
+        direction: [dx / length, dy / length],
+        size: markerSize,
+        markerType: this.getMarkerTypeValue(type),
+        depth: markerZ(nesting.depth(node.id)),
+        color: edge.style.color
+      });
+    };
+
     if (edge.style.sourceMarker && edge.style.sourceMarker !== 'none') {
-      const firstVertex = edge.userVertices.length > 0 
-        ? edge.userVertices[0] 
-        : targetNode?.data.position;
-      
-      const direction = {
-        x: sourceNode!.data.position.x - firstVertex!.x,
-        y: sourceNode!.data.position.y - firstVertex!.y
-      };
-      
-      const length = Math.sqrt(direction.x ** 2 + direction.y ** 2);
-      if (length > 0) {
-        const normalized = {
-          x: direction.x / length,
-          y: direction.y / length
-        };
-        
-        // Source marker points AWAY from the node
-        const sourceEdge = boundaryPoint(sourceNode!, { x: -normalized.x, y: -normalized.y }); // Point outward from source
-        
-        
-        markers.push({
-          position: [sourceEdge.x, sourceEdge.y],
-          direction: [normalized.x, normalized.y], // Direction AWAY from source
-          size: markerSize,
-          markerType: this.getMarkerTypeValue(edge.style.sourceMarker),
-          color: edge.style.color
-        });
-      }
+      const next = edge.userVertices[0] ?? targetPoint;
+      if (next) add(edge.style.sourceMarker, sourceNode, sourcePoint, next);
     }
-    
-    // Target marker
-    if (edge.style.targetMarker && edge.style.targetMarker !== 'none') {
-      const lastVertex = edge.userVertices.length > 0
-        ? edge.userVertices[edge.userVertices.length - 1]
-        : sourceNode!.data.position;
-      
-      const direction = {
-        x: targetNode!.data.position.x - lastVertex.x,
-        y: targetNode!.data.position.y - lastVertex.y
-      };
-      
-      const length = Math.sqrt(direction.x ** 2 + direction.y ** 2);
-      if (length > 0) {
-        const normalized = {
-          x: direction.x / length,
-          y: direction.y / length
-        };
-        
-        const targetEdge = boundaryPoint(targetNode!, { x: -normalized.x, y: -normalized.y });
-        
-        markers.push({
-          position: [targetEdge.x, targetEdge.y],
-          direction: [normalized.x, normalized.y],
-          size: markerSize,
-          markerType: this.getMarkerTypeValue(edge.style.targetMarker),
-          color: edge.style.color
-        });
-      }
+    if (targetNode && targetPoint && edge.style.targetMarker && edge.style.targetMarker !== 'none') {
+      const previous = edge.userVertices[edge.userVertices.length - 1] ?? sourcePoint;
+      add(edge.style.targetMarker, targetNode, targetPoint, previous);
     }
-    
-    
+
     return markers;
   }
   
@@ -916,7 +867,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         flatMarkerData[offset + 3] = marker.direction[1];
         flatMarkerData[offset + 4] = marker.size;
         flatMarkerData[offset + 5] = marker.markerType;
-        flatMarkerData[offset + 6] = 0; // padding1
+        flatMarkerData[offset + 6] = marker.depth;
         flatMarkerData[offset + 7] = 0; // padding1
         flatMarkerData[offset + 8] = marker.color[0];
         flatMarkerData[offset + 9] = marker.color[1];

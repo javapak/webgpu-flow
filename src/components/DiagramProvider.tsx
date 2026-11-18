@@ -15,6 +15,7 @@ import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, 
 import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
 import { createNodeFromTemplate, findFreeSpot, type NodeTemplate } from '../utils/NodeTemplates';
+import { arrangeContainers, nestingOf } from '../utils/Nesting';
 import type { DiagramEdit, NodeChanges } from '../utils/DiagramEdits';
 
 export const InteractionMode = {
@@ -117,7 +118,11 @@ export interface DiagramContextValue extends DiagramState {
   clearSelection: () => void;
   
   // Interaction methods
-  startDrag: (type: 'node' | 'viewport' | 'resize' | 'edge-vertex', screenPoint: Point, resizeHandle?: ResizeHandle, edgeID?: string, edgeVertexIndex?: number) => void;
+  /**
+   * `node` is the node to move or resize; it defaults to the selected one. Pass it when the press
+   * also selected it: the selection isn't committed until the next render.
+   */
+  startDrag: (type: 'node' | 'viewport' | 'resize' | 'edge-vertex', screenPoint: Point, resizeHandle?: ResizeHandle, edgeID?: string, edgeVertexIndex?: number, node?: DiagramNode) => void;
   updateDrag: (screenPoint: Point, isSnapped?: boolean) => void;
   endDrag: () => void;
   
@@ -142,6 +147,7 @@ type DiagramAction =
   | { type: 'LOAD_DIAGRAM'; nodes: DiagramNode[]; edges: DiagramEdge[]; palette: NodeTemplate[] | null }
   | { type: 'REMOVE_NODE'; nodeId: string }
   | { type: 'UPDATE_NODE'; node: DiagramNode }
+  | { type: 'UPDATE_NODES'; nodes: DiagramNode[] }
   | { type: 'ADD_EDGE'; edge: DiagramEdge }
   | { type: 'REMOVE_EDGE'; edgeId: string }
   | { type: 'UPDATE_EDGE'; edge: DiagramEdge }
@@ -183,6 +189,8 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'LOAD_DIAGRAM':
+      // Containers arrange their children; nothing inside one has a place of its own.
+      arrangeContainers(action.nodes);
       return {
         ...state,
         nodes: action.nodes,
@@ -198,16 +206,19 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
       };
 
     case 'REMOVE_NODE': {
-      // An edge can't outlive either of its nodes.
-      const attached = (edge: DiagramEdge) => edge.sourceNodeId === action.nodeId || edge.targetNodeId === action.nodeId;
+      // The nodes inside a container go with it, and an edge can't outlive either of its nodes.
+      const removed = new Set([action.nodeId, ...nestingOf(state.nodes).descendants(action.nodeId).map(n => n.id)]);
+      const attached = (edge: DiagramEdge) => removed.has(edge.sourceNodeId) || removed.has(edge.targetNodeId);
+      const nodes = state.nodes.filter(node => !removed.has(node.id));
+      arrangeContainers(nodes);   // closes the gap the node leaves in its container
       return {
         ...state,
-        nodes: state.nodes.filter(node => node.id !== action.nodeId),
+        nodes,
         edges: state.edges.filter(edge => !attached(edge)),
         interaction: {
           ...state.interaction,
           selectedNodes: state.interaction.selectedNodes.filter(
-            node => node.id !== action.nodeId
+            node => !removed.has(node.id)
           ),
           selectedEdges: state.interaction.selectedEdges.filter(edge => !attached(edge)),
         },
@@ -228,6 +239,18 @@ export const diagramReducer = (state: DiagramState, action: DiagramAction): Diag
         },
       };
 
+
+    case 'UPDATE_NODES': {
+      const updated = new Map(action.nodes.map(n => [n.id, n]));
+      return {
+        ...state,
+        nodes: state.nodes.map(node => updated.get(node.id) ?? node),
+        interaction: {
+          ...state.interaction,
+          selectedNodes: state.interaction.selectedNodes.map(node => updated.get(node.id) ?? node),
+        },
+      };
+    }
 
     case 'SET_GRID_SNAPPING':
       return { ...state, gridSnapping: { ...state.gridSnapping, enabled: action.enabled } };
@@ -568,11 +591,14 @@ const updateDrag = useCallback((screenPoint: Point) => {
         scheduleRender();
 
     } else if (drag.dragState.dragType === 'node') {
-        const selectedNode = stateRef.current.interaction.selectedNodes[0];
+        const selectedNode = drag.dragState.node ?? stateRef.current.interaction.selectedNodes[0];
         if (!selectedNode) return;
         const zoom = viewportRef.current.zoom;
-        selectedNode.data.position.x += deltaX / zoom;
-        selectedNode.data.position.y += deltaY / zoom;
+        // The nodes inside a container move with it.
+        for (const node of [selectedNode, ...(drag.dragState.carried ?? []).map(c => c.node)]) {
+            node.data.position.x += deltaX / zoom;
+            node.data.position.y += deltaY / zoom;
+        }
         scheduleRender();
 
     } else if (drag.dragState.dragType === 'resize') {
@@ -994,14 +1020,20 @@ const startDrag = useCallback((
     screenPoint: Point,
     resizeHandle?: ResizeHandle,
     edgeID?: string,
-    edgeVertexIndex?: number
+    edgeVertexIndex?: number,
+    node?: DiagramNode
 ) => {
-    const selectedNode = stateRef.current.interaction.selectedNodes[0];
+    // The stored node, which shares `data` with the selection's copy, so moving one moves both.
+    const pressed = node ?? stateRef.current.interaction.selectedNodes[0];
+    const selectedNode = pressed && (stateRef.current.nodes.find(n => n.id === pressed.id) ?? pressed);
 
     let originalSize, originalPosition, originalVertexPosition;
 
+    let carried: Array<{ node: DiagramNode; from: Point }> | undefined;
     if (type === 'node' && selectedNode) {
         originalPosition = { ...selectedNode.data.position };
+        carried = nestingOf(stateRef.current.nodes).descendants(selectedNode.id)
+            .map(node => ({ node, from: { ...node.data.position } }));
     }
 
     if (type === 'resize' && selectedNode) {
@@ -1037,6 +1069,8 @@ const startDrag = useCallback((
             originalSize,
             originalPosition,
             originalVertexPosition,
+            node: type === 'node' || type === 'resize' ? selectedNode : undefined,
+            carried,
         }
     };
 }, []);
@@ -1049,23 +1083,39 @@ const endDrag = useCallback(() => {
     if (!wasDragging) return;
 
     const current = stateRef.current;
-    const selected = current.interaction.selectedNodes[0];
+    const selected = drag.node ?? current.interaction.selectedNodes[0];
 
     if (type === 'viewport') {
         // Sync the gesture-driven viewport ref back into React state
         dispatch({ type: 'SET_VIEWPORT', viewport: { ...viewportRef.current } });
     } else if ((type === 'node' || type === 'resize') && selected) {
         const stored = current.nodes.find(n => n.id === selected.id) ?? selected;
-        // Snap the final position (not while dragging) unless Alt is held. Resizing keeps its exact geometry.
+        const carried = drag.carried ?? [];
+        const from = drag.originalPosition;
+        // Snap the final position (not while dragging) unless Alt is held, carrying the nested nodes
+        // the same distance. Resizing keeps its exact geometry.
         if (type === 'node' && current.gridSnapping.enabled && !current.interaction.altKeyPressed) {
-            stored.data.position = GridSnapping.snapPointToGrid(stored.data.position, current.gridSnapping.gridSize);
+            const snapped = GridSnapping.snapPointToGrid(stored.data.position, current.gridSnapping.gridSize);
+            const dx = snapped.x - stored.data.position.x, dy = snapped.y - stored.data.position.y;
+            stored.data.position = snapped;
+            for (const { node } of carried) node.data.position = { x: node.data.position.x + dx, y: node.data.position.y + dy };
         }
-        dispatch({ type: 'UPDATE_NODE', node: { ...stored } });
 
-        // Report only real changes: a click without movement is not an edit.
+        // Inside a container, the container decides where a node goes: put it back. Moving it to
+        // another container, or to another place in this one, changes the model, which only the
+        // host can do.
+        if (type === 'node' && from && nestingOf(current.nodes).parent(stored.id)) {
+            stored.data.position = { ...from };
+            for (const c of carried) c.node.data.position = { ...c.from };
+        }
+
+        const changed = [stored, ...carried.map(c => c.node)];
+        dispatch({ type: 'UPDATE_NODES', nodes: changed.map(n => ({ ...n })) });
+
+        // Report only real changes: a click without movement is not an edit. The nodes a container
+        // carries are placed by it, so only the container's own move is reported.
         const position = { ...stored.data.position };
         const size = { ...(stored.visual?.size ?? stored.data.size ?? { width: 100, height: 60 }) };
-        const from = drag.originalPosition;
         if (type === 'node' && from && (from.x !== position.x || from.y !== position.y)) {
             emitEdit({ kind: 'node-moved', nodeId: stored.id, from, to: position });
         } else if (type === 'resize' && from && drag.originalSize) {

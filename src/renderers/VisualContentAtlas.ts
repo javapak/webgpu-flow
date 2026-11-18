@@ -1,11 +1,16 @@
 import type { DiagramNode } from "../types";
+import type { AlphaMask } from "../utils/NodeGeometry";
 
 export interface VisualAtlasEntry {
   x: number;
   y: number;
   width: number;
   height: number;
+  /** Empty border around the content, inside width and height. */
+  padding: number;
   colorizable: boolean; // Track if this entry supports color tinting
+  /** Coverage of the content (without the padding), for SVGs and images: where their outline is. */
+  mask?: AlphaMask;
 }
 
 export class VisualContentAtlas {
@@ -189,7 +194,9 @@ export class VisualContentAtlas {
         y: this.currentY,
         width: totalSize,
         height: totalSize,
-        colorizable: colorizable
+        padding,
+        colorizable: colorizable,
+        mask: this.maskAt(this.currentX + padding, this.currentY + padding, size),
       };
 
       this.entries.set(cacheKey, entry);
@@ -245,6 +252,7 @@ export class VisualContentAtlas {
       y: this.currentY,
       width: totalSize,
       height: totalSize,
+      padding,
       colorizable: false
     };
 
@@ -304,7 +312,9 @@ export class VisualContentAtlas {
         y: this.currentY,
         width: totalSize,
         height: totalSize,
-        colorizable: false
+        padding,
+        colorizable: false,
+        mask: this.maskAt(this.currentX + padding, this.currentY + padding, size),
       };
 
       this.entries.set(cacheKey, entry);
@@ -393,6 +403,7 @@ export class VisualContentAtlas {
       y: this.currentY,
       width: totalSize,
       height: totalSize,
+      padding,
       colorizable: false
     };
 
@@ -415,6 +426,18 @@ export class VisualContentAtlas {
     );
 
     this.needsUpdate = false;
+  }
+
+  /** The alpha of a just-drawn region, or undefined when the canvas can't be read (a cross-origin image). */
+  private maskAt(x: number, y: number, size: number): AlphaMask | undefined {
+    try {
+      const { data } = this.ctx.getImageData(x, y, size, size);
+      const alpha = new Uint8Array(size * size);
+      for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
+      return { width: size, height: size, alpha };
+    } catch {
+      return undefined;
+    }
   }
 
   getEntry(key: string): VisualAtlasEntry | undefined {

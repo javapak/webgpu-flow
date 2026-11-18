@@ -1,6 +1,7 @@
 import type { DiagramNode } from '../types';
 import { VisualContentAtlas } from './VisualContentAtlas';
 import { Z_LAYERS } from '../utils/DepthConstants';
+import { setContentMask } from '../utils/NodeGeometry';
 
 export interface VisualInstanceData {
   texCoords: [number, number, number, number];
@@ -100,7 +101,7 @@ export class VisualContentRenderer {
         let localPos = positions[vertexIndex];
         let uv = uvs[vertexIndex];
         
-        let worldPos = visual.position + localPos * visual.size * 0.7;
+        let worldPos = visual.position + localPos * visual.size * 0.5;
         let atlasUV = mix(visual.texCoords.xy, visual.texCoords.zw, uv);
         
         var output: VertexOutput;
@@ -287,10 +288,17 @@ export class VisualContentRenderer {
           tintColor = this.hexToRgba(node.visual.iconColor);
         }
 
-        // Make visuals appropriately sized
-        const visualScale = 0.5;
-        const visualWorldWidth = iconSize * visualScale;
-        const visualWorldHeight = iconSize * visualScale;
+        // Content drawn instead of a shape is the node: it fills the node's box (the quad also
+        // covers the entry's padding), and its mask gives the outline. Otherwise it's an icon.
+        let visualWorldWidth = iconSize * 0.7;
+        let visualWorldHeight = iconSize * 0.7;
+        const visualContent = node.visual?.visualContent;
+        if (visualContent && node.visual?.shape === 'none' && node.visual.size) {
+          const scale = atlasEntry.width / (atlasEntry.width - 2 * atlasEntry.padding);
+          visualWorldWidth = node.visual.size.width * scale;
+          visualWorldHeight = node.visual.size.height * scale;
+          if (atlasEntry.mask) setContentMask(visualContent, atlasEntry.mask);
+        }
 
         const visualX = node.data.position.x;
         const visualY = node.data.position.y;

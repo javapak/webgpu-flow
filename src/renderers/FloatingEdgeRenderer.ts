@@ -1,7 +1,7 @@
 import type { EdgeDrawingState } from '../components/DiagramProvider';
-import type { VisualContentNodeManager } from '../compute/VisualContentNode';
 import type { DiagramEdge, DiagramNode } from '../types';
 import { Z_LAYERS } from '../utils/DepthConstants';
+import { boundaryPoint } from '../utils/NodeGeometry';
 
 // Marker type definitions
 export type MarkerType = 
@@ -52,115 +52,6 @@ export interface FloatingEdge {
   style: EdgeStyle;
 }
 
-class EdgeConnectionCalculator {
-  calculateNodeEdgePoint(
-    nodePosition: {x: number, y: number},
-    nodeSize: {width: number, height: number},
-    nodeShape: string,
-    directionToTarget: {x: number, y: number}
-  ): {x: number, y: number} {
-    
-    const length = Math.sqrt(directionToTarget.x ** 2 + directionToTarget.y ** 2);
-    if (length === 0) return nodePosition;
-    
-    const normalizedDir = {
-      x: directionToTarget.x / length,
-      y: directionToTarget.y / length
-    };
-    
-    switch (nodeShape) {
-      case 'rectangle':
-      case 'roundedRectangle':
-        return this.rectangleEdgeIntersection(nodePosition, nodeSize, normalizedDir);
-      case 'circle':
-        return this.circleEdgeIntersection(nodePosition, nodeSize, normalizedDir);
-      case 'oval':
-        return this.ellipseEdgeIntersection(nodePosition, nodeSize, normalizedDir);
-      case 'hexagon':
-        return this.hexagonEdgeIntersection(nodePosition, nodeSize, normalizedDir);
-      case 'diamond':
-        return this.diamondEdgeIntersection(nodePosition, nodeSize, normalizedDir);
-      default:
-        return this.rectangleEdgeIntersection(nodePosition, nodeSize, normalizedDir);
-    }
-  }
-  
-  private rectangleEdgeIntersection(
-    center: {x: number, y: number},
-    size: {width: number, height: number},
-    direction: {x: number, y: number}
-  ): {x: number, y: number} {
-    const halfWidth = size.width / 2;
-    const halfHeight = size.height / 2;
-    
-    const tx = direction.x === 0 ? Infinity : (direction.x > 0 ? halfWidth : -halfWidth) / direction.x;
-    const ty = direction.y === 0 ? Infinity : (direction.y > 0 ? halfHeight : -halfHeight) / direction.y;
-    
-    const t = Math.min(Math.abs(tx), Math.abs(ty));
-    
-    return {
-      x: center.x + direction.x * t,
-      y: center.y + direction.y * t
-    };
-  }
-  
-  private circleEdgeIntersection(
-    center: {x: number, y: number},
-    size: {width: number, height: number},
-    direction: {x: number, y: number}
-  ): {x: number, y: number} {
-    const radius = Math.min(size.width, size.height) / 2;
-    
-    return {
-      x: center.x + direction.x * radius,
-      y: center.y + direction.y * radius
-    };
-  }
-  
-  private ellipseEdgeIntersection(
-    center: {x: number, y: number},
-    size: {width: number, height: number},
-    direction: {x: number, y: number}
-  ): {x: number, y: number} {
-    const a = size.width / 2;
-    const b = size.height / 2;
-    
-    const denominator = (direction.x / a) ** 2 + (direction.y / b) ** 2;
-    const t = 1 / Math.sqrt(denominator);
-    
-    return {
-      x: center.x + direction.x * t,
-      y: center.y + direction.y * t
-    };
-  }
-  
-  private hexagonEdgeIntersection(
-    center: {x: number, y: number},
-    size: {width: number, height: number},
-    direction: {x: number, y: number}
-  ): {x: number, y: number} {
-    return this.circleEdgeIntersection(center, size, direction);
-  }
-  
-  private diamondEdgeIntersection(
-    center: {x: number, y: number},
-    size: {width: number, height: number},
-    direction: {x: number, y: number}
-  ): {x: number, y: number} {
-    const halfWidth = size.width / 2;
-    const halfHeight = size.height / 2;
-    
-    const absX = Math.abs(direction.x);
-    const absY = Math.abs(direction.y);
-    const t = 1 / (absX / halfWidth + absY / halfHeight);
-    
-    return {
-      x: center.x + direction.x * t,
-      y: center.y + direction.y * t
-    };
-  }
-}
-
 export class FloatingEdgeRenderer {
   private device!: GPUDevice;
   private edgeBuffer!: GPUBuffer;
@@ -175,7 +66,6 @@ export class FloatingEdgeRenderer {
   private handleBindGroup!: GPUBindGroup;  
   private maxVerticesPerEdge: number;
   private maxEdges: number;
-  private connectionCalculator: EdgeConnectionCalculator;
   private sampleCount: string;
   
   constructor(
@@ -188,7 +78,6 @@ export class FloatingEdgeRenderer {
     this.device = device;
     this.maxVerticesPerEdge = maxVerticesPerEdge;
     this.maxEdges = maxEdges;
-    this.connectionCalculator = new EdgeConnectionCalculator();
     this.sampleCount = sampleCount;
     
     this.createBuffers();
@@ -781,7 +670,6 @@ private createMarkerPipeline(format: GPUTextureFormat) {
   async generateEdgeGeometry(
     edge: FloatingEdge, 
     nodes: DiagramNode[],
-    visualContentNodeManager?: VisualContentNodeManager,
   ): Promise<Float32Array> {
     const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
     
@@ -809,29 +697,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       return new Float32Array(0);
     }
     
-    let sourcePoint: {x: number, y: number};
-    
-    if (visualContentNodeManager) {
-      const sourceVisualNode = visualContentNodeManager.getVisualNode(edge.sourceNodeId);
-      
-      if (sourceVisualNode && sourceNode.visual!.shape === 'none' && sourceNode.visual!.visualContent) {
-        sourcePoint = await sourceVisualNode.getEdgePoint(firstDirection);
-      } else {
-        sourcePoint = this.connectionCalculator.calculateNodeEdgePoint(
-          sourceNode.data.position,
-          sourceNode.visual!.size,
-          sourceNode.visual!.shape as string,
-          firstDirection
-        );
-      }
-    } else {
-      sourcePoint = this.connectionCalculator.calculateNodeEdgePoint(
-        sourceNode.data.position,
-        sourceNode.visual!.size,
-        sourceNode.visual!.shape as string,
-        firstDirection
-      );
-    }
+    const sourcePoint = boundaryPoint(sourceNode, firstDirection);
     
     allVertices.push(sourcePoint);
     allVertices.push(...edge.userVertices);
@@ -847,32 +713,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
             y: targetNode.data.position.y - sourceNode.data.position.y
           };
       
-      let targetPoint: {x: number, y: number};
-      
-      if (visualContentNodeManager) {
-        const targetVisualNode = visualContentNodeManager.getVisualNode(edge.targetNodeId);
-        
-        if (targetVisualNode && targetNode.visual!.shape === 'none' && targetNode.visual!.visualContent) {
-          targetPoint = await targetVisualNode.getEdgePoint({
-            x: -lastDirection.x, 
-            y: -lastDirection.y
-          });
-        } else {
-          targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
-            targetNode.data.position,
-            targetNode.visual!.size,
-            targetNode.visual!.shape as string,
-            {x: -lastDirection.x, y: -lastDirection.y}
-          );
-        }
-      } else {
-        targetPoint = this.connectionCalculator.calculateNodeEdgePoint(
-          targetNode.data.position,
-          targetNode.visual!.size,
-          targetNode.visual!.shape as string,
-          {x: -lastDirection.x, y: -lastDirection.y}
-        );
-      }
+      const targetPoint = boundaryPoint(targetNode, { x: -lastDirection.x, y: -lastDirection.y });
       
       allVertices.push(targetPoint);
     }
@@ -922,12 +763,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
         };
         
         // Source marker points AWAY from the node
-        const sourceEdge = this.connectionCalculator.calculateNodeEdgePoint(
-          sourceNode!.data.position,
-          sourceNode!.visual!.size,
-          sourceNode!.visual!.shape as string,
-          { x: -normalized.x, y: -normalized.y } // Point outward from source
-        );
+        const sourceEdge = boundaryPoint(sourceNode!, { x: -normalized.x, y: -normalized.y }); // Point outward from source
         
         
         markers.push({
@@ -958,12 +794,7 @@ private createMarkerPipeline(format: GPUTextureFormat) {
           y: direction.y / length
         };
         
-        const targetEdge = this.connectionCalculator.calculateNodeEdgePoint(
-          targetNode!.data.position,
-          targetNode!.visual!.size,
-          targetNode!.visual!.shape as string,
-          { x: -normalized.x, y: -normalized.y } 
-        );
+        const targetEdge = boundaryPoint(targetNode!, { x: -normalized.x, y: -normalized.y });
         
         markers.push({
           position: [targetEdge.x, targetEdge.y],
@@ -984,7 +815,6 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     edges: FloatingEdge[], 
     nodes: DiagramNode[],
     viewProjectionMatrix: number[] | Float32Array,
-    visualContentNodeManager?: VisualContentNodeManager,
     previewEdge?: EdgeDrawingState,
     selectedEdges?: DiagramEdge[],  
     viewport?: {zoom: number}        
@@ -1001,15 +831,13 @@ private createMarkerPipeline(format: GPUTextureFormat) {
     for (const edge of edges) {
       let geometry = await this.generateEdgeGeometry(
         edge, 
-        nodes, 
-        visualContentNodeManager,
+        nodes,
       );
       
       if (edge.id === selectedEdges?.[0]?.id) {
         geometry = await this.generateEdgeGeometry(
           {...edge, style: { ...edge.style, thickness: edge.style.thickness + 2, color: [1.0, 0.5, 0.0, 1.0] }},
-          nodes, 
-          visualContentNodeManager,
+          nodes,
         );
       }
       
@@ -1048,7 +876,6 @@ private createMarkerPipeline(format: GPUTextureFormat) {
       const geometry = await this.generateEdgeGeometry(
         tempEdge,
         nodes,
-        visualContentNodeManager,
       );
       
       if (geometry.length > 0) {

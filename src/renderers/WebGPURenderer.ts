@@ -4,8 +4,7 @@ import { LabelRenderer } from './LabelRenderer';
 import { VisualContentRenderer } from './VisualContentRenderer';
 import { Z_LAYERS } from '../utils/DepthConstants';
 import { FloatingEdgeRenderer } from './FloatingEdgeRenderer';
-import { VisualContentNodeManager } from '../compute/VisualContentNode';
-import { ShaderBasedEdgeDetector } from '../compute/ShaderBasedEdgeDetector';
+import { resizeHandles } from '../utils/NodeGeometry';
 import GPUCapabilities from '../utils/GPUCapabilities';
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import { GridSnapping } from '../utils/GridSnapping';
@@ -49,7 +48,6 @@ export class WebGPURenderer {
   private _depthTexture: GPUTexture | null = null;
   private multisampledTexture: GPUTexture | null = null;
   private edgeRenderer: FloatingEdgeRenderer | null = null;
-  private visualContentNodeManager: VisualContentNodeManager | null = null;
   private _gpuCapibilitiesRef: GPUCapabilities | null = null;
   private sampleCount: string = '1';
   private _isReconfiguring: boolean = false;
@@ -206,9 +204,7 @@ private recreateSizeDependentTextures(width: number, height: number) {
       try {
         this.visualRenderer = new VisualContentRenderer(WebGPURenderer.device!, this.uniformBuffer!, this.sampleCount);
         await this.visualRenderer.initialize();
-        
-        const edgeDetector = new ShaderBasedEdgeDetector(WebGPURenderer.device!);
-        this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
+
       } catch (error) {
         console.error('Failed to initialize visual renderer:', error);
         // Non-fatal - continue without visual content
@@ -434,9 +430,7 @@ private createIntermediateTexture(width: number, height: number) {
         
         this.visualRenderer = new VisualContentRenderer(WebGPURenderer.device, this.uniformBuffer!, count);
         await this.visualRenderer.initialize();
-        
-        const edgeDetector = new ShaderBasedEdgeDetector(WebGPURenderer.device);
-        this.visualContentNodeManager = new VisualContentNodeManager(edgeDetector, this.visualRenderer);
+
         
         this.edgeRenderer = new FloatingEdgeRenderer(
           WebGPURenderer.device,
@@ -1352,21 +1346,11 @@ private createIntermediateTexture(width: number, height: number) {
           
           const size = node.visual?.size || { width: 100, height: 100 };
           if (!canShowResizeHandles(size, viewport.zoom, pixelRatio)) return; // too small on screen to resize; still draggable
-          const shape = node.visual?.shape || 'rectangle';
-          const { x, y } = node.data.position;
-          
-          const handlePositions = this.getShapeHandlePositions(x, y, size.width, size.height, shape);
-          
-          handlePositions.forEach(handlePos => {
-            const isCorner = handlePos.type === 'corner';
-            const handleColor: [number, number, number, number] = isCorner ? [1.0, 1.0, 1.0, 1.0] : [0.8, 0.8, 1.0, 1.0];
-            
-            handleData.push({
-              position: [handlePos.x, handlePos.y],
-              size: [handleSize, handleSize],
-              color: handleColor,
-            });
-          });
+          // On the node's outline, where MouseInteractions.getResizeHandle looks for them.
+          for (const { handle, x, y } of resizeHandles(node)) {
+            const handleColor: [number, number, number, number] = handle.length === 2 ? [1.0, 1.0, 1.0, 1.0] : [0.8, 0.8, 1.0, 1.0];
+            handleData.push({ position: [x, y], size: [handleSize, handleSize], color: handleColor });
+          }
         });
       }
 
@@ -1418,7 +1402,6 @@ private createIntermediateTexture(width: number, height: number) {
             visibleEdges,
             visibleNodes,
             viewProjectionMatrix,
-            this.visualContentNodeManager!,
             previewEdge ? previewEdge : undefined,
             selectedEdges,
             viewport
@@ -1633,104 +1616,6 @@ private createIntermediateTexture(width: number, height: number) {
     }
   }
 
- private getShapeHandlePositions(
-  centerX: number, 
-  centerY: number, 
-  width: number, 
-  height: number, 
-  shape: string
-): Array<{x: number, y: number, type: 'corner' | 'edge'}> {
-  const handles: Array<{x: number, y: number, type: 'corner' | 'edge'}> = [];
-  
-  switch (shape) {
-    case 'circle':
-    case 'initialNode':
-    case 'finalNode': {
-      // Circles work well with radial handles
-      const radius = Math.max(width, height) / 2 * 0.95;
-      handles.push(
-        { x: centerX, y: centerY - radius, type: 'edge' },        // North
-        { x: centerX + radius, y: centerY, type: 'edge' },        // East
-        { x: centerX, y: centerY + radius, type: 'edge' },        // South
-        { x: centerX - radius, y: centerY, type: 'edge' },        // West
-        // Diagonal handles for better control
-        { x: centerX + radius * 0.707, y: centerY - radius * 0.707, type: 'corner' }, // NE
-        { x: centerX + radius * 0.707, y: centerY + radius * 0.707, type: 'corner' },  // SE
-        { x: centerX - radius * 0.707, y: centerY + radius * 0.707, type: 'corner' },  // SW
-        { x: centerX - radius * 0.707, y: centerY - radius * 0.707, type: 'corner' },  // NW
-      );
-      return handles;
-    }
-    
-    case 'diamond': {
-      const halfWidth = width / 2 * 0.95;
-      const halfHeight = height / 2 * 0.95;
-      handles.push(
-        { x: centerX, y: centerY - halfHeight, type: 'corner' },     // Top
-        { x: centerX + halfWidth, y: centerY, type: 'corner' },      // Right
-        { x: centerX, y: centerY + halfHeight, type: 'corner' },     // Bottom
-        { x: centerX - halfWidth, y: centerY, type: 'corner' },      // Left
-        { x: centerX + halfWidth * 0.5, y: centerY - halfHeight * 0.5, type: 'edge' },
-        { x: centerX + halfWidth * 0.5, y: centerY + halfHeight * 0.5, type: 'edge' },
-        { x: centerX - halfWidth * 0.5, y: centerY + halfHeight * 0.5, type: 'edge' },
-        { x: centerX - halfWidth * 0.5, y: centerY - halfHeight * 0.5, type: 'edge' },
-      );
-      return handles;
-    }
-    
-    case 'hexagon': {
-      const radius = Math.max(width, height) / 2 * 0.9;
-      const angles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
-      
-      angles.forEach(angle => {
-        handles.push({
-          x: centerX + radius * Math.cos(angle),
-          y: centerY + radius * Math.sin(angle),
-          type: 'corner'
-        });
-      });
-      return handles;
-    }
-    
-    case 'oval': {
-      const a = width / 2 * 0.95;
-      const b = height / 2 * 0.85;
-      
-      handles.push(
-        { x: centerX, y: centerY - b, type: 'edge' },        // Top
-        { x: centerX + a, y: centerY, type: 'edge' },        // Right
-        { x: centerX, y: centerY + b, type: 'edge' },        // Bottom
-        { x: centerX - a, y: centerY, type: 'edge' },        // Left
-        { x: centerX + a * 0.707, y: centerY - b * 0.707, type: 'corner' },
-        { x: centerX + a * 0.707, y: centerY + b * 0.707, type: 'corner' },
-        { x: centerX - a * 0.707, y: centerY + b * 0.707, type: 'corner' },
-        { x: centerX - a * 0.707, y: centerY - b * 0.707, type: 'corner' },
-      );
-      return handles;
-    }
-    
-    default: {
-      // Default bounding box handles for all other shapes
-      const halfWidth = width / 2 * 0.95; 
-      const halfHeight = height / 2 * 0.95;
-      
-      handles.push(
-        // Standard 8-point bounding box handles
-        // Corners
-        { x: centerX - halfWidth, y: centerY - halfHeight, type: 'corner' }, // top-left
-        { x: centerX + halfWidth, y: centerY - halfHeight, type: 'corner' }, // top-right
-        { x: centerX - halfWidth, y: centerY + halfHeight, type: 'corner' }, // bottom-left
-        { x: centerX + halfWidth, y: centerY + halfHeight, type: 'corner' }, // bottom-right
-        // Edges
-        { x: centerX, y: centerY - halfHeight, type: 'edge' },             // top
-        { x: centerX, y: centerY + halfHeight, type: 'edge' },             // bottom
-        { x: centerX - halfWidth, y: centerY, type: 'edge' },              // left
-        { x: centerX + halfWidth, y: centerY, type: 'edge' },              // right
-      );
-      return handles;
-    }
-  }
-}
 }
 
 export const SHAPE_TYPES = {

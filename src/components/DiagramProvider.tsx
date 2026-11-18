@@ -1140,8 +1140,12 @@ const endDrag = useCallback(() => {
     } else if (type === 'edge-vertex' && edgeId) {
         const edge = current.edges.find(e => e.id === edgeId);
         if (edge) {
-            dispatch({ type: 'UPDATE_EDGE', edge: { ...edge, userVertices: [...edge.userVertices] } });
+            // A bend point snaps to the grid like a node, unless Alt is held.
             const i = drag.vertexIndex;
+            if (i !== undefined && edge.userVertices[i] && current.gridSnapping.enabled && !current.interaction.altKeyPressed) {
+                edge.userVertices[i] = GridSnapping.snapPointToGrid(edge.userVertices[i], current.gridSnapping.gridSize);
+            }
+            dispatch({ type: 'UPDATE_EDGE', edge: { ...edge, userVertices: [...edge.userVertices] } });
             const was = drag.originalVertexPosition;
             const now = i === undefined ? undefined : edge.userVertices[i];
             if (i !== undefined && was && now && (was.x !== now.x || was.y !== now.y)) {
@@ -1344,6 +1348,9 @@ const endDrag = useCallback(() => {
   }, []);
 
 const addControlPoint = useCallback((point: {x: number, y: number}, replaceLast?: boolean) => {
+  // Bend points of an edge being drawn sit on the grid too (the preview as well), unless Alt is held.
+  const { gridSnapping, interaction } = stateRef.current;
+  if (gridSnapping.enabled && !interaction.altKeyPressed) point = GridSnapping.snapPointToGrid(point, gridSnapping.gridSize);
   setDrawingState(prev => {
     const newVertices = [...prev.userVertices];
     
@@ -1481,6 +1488,10 @@ const addEdgeVertex = useCallback((edgeId: string, position: {x: number, y: numb
   const edge = state.edges.find(e => e.id === edgeId);
   if (!edge) return;
   
+  // On the grid, as when one is dragged, unless Alt is held.
+  if (state.gridSnapping.enabled && !state.interaction.altKeyPressed) {
+    position = GridSnapping.snapPointToGrid(position, state.gridSnapping.gridSize);
+  }
   const updatedVertices = [...edge.userVertices];
   if (insertAtIndex !== undefined) {
     updatedVertices.splice(insertAtIndex, 0, position);

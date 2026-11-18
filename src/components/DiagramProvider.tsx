@@ -15,7 +15,7 @@ import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, 
 import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
 import { createNodeFromTemplate, findFreeSpot, type NodeTemplate } from '../utils/NodeTemplates';
-import { arrangeContainers, nestingOf } from '../utils/Nesting';
+import { arrangeContainers, boxOf, nestingOf, setBox } from '../utils/Nesting';
 import type { DiagramEdit, NodeChanges } from '../utils/DiagramEdits';
 
 export const InteractionMode = {
@@ -1092,13 +1092,18 @@ const endDrag = useCallback(() => {
         const stored = current.nodes.find(n => n.id === selected.id) ?? selected;
         const carried = drag.carried ?? [];
         const from = drag.originalPosition;
-        // Snap the final position (not while dragging) unless Alt is held, carrying the nested nodes
-        // the same distance. Resizing keeps its exact geometry.
-        if (type === 'node' && current.gridSnapping.enabled && !current.interaction.altKeyPressed) {
+        // Snap at the end of the gesture (not while dragging) unless Alt is held: a move snaps the
+        // node's centre, carrying the nested nodes the same distance; a resize snaps the edges it moved.
+        const snap = current.gridSnapping.enabled && !current.interaction.altKeyPressed;
+        if (type === 'node' && snap) {
             const snapped = GridSnapping.snapPointToGrid(stored.data.position, current.gridSnapping.gridSize);
             const dx = snapped.x - stored.data.position.x, dy = snapped.y - stored.data.position.y;
             stored.data.position = snapped;
             for (const { node } of carried) node.data.position = { x: node.data.position.x + dx, y: node.data.position.y + dy };
+        } else if (type === 'resize' && snap && drag.resizeHandle) {
+            const box = GridSnapping.snapResize(boxOf(stored), drag.resizeHandle, current.gridSnapping.gridSize,
+                MouseInteractions.shouldLockAspectRatio(stored.visual?.shape));
+            setBox(stored, box);
         }
 
         // Inside a container, the container decides where a node goes: put it back. Moving it to

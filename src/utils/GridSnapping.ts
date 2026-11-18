@@ -1,3 +1,5 @@
+import type { ResizeHandle } from './MouseInteractions';
+
 export interface GridSnappingOptions {
   gridSize: number;
   enabled: boolean;
@@ -71,33 +73,43 @@ export class GridSnapping {
     };
   }
 
-  /** Snaps the result of a resize to the grid. */
+  /**
+   * Snaps the result of a resize (a box by its centre) to the grid: the edges the handle
+   * moved go to the nearest grid line, at least one grid step from the edges that stayed put.
+   * With `lockAspectRatio`, the width snaps and the height follows it.
+   */
   static snapResize(
-    newDimensions: { width: number; height: number; x: number; y: number },
+    box: { width: number; height: number; x: number; y: number },
+    handle: ResizeHandle,
     gridSize: number = this.DEFAULT_GRID_SIZE,
-    minWidth: number = 40,
-    minHeight: number = 30
+    lockAspectRatio = false
   ): { width: number; height: number; x: number; y: number } {
-    // Snap the size
-    const snappedSize = this.snapSizeToGrid(
-      { width: newDimensions.width, height: newDimensions.height },
-      gridSize,
-      minWidth,
-      minHeight
-    );
-
-    // Snap the position
-    const snappedPosition = this.snapPointToGrid(
-      { x: newDimensions.x, y: newDimensions.y },
-      gridSize
-    );
-
-    return {
-      width: snappedSize.width,
-      height: snappedSize.height,
-      x: snappedPosition.x,
-      y: snappedPosition.y,
+    if (handle === 'none') return box;
+    const sx = handle.includes('e') ? 1 : handle.includes('w') ? -1 : 0;
+    const sy = handle.includes('s') ? 1 : handle.includes('n') ? -1 : 0;
+    // The edge that moved, snapped, and the one opposite it, kept; on an axis the handle doesn't move, both kept.
+    const axis = (s: number, centre: number, size: number) => {
+      if (!s) return { centre, size };
+      const fixed = centre - (s * size) / 2;
+      const moved = this.snapToGrid(centre + (s * size) / 2, gridSize);
+      const snappedSize = Math.max(gridSize, s * (moved - fixed));
+      return { centre: fixed + (s * snappedSize) / 2, size: snappedSize };
     };
+
+    if (lockAspectRatio) {
+      // Snap along the axis the handle moves (the width for a corner), and scale the other with it.
+      const ratio = box.width / box.height;
+      if (sx) {
+        const x = axis(sx, box.x, box.width);
+        const height = x.size / ratio;
+        return { x: x.centre, width: x.size, height, y: sy ? box.y + (sy * (height - box.height)) / 2 : box.y };
+      }
+      const y = axis(sy, box.y, box.height);
+      return { y: y.centre, height: y.size, width: y.size * ratio, x: box.x };
+    }
+
+    const x = axis(sx, box.x, box.width), y = axis(sy, box.y, box.height);
+    return { x: x.centre, y: y.centre, width: x.size, height: y.size };
   }
 
   /**

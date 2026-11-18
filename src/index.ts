@@ -11,7 +11,7 @@ export { startRenderer } from './renderers/startRenderer';
 export { default as WebGPUUnsupported, type WebGPUFailure } from './components/WebGPUUnsupported';
 
 // State and canvas
-export { DiagramProvider, useDiagram, type DiagramContextValue } from './components/DiagramProvider';
+export { DiagramProvider, useDiagram, InteractionMode, type DiagramContextValue } from './components/DiagramProvider';
 export { DiagramCanvas } from './components/DiagramCanvas';
 export { useRenderSettings, type Resolution } from './state/renderSettings';
 

@@ -1098,7 +1098,9 @@ const endDrag = useCallback(() => {
         // Snap at the end of the gesture (not while dragging) unless Alt is held: a move puts the node's
         // edges on grid lines, carrying the nested nodes the same distance; a resize snaps the edges it moved.
         const snap = current.gridSnapping.enabled && !current.interaction.altKeyPressed;
-        if (type === 'node' && snap) {
+        // A click (no movement) leaves the node where it is.
+        const dragged = !!from && (from.x !== stored.data.position.x || from.y !== stored.data.position.y);
+        if (type === 'node' && snap && dragged) {
             // The node's edges go on grid lines (its top-left corner on a grid point), as resizing does.
             const grid = current.gridSnapping.gridSize, box = boxOf(stored);
             const snapped = {

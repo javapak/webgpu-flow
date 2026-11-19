@@ -27,7 +27,8 @@ export default function NodePalette() {
   }, [templates, filter]);
 
   return (
-    <div style={{ padding: 12, borderBottom: '1px solid #444' }}>
+    // Colours come from CSS variables, so a host can theme the palette (defaults: the dark demo's).
+    <div style={{ padding: 12, borderBottom: '1px solid var(--wf-palette-border, #444)' }}>
       <Text fw={600} mb={4}>Add node</Text>
       {templates.length > FILTER_THRESHOLD && (
         <TextInput size="xs" mb={8} placeholder="Filter node types" value={filter} onChange={(e) => setFilter(e.currentTarget.value)} />
@@ -49,7 +50,8 @@ export default function NodePalette() {
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                     padding: '8px 4px', minHeight: 64, borderRadius: 6,
-                    border: '1px solid #444', background: '#2a2a2a', cursor: 'grab',
+                    border: '1px solid var(--wf-palette-item-border, #444)', background: 'var(--wf-palette-item-bg, #2a2a2a)',
+                    color: 'var(--wf-palette-item-color, inherit)', cursor: 'grab',
                   }}
                 >
                   <TemplatePreview template={t} />

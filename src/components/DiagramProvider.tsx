@@ -17,6 +17,7 @@ import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocume
 import { createNodeFromTemplate, findFreeSpot, type NodeTemplate } from '../utils/NodeTemplates';
 import { arrangeContainers, boxOf, nestingOf, setBox } from '../utils/Nesting';
 import type { DiagramEdit, NodeChanges } from '../utils/DiagramEdits';
+import { useRenderSettings } from '../state/renderSettings';
 
 export const InteractionMode = {
   SELECT: 0,
@@ -711,6 +712,7 @@ const scheduleRender = useCallback(() => {
         const s = stateRef.current;
         const vp = viewportRef.current;
         renderer.gridSize = s.gridSnapping.gridSize;
+        renderer.theme = useRenderSettings.getState().canvasTheme;
         try {
             renderer.render(
                 s.nodes,
@@ -726,6 +728,11 @@ const scheduleRender = useCallback(() => {
         }
     });
 }, []);
+
+  // A new canvas theme (the host's colour theme changed, say) shows straight away.
+  useEffect(() => useRenderSettings.subscribe((now, before) => {
+    if (now.canvasTheme !== before.canvasTheme) scheduleRender();
+  }), [scheduleRender]);
 
   /** Nodes under a point (canvas px). */
   const hitTestPoint = useCallback((screenPoint: Point) => {

@@ -41,6 +41,8 @@ export class LabelRenderer {
   private uniformBuffer: GPUBuffer;
   private sampleCount: string;
   private readonly msdfFont = new MsdfFont(INTER_MSDF);
+  /** Colour of text drawn on the canvas background (edge labels) unless an edge sets its own. */
+  backgroundTextColor = '#ffffff';
   /** The MSDF atlas once loaded; until then every label goes through the canvas atlas. */
   private msdfTexture: GPUTexture | null = null;
   /** Bound in the MSDF atlas's place until it loads. */
@@ -404,7 +406,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       // To the line's left or right, whichever is up (or left, for a vertical line).
       let side = { x: d.y, y: -d.x };
       if (side.y > 0 || (side.y === 0 && side.x > 0)) side = { x: -side.x, y: -side.y };
-      add(`${end}:${edge.id}`, -0.5, text.trim(), edge.style.labelColor || '#ffffff', DEFAULT_LABEL_FONT,
+      add(`${end}:${edge.id}`, -0.5, text.trim(), edge.style.labelColor || this.backgroundTextColor, DEFAULT_LABEL_FONT,
         at.x + d.x * END_LABEL_ALONG + side.x * END_LABEL_ASIDE, at.y + d.y * END_LABEL_ALONG + side.y * END_LABEL_ASIDE);
     }
 
@@ -420,7 +422,7 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
       y = (source.data.position.y + target.data.position.y) / 2;
     }
     // Below every node label, so edge labels only appear where there's room.
-    add(`e:${edge.id}`, -1, label, edge.style.labelColor || '#ffffff', DEFAULT_LABEL_FONT, x, y);
+    add(`e:${edge.id}`, -1, label, edge.style.labelColor || this.backgroundTextColor, DEFAULT_LABEL_FONT, x, y);
   }
 
   const keep = declutter(candidates, zoom, 4 * pixelRatio);

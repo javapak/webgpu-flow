@@ -9,6 +9,7 @@ import { resizeHandles } from '../utils/NodeGeometry';
 import GPUCapabilities from '../utils/GPUCapabilities';
 import type { EdgeDrawingState } from '../components/DiagramProvider';
 import { GridSnapping } from '../utils/GridSnapping';
+import { DEFAULT_CANVAS_THEME, parseCssColor, type CanvasTheme } from '../state/renderSettings';
 import { canShowResizeHandles } from '../utils/CanvasCoords';
 import SupersamplingManager from './SupersamplingManager';
 import { FXAARenderer } from './FXAARendererer';
@@ -40,6 +41,8 @@ export class WebGPURenderer {
   private gridUniformBuffer: GPUBuffer | null = null;
   /** Spacing of the drawn grid's finest lines, in world units: the snapping grid's. */
   gridSize = GridSnapping.getDefaultGridSize();
+  /** Background, grid and edge label colours (see CanvasTheme). */
+  theme: CanvasTheme = DEFAULT_CANVAS_THEME;
   private nodeBindGroup: GPUBindGroup | null = null;
   private handleBindGroup: GPUBindGroup | null = null;
   private gridBindGroup: GPUBindGroup | null = null;
@@ -474,7 +477,7 @@ private createIntermediateTexture(width: number, height: number) {
 
     // Grid uniforms also carry the canvas size
     this.gridUniformBuffer = WebGPURenderer.device.createBuffer({
-      size: 96, // mat4x4 (64 bytes) + vec4 viewport (16 bytes) + vec4 canvas size, grid size, pixel ratio (16 bytes)
+      size: 112, // mat4x4 (64 bytes) + vec4 viewport + vec4 canvas size, grid size, pixel ratio + vec4 grid colour (16 bytes each)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -711,6 +714,7 @@ private createIntermediateTexture(width: number, height: number) {
         viewProjection: mat4x4<f32>,
         viewport: vec4<f32>, // x, y, zoom, aspect
         canvasSize: vec4<f32>, // width, height, grid size (world units), canvas px per CSS px
+        gridColor: vec4<f32>,
       }
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -768,7 +772,7 @@ private createIntermediateTexture(width: number, height: number) {
         if (alpha < 0.003) {
           discard;
         }
-        return vec4<f32>(0.7, 0.7, 0.7, alpha * GRID_ALPHA);
+        return vec4<f32>(uniforms.gridColor.rgb, alpha * GRID_ALPHA * uniforms.gridColor.a);
       }
     `;
 
@@ -1210,7 +1214,8 @@ private createIntermediateTexture(width: number, height: number) {
         new Float32Array([
           ...viewProjectionMatrix,
           viewport.x, viewport.y, viewport.zoom, canvasSize.width / canvasSize.height,
-          canvasSize.width, canvasSize.height, this.gridSize, viewport.pixelRatio ?? 1
+          canvasSize.width, canvasSize.height, this.gridSize, viewport.pixelRatio ?? 1,
+          ...parseCssColor(this.theme.grid, [0.7, 0.7, 0.7, 1]),
         ])
       );
 
@@ -1307,7 +1312,10 @@ private createIntermediateTexture(width: number, height: number) {
 
       let colorAttachment: GPURenderPassColorAttachment = {
         view: colorAttachmentView,
-        clearValue: { r: 0.15, g: 0.15, b: 0.15, a: 1 },
+        clearValue: (() => {
+          const [r, g, b] = parseCssColor(this.theme.background, [0.15, 0.15, 0.15, 1]);
+          return { r, g, b, a: 1 };
+        })(),
         loadOp: 'clear',
         storeOp: 'store',
       };
@@ -1457,6 +1465,7 @@ private createIntermediateTexture(width: number, height: number) {
         }
 
         if (this.labelRenderer) {
+          this.labelRenderer.backgroundTextColor = this.theme.text;
           const labelData = this.labelRenderer.prepareLabelData(visibleNodes, visibleEdges, viewport);
           if (labelData.length > 0) {
             this.labelRenderer.render(renderPass, labelData);

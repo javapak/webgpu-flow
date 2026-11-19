@@ -12,7 +12,7 @@ import { GridSnapping } from '../utils/GridSnapping';
 import globalRenderer from '../renderers/gpuInstance'
 import { canvasToWorld, clampZoom, clientToCanvas as clientToCanvasPoint, zoomAbout, type View } from '../utils/CanvasCoords';
 import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutResult } from '../layout/graphLayout';
-import { nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
+import { morphRoute, nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
 import { createNodeFromTemplate, findFreeSpot, type NodeTemplate } from '../utils/NodeTemplates';
 import { arrangeContainers, boxOf, nestingOf, setBox } from '../utils/Nesting';
@@ -911,7 +911,8 @@ const scheduleRender = useCallback(() => {
 
   const applyLayout = useCallback(async (options: Partial<LayoutOptions> = {}, { animate = false }: { animate?: boolean } = {}) => {
     finishLayoutAnimation();
-    const resolved = { ...DEFAULT_LAYOUT_OPTIONS, ...options };
+    // Nodes land on the snap grid while snapping is on.
+    const resolved = { ...DEFAULT_LAYOUT_OPTIONS, grid: gridOf(stateRef.current), ...options };
     const { nodes, edges } = stateRef.current;
     const layout = await computeLayout(nodes, edges, resolved);
 
@@ -938,10 +939,28 @@ const scheduleRender = useCallback(() => {
     fitToContent({ duration, ignoreReducedMotion: true });
 
     // Like pan/zoom, frames write positions to stateRef and render directly; React state is
-    // committed once at the end. Bend points from the old and new layouts don't correspond,
-    // so edges travel straight between the moving nodes and pick up their routing on landing.
-    const delays = staggerDelays(layout.positions, resolved);
-    const straightEdges = edges.map(e => (e.userVertices.length ? { ...e, userVertices: [] } : e));
+    // committed once at the end. Each edge's route morphs from the old one to the new one
+    // (see morphRoute), keeping pace with its two ends.
+    const staggered = staggerDelays(layout.positions, resolved);
+    // Nested nodes move with their top-level container, so they set off when it does.
+    const parentOf = new Map(nodes.map(n => [n.id, n.parentId]));
+    const delays = new Map([...staggered.keys()].map(id => {
+      let root = id;
+      for (let p = parentOf.get(root); p && parentOf.has(p); p = parentOf.get(root)) root = p;
+      return [id, staggered.get(root) ?? staggered.get(id)!];
+    }));
+    const centre = (id: string, after: boolean) => {
+      const node = nodes.find(n => n.id === id);
+      return (after && layout.positions.get(id)) || node?.data.position || { x: 0, y: 0 };
+    };
+    const morphs = new Map(finalEdges.flatMap((e, i) => {
+      const before = edges[i].userVertices;
+      if (before.length === 0 && e.userVertices.length === 0) return [];
+      return [[e.id, morphRoute(
+        [centre(e.sourceNodeId, false), ...before, centre(e.targetNodeId, false)],
+        [centre(e.sourceNodeId, true), ...e.userVertices, centre(e.targetNodeId, true)],
+      )] as const];
+    }));
 
     await new Promise<void>(resolve => {
       const start = performance.now();
@@ -959,19 +978,29 @@ const scheduleRender = useCallback(() => {
 
       const step = (now: number) => {
         const elapsed = now - start;
+        const progress = new Map<string, number>();
         const frameNodes = nodes.map(n => {
           const to = layout.positions.get(n.id);
           if (!to) return n;
           const t = nodeProgress(elapsed, delays.get(n.id) ?? 0);
+          progress.set(n.id, t);
           const from = n.data.position;
           return { ...n, data: { ...n.data, position: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t } } };
+        });
+        // An edge is as far along as its ends on average (an end that doesn't move doesn't count).
+        const frameEdges = edges.map(e => {
+          const morph = morphs.get(e.id);
+          if (!morph) return e;
+          const ends = [progress.get(e.sourceNodeId), progress.get(e.targetNodeId)].filter((t): t is number => t !== undefined);
+          const t = ends.length ? ends.reduce((a, b) => a + b, 0) / ends.length : Math.min(1, elapsed / duration);
+          return { ...e, userVertices: morph(t) };
         });
         const byId = new Map(frameNodes.map(n => [n.id, n]));
         const current = stateRef.current;
         stateRef.current = {
           ...current,
           nodes: frameNodes,
-          edges: straightEdges,
+          edges: frameEdges,
           // Selection handles are drawn from the selected copies, so move those too.
           interaction: { ...current.interaction, selectedNodes: current.interaction.selectedNodes.map(n => byId.get(n.id) ?? n) },
         };
@@ -992,7 +1021,13 @@ const scheduleRender = useCallback(() => {
     const { nodes } = stateRef.current;
     // Without a position, take the free spot nearest the centre of the view.
     const { x, y } = viewportRef.current;
-    const at = position ?? findFreeSpot(nodes, { x, y }, template.visual.size);
+    let at = position ?? findFreeSpot(nodes, { x, y }, template.visual.size);
+    // Like a drag, a new node's top-left corner goes on the snap grid.
+    const grid = gridOf(stateRef.current);
+    if (grid) {
+      const { width, height } = template.visual.size;
+      at = { x: Math.round((at.x - width / 2) / grid) * grid + width / 2, y: Math.round((at.y - height / 2) / grid) * grid + height / 2 };
+    }
     const node = createNodeFromTemplate(template, at, new Set(nodes.map(n => n.id)));
     // Keep stateRef current so a second add before the next render gets a fresh id.
     stateRef.current = { ...stateRef.current, nodes: [...stateRef.current.nodes, node] };

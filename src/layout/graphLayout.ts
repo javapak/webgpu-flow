@@ -16,6 +16,11 @@ export interface LayoutOptions {
   edgeRouting: EdgeRouting;
   /** Multiplier on the base node/layer spacing. */
   spacing: number;
+  /**
+   * Snap grid, in world units: each node's top-left corner lands on it (nested nodes move with
+   * their container), and nodes keep at least a cell apart so snapping can't make them touch.
+   */
+  grid?: number;
 }
 
 export const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
@@ -64,8 +69,22 @@ const ALGORITHM_IDS: Record<LayoutAlgorithm, string> = {
   box: 'rectpacking',
 };
 
+/** Least room between nodes: the spacing's, and at least a grid cell (snapping moves each node up to half of one). */
+function nodeGap(o: LayoutOptions): number {
+  return Math.max(NODE_GAP * o.spacing, o.grid ?? 0);
+}
+
+/** Moves each node so its top-left corner is on the grid. */
+function snapToGrid(positions: Map<string, Point2D>, sizes: Map<string, Size>, grid: number): Map<string, Point2D> {
+  const snap = (v: number) => Math.round(v / grid) * grid;
+  return new Map([...positions].map(([id, p]) => {
+    const { width, height } = sizes.get(id)!;
+    return [id, { x: snap(p.x - width / 2) + width / 2, y: snap(p.y - height / 2) + height / 2 }];
+  }));
+}
+
 function buildElkOptions(o: LayoutOptions): ElkOptions {
-  const node = String(NODE_GAP * o.spacing);
+  const node = String(nodeGap(o));
   const layer = String(LAYER_GAP * o.spacing);
 
   const common: ElkOptions = {
@@ -185,10 +204,10 @@ function layoutRadial(
   nodes: DiagramNode[],
   edges: DiagramEdge[],
   spacing: number,
+  gap: number,
 ): Map<string, Point2D> {
   const size = new Map(nodes.map(n => [n.id, sizeOf(n)]));
   const radiusOf = (id: string) => Math.max(size.get(id)!.width, size.get(id)!.height) / 2;
-  const gap = NODE_GAP * spacing;
   const ringGap = LAYER_GAP * spacing;
 
   const adjacency = new Map<string, string[]>(nodes.map(n => [n.id, []]));
@@ -390,7 +409,7 @@ async function computeFlatLayout(
   const routes = new Map<string, Point2D[]>();
 
   if (options.algorithm === 'radial') {
-    positions = layoutRadial(nodes, usableEdges, options.spacing);
+    positions = layoutRadial(nodes, usableEdges, options.spacing, nodeGap(options));
   } else {
     const graph: ElkNode = {
       id: 'root',
@@ -413,7 +432,7 @@ async function computeFlatLayout(
     );
 
     if (options.algorithm === 'stress' || options.algorithm === 'force') {
-      removeOverlaps(positions, sizes, NODE_GAP * options.spacing * 0.5);
+      removeOverlaps(positions, sizes, Math.max(NODE_GAP * options.spacing * 0.5, options.grid ?? 0));
     } else if (options.algorithm === 'layered' && options.edgeRouting !== 'STRAIGHT') {
       for (const elkEdge of (result.edges ?? []) as ElkExtendedEdge[]) {
         const section = elkEdge.sections?.[0];
@@ -432,6 +451,8 @@ async function computeFlatLayout(
   const ox = (minX + maxX) / 2, oy = (minY + maxY) / 2;
   const toWorld = (p: Point2D): Point2D => ({ x: p.x - ox, y: p.y - oy });
   positions = new Map([...positions].map(([id, p]) => [id, toWorld(p)]));
+  // On the grid before any routing, so edges are routed (or anchored) to where the nodes end up.
+  if (options.grid) positions = snapToGrid(positions, sizes, options.grid);
 
   // Only layered routes its edges; route the others' around the nodes.
   if (options.algorithm !== 'layered' && options.edgeRouting !== 'STRAIGHT') {

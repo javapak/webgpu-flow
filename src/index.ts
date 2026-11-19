@@ -14,6 +14,7 @@ export { default as WebGPUUnsupported, type WebGPUFailure } from './components/W
 export { DiagramProvider, useDiagram, InteractionMode, type DiagramContextValue } from './components/DiagramProvider';
 export { DiagramCanvas } from './components/DiagramCanvas';
 export { useRenderSettings, type Resolution } from './state/renderSettings';
+export { default as RenderSettingsModal, type RenderSettingsModalProps } from './components/RenderSettingsModal';
 
 // Automatic layout (DiagramProvider's applyLayout)
 export { setLayoutWorker, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, type LayoutAlgorithm, type LayoutDirection, type EdgeRouting } from './layout/graphLayout';

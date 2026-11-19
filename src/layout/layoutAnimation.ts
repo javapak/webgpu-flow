@@ -53,3 +53,35 @@ export function nodeProgress(elapsed: number, delay: number): number {
 
 export const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Morphs one edge's route into another for a layout transition. Both routes run from the
+ * source's centre through the bend points to the target's centre. Each is sampled at its own
+ * corners and the other's (by fraction of path length), so they have points in common to
+ * interpolate between: the line starts exactly as the old route and lands exactly as the new
+ * one, and an edge gaining or losing its routing unfolds rather than jumps. Returns the bend
+ * points at progress `t` (0..1), without the two ends.
+ */
+export function morphRoute(from: Point2D[], to: Point2D[]): (t: number) => Point2D[] {
+  const fractions = (path: Point2D[]): number[] => {
+    const lengths = path.slice(1).map((p, i) => Math.hypot(p.x - path[i].x, p.y - path[i].y));
+    const total = lengths.reduce((a, b) => a + b, 0);
+    let run = 0;
+    return [0, ...lengths.map(l => (run += l) / (total || 1))].map((f, i) => (total ? f : i / (path.length - 1)));
+  };
+  const at = (path: Point2D[], f: number[], u: number): Point2D => {
+    let i = 1;
+    while (i < f.length - 1 && f[i] < u) i++;
+    const span = f[i] - f[i - 1];
+    const s = span > 0 ? (u - f[i - 1]) / span : 0;
+    return { x: path[i - 1].x + (path[i].x - path[i - 1].x) * s, y: path[i - 1].y + (path[i].y - path[i - 1].y) * s };
+  };
+
+  const ff = fractions(from), ft = fractions(to);
+  // The corners of both routes, as fractions of the way along; the ends aren't bend points.
+  const shared = [...new Set([...ff, ...ft].map(u => Math.round(u * 1e6) / 1e6))]
+    .filter(u => u > 0 && u < 1)
+    .sort((a, b) => a - b);
+  const a = shared.map(u => at(from, ff, u)), b = shared.map(u => at(to, ft, u));
+  return t => a.map((p, i) => ({ x: p.x + (b[i].x - p.x) * t, y: p.y + (b[i].y - p.y) * t }));
+}

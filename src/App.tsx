@@ -2,16 +2,15 @@ import React, { useState, useEffect, useCallback} from 'react';
 import "allotment/dist/style.css";
 import '@mantine/core/styles.css'
 import './App.css';
-import { ActionIcon, Checkbox, NativeSelect } from '@mantine/core';
+import { ActionIcon } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {Dismiss16Regular} from '@fluentui/react-icons';
-import { useDiagram } from './components/DiagramProvider';
 import PropertyEditorPanel from './components/PropertyEditorPanel';
 import { Allotment } from 'allotment';
 import ERFlow from './components/ERFlow';
 import Toolbar from './components/Toolbar';
 import FileMenu from './components/FileMenu';
-import { RESOLUTION_OPTIONS, parseResolution, useRenderSettings } from './state/renderSettings';
+import RenderSettingsModal from './components/RenderSettingsModal';
 
 // Below this width the split view doesn't fit (canvas pane min 400 + sidebar min 260),
 // so the canvas goes full screen and properties move into a bottom sheet.
@@ -21,17 +20,13 @@ export const DiagramDemo: React.FC = () => {
   const compact = useMediaQuery(COMPACT_QUERY, window.matchMedia(COMPACT_QUERY).matches, { getInitialValueInEffect: false });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
-  const resolution = useRenderSettings(s => s.resolution);
-  const setResolution = useRenderSettings(s => s.setResolution);
-
-  const { fxaaEnabled, smaaEnabled, setFXAAEnabled, setSMAAEnabled } = useDiagram();
 
   useEffect(() => {
     if (!settingsOpen && !propertiesOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (settingsOpen) setSettingsOpen(false);
-      else setPropertiesOpen(false);
+      // The settings modal closes itself on Escape.
+      if (e.key !== 'Escape' || settingsOpen) return;
+      setPropertiesOpen(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -68,29 +63,7 @@ export const DiagramDemo: React.FC = () => {
         </div>
       )}
 
-      {/* Settings modal */}
-      {settingsOpen && (
-        <div className="settings-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) handleOpenSettingsMenu(); }}>
-          <div className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-            <div className="settings-header">
-              <h2 id="settings-title">Settings</h2>
-              <ActionIcon variant="subtle" color="gray" size={compact ? 40 : 28} aria-label="Close settings" onClick={handleOpenSettingsMenu}><Dismiss16Regular/></ActionIcon>
-            </div>
-
-            <div className="settings-body">
-              <section className="settings-section">
-                <h3>Display</h3>
-                <NativeSelect label="Resolution" description="Render sharpness; on-screen size is unchanged" data={[...RESOLUTION_OPTIONS]} value={`${resolution.width}x${resolution.height}`} onChange={(e) => setResolution(parseResolution(e.currentTarget.value))} />
-              </section>
-
-              <section className="settings-section">
-                <h3>Anti-aliasing</h3>
-                <Checkbox label="FXAA" checked={fxaaEnabled} onChange={(e) => setFXAAEnabled(e.currentTarget.checked)}/>
-                <Checkbox label="SMAA" checked={smaaEnabled} onChange={(e) => setSMAAEnabled(e.currentTarget.checked)}/>
-              </section>
-            </div>
-          </div>
-        </div>)}
+      <RenderSettingsModal opened={settingsOpen} onClose={handleOpenSettingsMenu} fullScreen={compact} />
     </div>
   );
 

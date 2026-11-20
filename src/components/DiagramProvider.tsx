@@ -15,7 +15,7 @@ import { computeLayout, nodeBounds, DEFAULT_LAYOUT_OPTIONS, type LayoutOptions, 
 import { morphRoute, nodeProgress, staggerDelays, transitionDuration } from '../layout/layoutAnimation';
 import { parseDiagram, serializeDiagram as toDiagramDocument, type DiagramDocument } from '../utils/DiagramIO';
 import { createNodeFromTemplate, findFreeSpot, type NodeTemplate } from '../utils/NodeTemplates';
-import { arrangeContainers, boxOf, nestingOf, setBox } from '../utils/Nesting';
+import { arrangeContainers, boxOf, isFree, nestingOf, setBox, type Box } from '../utils/Nesting';
 import type { DiagramEdit, NodeChanges } from '../utils/DiagramEdits';
 import { useRenderSettings } from '../state/renderSettings';
 
@@ -1159,19 +1159,41 @@ const endDrag = useCallback(() => {
             setBox(stored, box);
         }
 
-        // Inside a container, the container decides where a node goes: put it back. Moving it to
-        // another container, or to another place in this one, changes the model, which only the
-        // host can do.
-        if (type === 'node' && from && nestingOf(current.nodes).parent(stored.id)) {
+        // Inside a container that arranges its children, the container decides where a node goes:
+        // put it back. Moving it to another container, or to another place in this one, changes the
+        // model, which only the host can do. A free container leaves it where it was dropped.
+        const nesting = nestingOf(current.nodes);
+        const parent = nesting.parent(stored.id);
+        if (type === 'node' && from && parent && !isFree(parent)) {
             stored.data.position = { ...from };
             for (const c of carried) c.node.data.position = { ...c.from };
         }
 
-        const changed = [stored, ...carried.map(c => c.node)];
+        // The free containers around it grow to hold it.
+        const around: DiagramNode[] = [];
+        for (let p = parent; p; p = nesting.parent(p.id)) if (isFree(p)) around.push(p);
+        const before = new Map<string, Box>(around.map(p => [p.id, boxOf(p)]));
+        if (around.length || isFree(stored)) arrangeContainers(current.nodes, gridOf(current));
+
+        const changed = [stored, ...carried.map(c => c.node), ...around];
         dispatch({ type: 'UPDATE_NODES', nodes: changed.map(n => ({ ...n })) });
 
         // Report only real changes: a click without movement is not an edit. The nodes a container
-        // carries are placed by it, so only the container's own move is reported.
+        // carries are placed by it, so they're reported only inside a free container, which doesn't.
+        for (const c of carried) {
+            const to = c.node.data.position;
+            if (isFree(nesting.parent(c.node.id)) && (to.x !== c.from.x || to.y !== c.from.y)) {
+                emitEdit({ kind: 'node-moved', nodeId: c.node.id, from: c.from, to: { ...to } });
+            }
+        }
+        for (const p of around) {
+            const was = before.get(p.id)!, now = boxOf(p);
+            if (was.x !== now.x || was.y !== now.y || was.width !== now.width || was.height !== now.height) {
+                emitEdit({ kind: 'node-resized', nodeId: p.id,
+                    from: { position: { x: was.x, y: was.y }, size: { width: was.width, height: was.height } },
+                    to: { position: { x: now.x, y: now.y }, size: { width: now.width, height: now.height } } });
+            }
+        }
         const position = { ...stored.data.position };
         const size = { ...(stored.visual?.size ?? stored.data.size ?? { width: 100, height: 60 }) };
         if (type === 'node' && from && (from.x !== position.x || from.y !== position.y)) {

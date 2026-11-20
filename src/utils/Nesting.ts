@@ -19,6 +19,12 @@
  * neither it nor its children can be resized, and children have no positions
  * of their own to store.
  *
+ * A free container (`visual.layout: 'free'`) leaves its children where they
+ * are instead, like nodes on the canvas: they can be dragged and resized, and
+ * the host stores their positions. It keeps its own size, which can be set by
+ * hand, but grows to hold its header, compartment and children, padded. A
+ * child that is itself a container arranges its own children as usual.
+ *
  * Everything here works on positions as the renderer has them (absolute
  * centres). Hosts that estimate container sizes themselves (arbor's adapter)
  * use the same constants; keep them in step.
@@ -102,6 +108,11 @@ export function nestingOf(nodes: readonly DiagramNode[]): Nesting {
   return nesting;
 }
 
+/** Whether the node is a free container: its children keep their own places (see the top of this file). */
+export function isFree(node: DiagramNode | undefined): boolean {
+  return node?.visual?.layout === 'free';
+}
+
 /** Whether the node is drawn as a row (see the top of this file). */
 export function isRow(node: DiagramNode): boolean {
   return node.visual?.presentation === 'row';
@@ -166,7 +177,31 @@ export function arrangeContainers(nodes: readonly DiagramNode[], grid?: number):
   const nesting = nestingOf(nodes);
   const sizes = new Map<string, Size>();
   const columns = new Map<string, DiagramNode[][]>();
+  /** Free containers' boxes, grown to hold their children where those are now. */
+  const fitted = new Map<string, Box>();
   const boxed = (node: DiagramNode) => !isRow(node) && (nesting.isContainer(node) || compartmentOf(node).length > 0);
+  const centre = (node: DiagramNode) => fitted.get(node.id) ?? node.data.position;
+
+  // A free container: its own box, grown to hold its header, compartment and children.
+  const fit = (node: DiagramNode): Size => {
+    const own = boxOf(node);
+    const lines = compartmentOf(node);
+    const kids = nesting.children(node.id);
+    const above = NEST_HEADER + (lines.length ? NEST_PADDING + lines.length * LINE_HEIGHT + SECTION_GAP : 0);
+    const textWidth = Math.max(0, ...lines.map(l => l.length * CHAR_WIDTH + 2 * ROW_INSET)) + 2 * NEST_PADDING;
+    let left = own.x - own.width / 2, top = own.y - own.height / 2;
+    let right = Math.max(own.x + own.width / 2, left + textWidth);
+    let bottom = Math.max(own.y + own.height / 2, top + above + (lines.length ? NEST_PADDING : 0));
+    for (const kid of kids) {
+      const size = measure(kid), at = centre(kid);
+      left = Math.min(left, at.x - size.width / 2 - NEST_PADDING);
+      right = Math.max(right, at.x + size.width / 2 + NEST_PADDING);
+      top = Math.min(top, at.y - size.height / 2 - NEST_PADDING - above);
+      bottom = Math.max(bottom, at.y + size.height / 2 + NEST_PADDING);
+    }
+    fitted.set(node.id, { x: (left + right) / 2, y: (top + bottom) / 2, width: right - left, height: bottom - top });
+    return { width: right - left, height: bottom - top };
+  };
 
   // Sizes, deepest first.
   const measure = (node: DiagramNode): Size => {
@@ -175,7 +210,9 @@ export function arrangeContainers(nodes: readonly DiagramNode[], grid?: number):
     const kids = nesting.children(node.id);
     const lines = compartmentOf(node);
     let size: Size;
-    if (boxed(node)) {
+    if (boxed(node) && isFree(node)) {
+      size = fit(node);
+    } else if (boxed(node)) {
       const cols = kids.length ? columnsOf(kids, measure) : [];
       if (cols.length) columns.set(node.id, cols);
       const extent = cols.length ? extentOf(cols, measure) : { width: 0, height: 0 };
@@ -199,10 +236,24 @@ export function arrangeContainers(nodes: readonly DiagramNode[], grid?: number):
   // Positions, top-down: columns from the box's top-left, below the header and compartment.
   const place = (node: DiagramNode, x: number, y: number, width: number) => {
     const size = sizes.get(node.id)!;
+    const was = centre(node);
     setBox(node, { x, y, width, height: size.height });
     const cols = columns.get(node.id);
-    if (boxed(node) || nesting.parent(node.id)) {
-      node.visual = { ...node.visual, resizable: false, ...(boxed(node) ? { boxed: true, boxedChildren: !!cols } : {}) };
+    const parent = nesting.parent(node.id);
+    if (boxed(node) || parent) {
+      // A container that arranges its children is as big as they need, and so is a node it arranges.
+      const resizable = !(boxed(node) && !isFree(node)) && !(parent && !isFree(parent));
+      const kids = nesting.children(node.id).length > 0;
+      node.visual = { ...node.visual, resizable, ...(boxed(node) ? { boxed: true, boxedChildren: isFree(node) ? kids : !!cols } : {}) };
+    }
+    if (isFree(node)) {
+      // Its children keep their places, moving only as far as it does.
+      const dx = x - was.x, dy = y - was.y;
+      for (const kid of nesting.children(node.id)) {
+        const at = centre(kid);
+        place(kid, at.x + dx, at.y + dy, measure(kid).width);
+      }
+      return;
     }
     if (!cols) return;
     const lines = compartmentOf(node).length;
@@ -229,6 +280,12 @@ export function arrangeContainers(nodes: readonly DiagramNode[], grid?: number):
     if (nesting.depth(node.id) > 0 || !boxed(node)) continue;
     let { x, y } = node.data.position;
     let size = measure(node);
+    if (isFree(node)) {
+      // Its box follows from its own and its children's, which were put on the grid when they moved.
+      const box = fitted.get(node.id)!;
+      place(node, box.x, box.y, box.width);
+      continue;
+    }
     if (grid) {
       // Its size can't be set by hand, so put its edges on grid lines: whole grid steps, corner on the grid.
       size = { width: Math.ceil(size.width / grid) * grid, height: Math.ceil(size.height / grid) * grid };

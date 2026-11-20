@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { InteractionMode, useDiagram } from './DiagramProvider';
 import { MouseInteractions, type ResizeHandle } from '../utils/MouseInteractions';
 import { TEMPLATE_MIME, type NodeTemplate } from '../utils/NodeTemplates';
-import type { DiagramNode } from '../types';
+import { defaultConfig, type DiagramNode } from '../types';
 import {
   clampZoom, distance, fitContain, midpoint, pinchView, wheelZoomFactor, zoomAbout,
   type Point, type View,
@@ -17,7 +17,8 @@ interface DiagramCanvasProps {
   className?: string;
   onNodeClick?: (node: any) => void;
   onNodeDropped?: (template: NodeTemplate, position: {x: number, y: number}) => void;
-  onNodeDoubleClick?: (node: any) => void;
+  /** A second press of the same node within `interaction.doubleClickThreshold` ms, close to the first (a double-tap too). */
+  onNodeDoubleClick?: (node: DiagramNode) => void;
   onCanvasClick?: (worldPoint: { x: number; y: number }) => void;
   /** Palette item to place on the next tap. */
   selectedNodeType?: any;
@@ -36,6 +37,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   height,
   className = '',
   onNodeClick,
+  onNodeDoubleClick,
   onCanvasClick,
   resolution,
   onNodeDropped,
@@ -44,6 +46,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   setSupportedSampleCount
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  /** The last press of a node, to tell a double-click from two clicks. */
+  const lastNodePress = useRef<{ id: string; time: number; pos: Point } | null>(null);
   const [currentCursor, setCurrentCursor] = useState<string>('grab');
   const initializationAttempted = useRef(false);
 
@@ -320,8 +324,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       // Pass the node: if this press selected it, the selection isn't committed yet.
       beginDrag('node', pos, e.pointerId, e.pointerType, undefined, undefined, undefined, topNode);
       onNodeClick?.(topNode);
+      const last = lastNodePress.current, now = e.timeStamp;
+      const slop = (DRAG_SLOP_CSS[e.pointerType] ?? 3) * 2;
+      if (last && last.id === topNode.id && now - last.time <= defaultConfig.interaction.doubleClickThreshold && distance(last.pos, pos) <= slop) {
+        lastNodePress.current = null;
+        onNodeDoubleClick?.(topNode);
+      } else {
+        lastNodePress.current = { id: topNode.id, time: now, pos };
+      }
       return;
     }
+    lastNodePress.current = null;
 
     const edgeHit = hitTestEdge(pos);
     clearSelection();
@@ -338,7 +351,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       onPlaceNode, mode, hitTestWithHandles, drawingState, startDrawing, addControlPoint, completeEdge,
       addEdge, exitDrawMode, interaction.selectedEdges, interaction.selectedNodes, hitTestEdgeVertex,
       clearVertexSelection, selectEdgeVertex, clearEdgeSelection, clearSelection, selectNode, onNodeClick,
-      hitTestEdge, selectEdge, onCanvasClick]);
+      onNodeDoubleClick, hitTestEdge, selectEdge, onCanvasClick]);
 
   const updateHoverCursor = useCallback(() => {
     hoverRef.current.raf = null;

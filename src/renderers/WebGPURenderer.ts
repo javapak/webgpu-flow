@@ -686,8 +686,12 @@ private createIntermediateTexture(width: number, height: number) {
         
         var finalColor = input.color;
         
-        // Selection highlight
-        if (input.isSelected > 0.5) {
+        // Selection highlight, blue; a highlighted node (2) glows amber, more strongly.
+        if (input.isSelected > 1.5) {
+          let highlightGlow = exp(-abs(distance) * 4.0) * 0.75;
+          let highlightColor = vec4<f32>(1.0, 0.72, 0.1, 1.0);
+          finalColor = mix(finalColor, highlightColor, highlightGlow);
+        } else if (input.isSelected > 0.5) {
           let selectionGlow = exp(-abs(distance) * 6.0) * 0.4;
           let selectionColor = vec4<f32>(0.2, 0.7, 1.0, 1.0);
           finalColor = mix(finalColor, selectionColor, selectionGlow);
@@ -1233,7 +1237,8 @@ private createIntermediateTexture(width: number, height: number) {
         let color = this.hexToRgba(node.visual?.color || '#3b82f6');
         const size = node.visual?.size || { width: 100, height: 60 };
         const depth = nodeZ(nesting.depth(node.id));
-        const isSelected = selectedNodeIds.has(node.id) ? 1 : 0;
+        // 1: selected; 2: highlighted (`visual.highlighted`, e.g. a simulation's active state).
+        const isSelected = selectedNodeIds.has(node.id) ? 1 : node.visual?.highlighted === true ? 2 : 0;
         
         if (isRow(node)) {
           // A faint bar in the kind's colour, and the kind's shape as an icon at its left

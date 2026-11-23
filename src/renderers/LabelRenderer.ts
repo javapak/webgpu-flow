@@ -8,6 +8,10 @@ import { boundaryPoint } from '../utils/NodeGeometry';
 import { MsdfFont } from './MsdfFont';
 import { INTER_MSDF } from '../assets/fonts/interMsdf';
 
+/** A badge's distance from its node's bottom-right corner, and half its line's height (world units). */
+const BADGE_INSET = 6;
+const BADGE_HALF_HEIGHT = 7;
+
 /**
  * The font labels use unless a node picks another: drawn from its MSDF atlas, so it's sharp at any
  * zoom. Other fonts, and text with characters the atlas lacks, are rasterised into the canvas atlas.
@@ -363,6 +367,14 @@ prepareLabelData(visibleNodes: DiagramNode[], visibleEdges: DiagramEdge[], viewp
   };
 
   for (const node of visibleNodes) {
+    // A badge in the bottom-right corner (`visual.badge`, e.g. a node that opens into a diagram of
+    // its own): what the node offers, so kept over any label.
+    const badge = typeof node.visual?.badge === 'string' ? node.visual.badge.trim() : '';
+    if (badge && node.visual?.size && !isRow(node)) {
+      const { x, y } = node.data.position, { width, height } = node.visual.size;
+      add(`b:${node.id}`, 2e6, badge, node.visual?.labelColor || '#ffffffff', DEFAULT_LABEL_FONT,
+        x + width / 2 - BADGE_INSET, y + height / 2 - BADGE_INSET - BADGE_HALF_HEIGHT, 'right', 0.85, true);
+    }
     const label = node.data.label?.trim();
     if (!label) continue;
     // Selected nodes always win; otherwise well-connected nodes are the ones worth naming.
